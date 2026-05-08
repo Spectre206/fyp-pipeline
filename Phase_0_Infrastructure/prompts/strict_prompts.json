@@ -1,0 +1,188 @@
+{
+  "variant": "strict",
+  "description": "Full strict system prompt — tests JSON compliance under maximum constraint with explicit failure conditions and risk tier rules",
+  "models": ["phi4-mini:latest", "qwen3:1.7b", "deepseek-r1:1.5b"],
+  "system_prompt": "You are the Strategy Agent in a self-healing data pipeline system.\n\nCRITICAL OUTPUT RULES:\n- Respond ONLY with raw JSON.\n- DO NOT use markdown.\n- DO NOT include ``` or ```json.\n- DO NOT include any text before or after the JSON.\n- Response MUST start with { and end with }.\n- Output must be a single valid JSON object.\n\nJSON SCHEMA (STRICT):\n{\n  \"anomaly_type\": string,\n  \"severity\": \"LOW\" | \"MEDIUM\" | \"HIGH\" | \"CRITICAL\",\n  \"affected_component\": string,\n  \"recommended_actions\": [string, string, string],\n  \"confidence\": float (0.0 to 1.0),\n  \"risk_tier\": \"LOW\" | \"HIGH\",\n  \"reasoning\": string (one sentence)\n}\n\nRISK TIER RULES:\n- If severity is LOW or MEDIUM → risk_tier MUST be \"LOW\".\n- If severity is HIGH or CRITICAL → risk_tier MUST be \"HIGH\".\n\nFAILURE CONDITIONS (MUST AVOID):\n- Missing any field\n- Extra fields\n- Markdown formatting\n- Invalid JSON\n\nReturn ONLY the JSON object.",
+  "prompts": [
+    {
+      "id": "CPU_01",
+      "category": "CPU/Memory Spike",
+      "severity": "HIGH",
+      "text": "Anomaly Type: CPU/Memory Spike\nSeverity: HIGH\nAffected Component: RabbitMQ consumer process\nNode: node-2\nHistorical Context: Similar spikes during peak load last week\nAdditional Details: CPU usage >90% for 5 minutes\n\nGenerate the incident response JSON."
+    },
+    {
+      "id": "CPU_02",
+      "category": "CPU/Memory Spike",
+      "severity": "CRITICAL",
+      "text": "Anomaly Type: CPU/Memory Spike\nSeverity: CRITICAL\nAffected Component: Anomaly Detection Module\nNode: node-2\nHistorical Context: Repeated crashes under heavy load\nAdditional Details: Memory exhaustion observed\n\nGenerate the incident response JSON."
+    },
+    {
+      "id": "CPU_03",
+      "category": "CPU/Memory Spike",
+      "severity": "MEDIUM",
+      "text": "Anomaly Type: CPU/Memory Spike\nSeverity: MEDIUM\nAffected Component: Stream Processor\nNode: node-1\nHistorical Context: Occasional spikes during batch jobs\nAdditional Details: CPU briefly hit 85%\n\nGenerate the incident response JSON."
+    },
+    {
+      "id": "CPU_04",
+      "category": "CPU/Memory Spike",
+      "severity": "HIGH",
+      "text": "Anomaly Type: CPU/Memory Spike\nSeverity: HIGH\nAffected Component: Isolation Forest model process\nNode: node-2\nHistorical Context: Model instability previously observed\nAdditional Details: CPU sustained 95% with lagging predictions\n\nGenerate the incident response JSON."
+    },
+    {
+      "id": "CPU_05",
+      "category": "CPU/Memory Spike",
+      "severity": "LOW",
+      "text": "Anomaly Type: CPU/Memory Spike\nSeverity: LOW\nAffected Component: Log shipping agent\nNode: node-3\nHistorical Context: Rare spikes\nAdditional Details: CPU briefly reached 70%\n\nGenerate the incident response JSON."
+    },
+    {
+      "id": "CPU_06",
+      "category": "CPU/Memory Spike",
+      "severity": "CRITICAL",
+      "text": "Anomaly Type: CPU/Memory Spike\nSeverity: CRITICAL\nAffected Component: Core pipeline ingestion loop\nNode: node-1\nHistorical Context: Critical path component\nAdditional Details: System near halt due to resource exhaustion\n\nGenerate the incident response JSON."
+    },
+    {
+      "id": "ERR_01",
+      "category": "Error Rate Surge",
+      "severity": "HIGH",
+      "text": "Anomaly Type: Error Rate Surge (5xx)\nSeverity: HIGH\nAffected Component: HTTP ingestion endpoint\nNode: node-1\nHistorical Context: Intermittent spikes previously\nAdditional Details: 20% 5xx errors\n\nGenerate the incident response JSON."
+    },
+    {
+      "id": "ERR_02",
+      "category": "Error Rate Surge",
+      "severity": "CRITICAL",
+      "text": "Anomaly Type: Error Rate Surge (5xx)\nSeverity: CRITICAL\nAffected Component: Upstream data provider API\nNode: external\nHistorical Context: Third-party instability\nAdditional Details: API failing consistently\n\nGenerate the incident response JSON."
+    },
+    {
+      "id": "ERR_03",
+      "category": "Error Rate Surge",
+      "severity": "MEDIUM",
+      "text": "Anomaly Type: Error Rate Surge (5xx)\nSeverity: MEDIUM\nAffected Component: Schema validation layer\nNode: node-2\nHistorical Context: Minor validation issues before\nAdditional Details: Increased invalid payloads\n\nGenerate the incident response JSON."
+    },
+    {
+      "id": "ERR_04",
+      "category": "Error Rate Surge",
+      "severity": "HIGH",
+      "text": "Anomaly Type: Error Rate Surge (5xx)\nSeverity: HIGH\nAffected Component: Core message broker connection\nNode: node-1\nHistorical Context: Broker failures impact system\nAdditional Details: Frequent disconnects\n\nGenerate the incident response JSON."
+    },
+    {
+      "id": "ERR_05",
+      "category": "Error Rate Surge",
+      "severity": "LOW",
+      "text": "Anomaly Type: Error Rate Surge (5xx)\nSeverity: LOW\nAffected Component: Health check endpoint\nNode: node-3\nHistorical Context: Non-critical endpoint\nAdditional Details: Occasional failures\n\nGenerate the incident response JSON."
+    },
+    {
+      "id": "ERR_06",
+      "category": "Error Rate Surge",
+      "severity": "CRITICAL",
+      "text": "Anomaly Type: Error Rate Surge (5xx)\nSeverity: CRITICAL\nAffected Component: All pipeline endpoints simultaneously\nNode: all\nHistorical Context: Rare global outage\nAdditional Details: System-wide failure\n\nGenerate the incident response JSON."
+    },
+    {
+      "id": "THR_01",
+      "category": "Throughput Drop",
+      "severity": "HIGH",
+      "text": "Anomaly Type: Throughput Drop / Silent Crash\nSeverity: HIGH\nAffected Component: RabbitMQ consumer\nNode: node-2\nHistorical Context: Load issues before\nAdditional Details: Messages not consumed\n\nGenerate the incident response JSON."
+    },
+    {
+      "id": "THR_02",
+      "category": "Throughput Drop",
+      "severity": "CRITICAL",
+      "text": "Anomaly Type: Throughput Drop / Silent Crash\nSeverity: CRITICAL\nAffected Component: Entire Layer 1 pipeline\nNode: all\nHistorical Context: Core system failure scenario\nAdditional Details: Pipeline halted\n\nGenerate the incident response JSON."
+    },
+    {
+      "id": "THR_03",
+      "category": "Throughput Drop",
+      "severity": "MEDIUM",
+      "text": "Anomaly Type: Throughput Drop / Silent Crash\nSeverity: MEDIUM\nAffected Component: Single anomaly detection worker\nNode: node-2\nHistorical Context: Worker occasionally fails\nAdditional Details: Reduced processing rate\n\nGenerate the incident response JSON."
+    },
+    {
+      "id": "THR_04",
+      "category": "Throughput Drop",
+      "severity": "HIGH",
+      "text": "Anomaly Type: Throughput Drop / Silent Crash\nSeverity: HIGH\nAffected Component: NAB model inference process\nNode: node-2\nHistorical Context: Model latency issues\nAdditional Details: Slow inference\n\nGenerate the incident response JSON."
+    },
+    {
+      "id": "THR_05",
+      "category": "Throughput Drop",
+      "severity": "LOW",
+      "text": "Anomaly Type: Throughput Drop / Silent Crash\nSeverity: LOW\nAffected Component: Metrics exporter\nNode: node-3\nHistorical Context: Monitoring only\nAdditional Details: Delayed metrics\n\nGenerate the incident response JSON."
+    },
+    {
+      "id": "THR_06",
+      "category": "Throughput Drop",
+      "severity": "CRITICAL",
+      "text": "Anomaly Type: Throughput Drop / Silent Crash\nSeverity: CRITICAL\nAffected Component: Stream Processor + consumer together\nNode: node-1\nHistorical Context: Cascade failure risk\nAdditional Details: Both components stopped\n\nGenerate the incident response JSON."
+    },
+    {
+      "id": "AUTH_01",
+      "category": "Auth Failure Flood",
+      "severity": "HIGH",
+      "text": "Anomaly Type: Auth Failure Flood\nSeverity: HIGH\nAffected Component: RabbitMQ management API\nNode: node-2\nHistorical Context: Possible brute force attempts\nAdditional Details: Many failed logins\n\nGenerate the incident response JSON."
+    },
+    {
+      "id": "AUTH_02",
+      "category": "Auth Failure Flood",
+      "severity": "CRITICAL",
+      "text": "Anomaly Type: Auth Failure Flood\nSeverity: CRITICAL\nAffected Component: SSH daemon\nNode: node-2\nHistorical Context: Security sensitive\nAdditional Details: Continuous login failures\n\nGenerate the incident response JSON."
+    },
+    {
+      "id": "AUTH_03",
+      "category": "Auth Failure Flood",
+      "severity": "MEDIUM",
+      "text": "Anomaly Type: Auth Failure Flood\nSeverity: MEDIUM\nAffected Component: Django HITL dashboard login\nNode: node-3\nHistorical Context: Occasional login issues\nAdditional Details: Increased failed attempts\n\nGenerate the incident response JSON."
+    },
+    {
+      "id": "AUTH_04",
+      "category": "Auth Failure Flood",
+      "severity": "HIGH",
+      "text": "Anomaly Type: Auth Failure Flood\nSeverity: HIGH\nAffected Component: Grafana admin interface\nNode: node-3\nHistorical Context: Admin target\nAdditional Details: Suspicious login attempts\n\nGenerate the incident response JSON."
+    },
+    {
+      "id": "AUTH_05",
+      "category": "Auth Failure Flood",
+      "severity": "CRITICAL",
+      "text": "Anomaly Type: Auth Failure Flood\nSeverity: CRITICAL\nAffected Component: All three node SSH daemons simultaneously\nNode: all\nHistorical Context: Coordinated attack risk\nAdditional Details: Massive login failure spike\n\nGenerate the incident response JSON."
+    },
+    {
+      "id": "AUTH_06",
+      "category": "Auth Failure Flood",
+      "severity": "LOW",
+      "text": "Anomaly Type: Auth Failure Flood\nSeverity: LOW\nAffected Component: Prometheus metrics endpoint\nNode: node-3\nHistorical Context: Public endpoint\nAdditional Details: Minor auth issues\n\nGenerate the incident response JSON."
+    },
+    {
+      "id": "DRIFT_01",
+      "category": "Schema Drift",
+      "severity": "HIGH",
+      "text": "Anomaly Type: Schema Change / Data Drift\nSeverity: HIGH\nAffected Component: Event payload — missing required field\nNode: node-1\nHistorical Context: Schema strict\nAdditional Details: Missing critical field\n\nGenerate the incident response JSON."
+    },
+    {
+      "id": "DRIFT_02",
+      "category": "Schema Drift",
+      "severity": "MEDIUM",
+      "text": "Anomaly Type: Schema Change / Data Drift\nSeverity: MEDIUM\nAffected Component: Event payload — type mutation\nNode: node-1\nHistorical Context: Type mismatch seen before\nAdditional Details: Integer changed to string\n\nGenerate the incident response JSON."
+    },
+    {
+      "id": "DRIFT_03",
+      "category": "Schema Drift",
+      "severity": "LOW",
+      "text": "Anomaly Type: Schema Change / Data Drift\nSeverity: LOW\nAffected Component: Optional metadata field — value shift\nNode: node-3\nHistorical Context: Non-critical field\nAdditional Details: Slight value drift\n\nGenerate the incident response JSON."
+    },
+    {
+      "id": "DRIFT_04",
+      "category": "Schema Drift",
+      "severity": "CRITICAL",
+      "text": "Anomaly Type: Schema Change / Data Drift\nSeverity: CRITICAL\nAffected Component: Core schema — multiple field violations\nNode: node-1\nHistorical Context: Core data corruption risk\nAdditional Details: Multiple invalid fields\n\nGenerate the incident response JSON."
+    },
+    {
+      "id": "DRIFT_05",
+      "category": "Schema Drift",
+      "severity": "MEDIUM",
+      "text": "Anomaly Type: Schema Change / Data Drift\nSeverity: MEDIUM\nAffected Component: Nested JSON structure change\nNode: node-2\nHistorical Context: Parsing issues before\nAdditional Details: Structure mismatch\n\nGenerate the incident response JSON."
+    },
+    {
+      "id": "DRIFT_06",
+      "category": "Schema Drift",
+      "severity": "HIGH",
+      "text": "Anomaly Type: Schema Change / Data Drift\nSeverity: HIGH\nAffected Component: Statistical drift — value distribution\nNode: node-2\nHistorical Context: Model sensitivity high\nAdditional Details: Distribution shift detected\n\nGenerate the incident response JSON."
+    }
+  ]
+}

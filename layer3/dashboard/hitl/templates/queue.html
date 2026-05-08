@@ -1,0 +1,16 @@
+<!--
+HITL Incident Queue Page Template
+
+This template renders the main HITL Dashboard queue view. It displays a
+real-time table of all pending incidents waiting for operator review, ordered
+by arrival time with the oldest incident first.
+
+Each row will show: event_id (truncated), anomaly_type, severity (coloured
+badge — red for CRITICAL, orange for HIGH, blue for MEDIUM, green for LOW),
+affected_component, node, routing_reason, and time_in_queue with a live timer.
+
+Clicking any row navigates to the incident_detail.html page for that event.
+The page connects to the Django Channels SSE endpoint so new incidents appear
+automatically without refreshing. A counter at the top shows total pending
+incidents and the oldest incident's age.
+-->

@@ -1,0 +1,16 @@
+<!--
+Auto-Execution Monitor Page Template
+
+This template renders the auto-execution history panel showing all incidents
+that were routed to auto.execute by the Policy Agent. It is a read-only view
+for operator situational awareness.
+
+Each row shows: event_id, anomaly_type, severity, affected_component, the
+three recommended_actions taken, execution timestamp, execution outcome
+(SUCCESS or FAILURE), and resolution_time_ms. Failed auto-executions are
+highlighted in red — these feed a negative signal to the Learning Agent and
+may indicate that the confidence threshold needs recalibration.
+
+The page uses the same SSE connection as the queue page so new auto-executed
+incidents appear in real time.
+-->

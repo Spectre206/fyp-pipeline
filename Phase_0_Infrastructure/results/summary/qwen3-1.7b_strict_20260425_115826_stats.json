@@ -1,0 +1,22 @@
+{
+  "run_tag": "qwen3-1.7b_strict_20260425_115826",
+  "model": "qwen3:1.7b",
+  "variant": "strict",
+  "total_prompts": 30,
+  "json_valid_count": 29,
+  "json_valid_pct": 96.7,
+  "schema_valid_count": 27,
+  "schema_valid_pct": 90.0,
+  "risk_tier_LOW_count": 11,
+  "risk_tier_HIGH_count": 18,
+  "avg_response_time_s": 20.19,
+  "fastest_response_s": 15.66,
+  "fastest_prompt_id": "DRIFT_01",
+  "slowest_response_s": 25.57,
+  "slowest_prompt_id": "CPU_01",
+  "avg_tokens_per_s": 16.71,
+  "fastest_tokens_per_s": 16.9,
+  "fastest_tps_prompt": "CPU_05",
+  "slowest_tokens_per_s": 16.55,
+  "slowest_tps_prompt": "THR_06"
+}

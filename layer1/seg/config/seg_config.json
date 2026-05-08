@@ -1,0 +1,20 @@
+{
+  "_comment": "SEG configuration. Adjust replay_speed and seed here. Do not change event_counts without updating the evaluation dataset specification in the System Design document.",
+  "seed": 42,
+  "replay_speed_multiplier": 1,
+  "output_dir": "../../evaluation/data",
+  "labels_file": "../../evaluation/labels.csv",
+  "event_counts": {
+    "NORMAL": 1000,
+    "cpu_memory_spike": 200,
+    "error_rate_surge": 200,
+    "throughput_drop": 200,
+    "auth_failure_flood": 200,
+    "schema_drift": 150
+  },
+  "schema_drift_subtypes": {
+    "missing_field": 50,
+    "type_mutation": 50,
+    "value_shift": 50
+  }
+}

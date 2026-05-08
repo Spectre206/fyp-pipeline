@@ -1,0 +1,81 @@
+# ─── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.egg-info/
+dist/
+build/
+.installed.cfg
+
+# ─── Virtual environments ─────────────────────────────────────────────────────
+venv/
+env/
+ENV/
+.venv/
+.env
+.env.*
+
+# ─── Trained ML models (large binaries — stored separately) ──────────────────
+# To include a model explicitly: git add -f layer1/adm/models/your_model.pkl
+layer1/adm/models/*.pkl
+layer1/adm/models/*.joblib
+layer1/adm/models/*.h5
+
+# ─── Evaluation results (generated at runtime) ───────────────────────────────
+evaluation/results/
+!evaluation/results/.gitkeep
+evaluation/data/
+evaluation/*.jsonl
+evaluation/labels.csv
+
+# ─── Phase 0 raw results (large JSONL files) ─────────────────────────────────
+Phase_0_Infrastructure/results/raw_responses/*.jsonl
+Phase_0_Infrastructure/results/summary/*.csv
+# Aggregate stats JSON are kept — small and important for paper
+!Phase_0_Infrastructure/results/summary/*_stats.json
+
+# ─── Datasets (downloaded separately — see datasets/README.md) ───────────────
+datasets/NAB/
+datasets/Loghub/
+datasets/KDD99/
+datasets/*.csv
+datasets/*.zip
+
+# ─── Django runtime ───────────────────────────────────────────────────────────
+layer3/dashboard/db.sqlite3
+layer3/dashboard/db.sqlite3-journal
+layer3/dashboard/staticfiles/
+layer3/dashboard/media/
+
+# ─── SQLite decision log (runtime data) ──────────────────────────────────────
+layer3/sqlite_logger/*.db
+layer3/sqlite_logger/*.sqlite3
+
+# ─── ChromaDB persistent store (Node 2 runtime data) ─────────────────────────
+layer2/chromadb_data/
+
+# ─── Logs ─────────────────────────────────────────────────────────────────────
+*.log
+logs/
+*.out
+
+# ─── OS artefacts ────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ─── IDEs ─────────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ─── Jupyter ─────────────────────────────────────────────────────────────────
+.ipynb_checkpoints/
+*.ipynb
+
+# ─── Prometheus / Grafana runtime data ───────────────────────────────────────
+layer3/prometheus_data/
+layer3/grafana_data/

@@ -1,0 +1,22 @@
+{
+  "run_tag": "deepseek-r1-1.5b_strict_20260425_121224",
+  "model": "deepseek-r1:1.5b",
+  "variant": "strict",
+  "total_prompts": 30,
+  "json_valid_count": 2,
+  "json_valid_pct": 6.7,
+  "schema_valid_count": 0,
+  "schema_valid_pct": 0.0,
+  "risk_tier_LOW_count": 1,
+  "risk_tier_HIGH_count": 0,
+  "avg_response_time_s": 19.69,
+  "fastest_response_s": 14.03,
+  "fastest_prompt_id": "CPU_05",
+  "slowest_response_s": 23.18,
+  "slowest_prompt_id": "CPU_01",
+  "avg_tokens_per_s": 21.03,
+  "fastest_tokens_per_s": 21.36,
+  "fastest_tps_prompt": "CPU_05",
+  "slowest_tokens_per_s": 20.47,
+  "slowest_tps_prompt": "ERR_02"
+}

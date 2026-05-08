@@ -1,0 +1,22 @@
+{
+  "run_tag": "phi4-mini-latest_simple_20260425_064043",
+  "model": "phi4-mini:latest",
+  "variant": "simple",
+  "total_prompts": 30,
+  "json_valid_count": 0,
+  "json_valid_pct": 0.0,
+  "schema_valid_count": 0,
+  "schema_valid_pct": 0.0,
+  "risk_tier_LOW_count": 0,
+  "risk_tier_HIGH_count": 0,
+  "avg_response_time_s": 18.34,
+  "fastest_response_s": 15.28,
+  "fastest_prompt_id": "CPU_03",
+  "slowest_response_s": 21.53,
+  "slowest_prompt_id": "CPU_01",
+  "avg_tokens_per_s": 8.71,
+  "fastest_tokens_per_s": 8.76,
+  "fastest_tps_prompt": "CPU_03",
+  "slowest_tokens_per_s": 8.64,
+  "slowest_tps_prompt": "THR_02"
+}

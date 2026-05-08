@@ -1,0 +1,20 @@
+<!--
+Incident Detail Page Template
+
+This template renders the full reasoning chain for a single incident. It is
+designed to give the operator all the information needed to make an approve,
+reject, or modify decision without needing to look elsewhere.
+
+The page is divided into four expandable sections:
+  1. Original Event — raw event payload from Layer 1 (SEG output)
+  2. Triage Agent Result — classification, RAG context examples with similarity
+     scores, and triage latency
+  3. Strategy Agent Response — the 7-field JSON output from qwen3:1.7b,
+     the raw LLM text response (for debugging), response time, and tokens/second
+  4. Policy Agent Decision — routing decision, reason code, and confidence value
+
+Below the reasoning chain are three action buttons: APPROVE, REJECT, MODIFY.
+MODIFY expands an inline form allowing the operator to edit the recommended
+actions list before approving. All buttons require a confirmation click.
+A notes field is available for the operator to record their reasoning.
+-->
