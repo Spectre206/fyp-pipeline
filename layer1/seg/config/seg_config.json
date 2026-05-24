@@ -1,9 +1,18 @@
 {
-  "_comment": "SEG configuration. Adjust replay_speed and seed here. Do not change event_counts without updating the evaluation dataset specification in the System Design document.",
   "seed": 42,
-  "replay_speed_multiplier": 1,
-  "output_dir": "../../evaluation/data",
-  "labels_file": "../../evaluation/labels.csv",
+  "output_dir": "../../evaluation/",
+  "corpus_filename": "evaluation_corpus.jsonl",
+  "labels_filename": "labels.csv",
+  "replay_speed": 1.0,
+  "rabbitmq": {
+    "host": "192.168.18.101",
+    "port": 5672,
+    "virtual_host": "fyp",
+    "username": "fyp_user",
+    "password": "fyp_pass_2026",
+    "exchange": "pipeline.events",
+    "routing_key": "anomaly.raw"
+  },
   "event_counts": {
     "NORMAL": 1000,
     "cpu_memory_spike": 200,
@@ -12,9 +21,17 @@
     "auth_failure_flood": 200,
     "schema_drift": 150
   },
-  "schema_drift_subtypes": {
-    "missing_field": 50,
-    "type_mutation": 50,
-    "value_shift": 50
-  }
+  "severity_distribution": {
+    "cpu_memory_spike":   {"HIGH": 100, "MEDIUM": 60, "CRITICAL": 40},
+    "error_rate_surge":   {"HIGH": 100, "MEDIUM": 60, "CRITICAL": 40},
+    "throughput_drop":    {"HIGH": 100, "MEDIUM": 60, "CRITICAL": 40},
+    "auth_failure_flood": {"HIGH": 100, "MEDIUM": 60, "CRITICAL": 40},
+    "schema_drift": {
+      "missing_field":  {"count": 50, "severity": "MEDIUM"},
+      "type_mutation":  {"count": 50, "severity": "HIGH"},
+      "value_shift":    {"count": 50, "severity": "MEDIUM"}
+    }
+  },
+  "poisson_lambda_seconds": 1.0,
+  "base_timestamp": "2026-04-01T08:00:00Z"
 }
