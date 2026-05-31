@@ -1,6 +1,6 @@
 {
   "seed": 42,
-  "output_dir": "../../evaluation/",
+  "output_dir": "evaluation/",
   "corpus_filename": "evaluation_corpus.jsonl",
   "labels_filename": "labels.csv",
   "replay_speed": 1.0,
@@ -10,7 +10,7 @@
     "virtual_host": "fyp",
     "username": "fyp_user",
     "password": "fyp_pass_2026",
-    "exchange": "pipeline.events",
+    "exchange": "raw.events",
     "routing_key": "anomaly.raw"
   },
   "event_counts": {

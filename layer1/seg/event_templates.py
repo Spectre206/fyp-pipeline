@@ -138,10 +138,23 @@ class EventTemplateFactory:
         }
 
     # ── Anomaly event ─────────────────────────────────────────────────
+    # ── Anomaly event ─────────────────────────────────────────────────
     def anomaly(self, atype: str, severity: str, node=None) -> dict:
         node    = node or self._node()
-        ranges  = ANOMALY_METRICS.get(atype, {}).get(severity, {})
-        metrics = {k: self._sample(lo, hi) for k, (lo, hi) in ranges.items()}
+        
+        # 1. Start with a baseline of normal metrics
+        base_metrics = {
+            k: self._sample(lo, hi)
+            for k, (lo, hi) in NORMAL_METRICS.items()
+        }
+        
+        # 2. Get the specific spiking metrics for this anomaly
+        ranges = ANOMALY_METRICS.get(atype, {}).get(severity, {})
+        spike_metrics = {k: self._sample(lo, hi) for k, (lo, hi) in ranges.items()}
+        
+        # 3. Merge them (spike_metrics overwrite base_metrics where they overlap)
+        base_metrics.update(spike_metrics)
+        
         risk    = RISK_TIER_MAP.get((atype, severity), "HIGH")
 
         context_map = {
@@ -158,7 +171,7 @@ class EventTemplateFactory:
             "severity":               severity,
             "affected_component":     self._component(atype),
             "node":                   node,
-            "metric_values":          metrics,
+            "metric_values":          base_metrics, # <--- Now contains ALL 5 metrics!
             "context":                context_map.get(atype, f"{atype} anomaly"),
             "ground_truth_label":     "ANOMALY",
             "ground_truth_risk_tier": risk,

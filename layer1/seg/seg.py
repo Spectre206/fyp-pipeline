@@ -122,11 +122,13 @@ class SyntheticEventGenerator:
 
     def replay(self, events_path):
         lines = open(events_path).readlines()
-        log.info(f"Replaying {len(lines)} events to exchange: pipeline.events")
-        for line in lines:
+        total_events = len(lines)
+        # Updated log message to match the new exchange
+        log.info(f"Replaying {total_events} events to exchange: raw.events") 
+        
+        for i, line in enumerate(lines, 1): # Added progress tracker
             ev = json.loads(line.strip())
             
-            # V1.2 UPDATE: Adding headers for Fusion Engine correlation
             headers = {
                 "x-event-type": ev.get("anomaly_type", "NORMAL"),
                 "x-severity": ev.get("severity", "N/A"),
@@ -134,27 +136,37 @@ class SyntheticEventGenerator:
             }
             
             self._ch.basic_publish(
-                exchange="pipeline.events",
+                exchange="raw.events",  # <--- CRITICAL V1.2 FIX
                 routing_key="anomaly.raw",
                 body=json.dumps(ev),
                 properties=pika.BasicProperties(
                     delivery_mode=2, 
                     content_type="application/json",
-                    headers=headers  # <--- Added headers
+                    headers=headers
                 )
             )
+            
+            # Print an update every 100 events
+            if i % 100 == 0 or i == total_events:
+                log.info(f"Progress: Published {i}/{total_events} events...")
+                
             time.sleep(max(0, self.interval))
+            
+        log.info("Replay successfully finished.")
         self._conn.close()
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--mode", choices=["generate", "replay"], default="generate")
     ap.add_argument("--speed", type=float, default=1.0)
-    ap.add_argument("--output", default="../../evaluation/")
-    ap.add_argument("--input", default="../../evaluation/events_1950.jsonl")
+    
+    # Fixed defaults so it saves locally in the fyp-pipeline folder!
+    ap.add_argument("--output", default="evaluation/")
+    ap.add_argument("--input", default="evaluation/events_1950.jsonl")
+    
     a = ap.parse_args()
 
-    seg = SyntheticEventGenerator()
+    seg = SyntheticEventGenerator(replay_speed=a.speed) # Passed speed into the class!
     if a.mode == "generate":
         seg.save_corpus(seg.generate_corpus(), a.output)
     else:
