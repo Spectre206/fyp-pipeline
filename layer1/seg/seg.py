@@ -1,5 +1,5 @@
 # layer1/seg/seg.py
-# Synthetic Event Generator — v1.2 Implementation
+# Synthetic Event Generator — v1.2 Implementation (Corrected)
 # orchestrates data generation, noise injection, and RabbitMQ replay.
 
 import json
@@ -45,7 +45,7 @@ class SyntheticEventGenerator:
         self.noise = NoiseInjector(self.rng)
         self.labels = {} 
 
-        # V1.2: Connect to the 'fyp' vhost and use 'pipeline.events' exchange
+        # V1.2: Connect to the 'fyp' vhost
         self._conn = pika.BlockingConnection(pika.ConnectionParameters(
             host=host,
             virtual_host="fyp",
@@ -58,6 +58,14 @@ class SyntheticEventGenerator:
         gt = {k: event.pop(k, None) for k in GT_FIELDS}
         self.labels[event["event_id"]] = gt
         return event
+
+    def _gen_timestamps(self, n, start):
+        """Generates exponentially distributed sequential timestamps."""
+        ts, out = start, []
+        for _ in range(n):
+            out.append(ts.isoformat())
+            ts += timedelta(seconds=max(0.01, self.rng.exponential(self.interval)))
+        return out
 
     def generate_corpus(self) -> list:
         events = []
@@ -76,10 +84,15 @@ class SyntheticEventGenerator:
 
         self.rng.shuffle(events)
         
-        # Apply temporal and metric noise
-        for ev in events:
+        # --- FIX: Generate sequentially spaced timestamps ---
+        ts = self._gen_timestamps(len(events), datetime.now(timezone.utc).replace(microsecond=0))
+        
+        # Apply timestamps, UUIDs, and metric noise
+        for ev, t in zip(events, ts):
             ev["event_id"] = str(uuid.uuid4())
+            ev["timestamp"] = t  # Overwrite the template timestamp
             self.noise.apply(ev)
+            
         return events
 
     # ── Corpus and Labels writer ───────────────────────────────────────
@@ -123,10 +136,9 @@ class SyntheticEventGenerator:
     def replay(self, events_path):
         lines = open(events_path).readlines()
         total_events = len(lines)
-        # Updated log message to match the new exchange
-        log.info(f"Replaying {total_events} events to exchange: raw.events") 
+        log.info(f"Replaying {total_events} events to exchange: fyp.events (Routing Key: event.raw)") 
         
-        for i, line in enumerate(lines, 1): # Added progress tracker
+        for i, line in enumerate(lines, 1):
             ev = json.loads(line.strip())
             
             headers = {
@@ -135,9 +147,10 @@ class SyntheticEventGenerator:
                 "x-node": ev.get("node", "unknown")
             }
             
+            # --- FIX: Target the correct unified topic exchange and routing key ---
             self._ch.basic_publish(
-                exchange="raw.events",  # <--- CRITICAL V1.2 FIX
-                routing_key="anomaly.raw",
+                exchange="fyp.events",
+                routing_key="event.raw",
                 body=json.dumps(ev),
                 properties=pika.BasicProperties(
                     delivery_mode=2, 
@@ -160,13 +173,12 @@ if __name__ == "__main__":
     ap.add_argument("--mode", choices=["generate", "replay"], default="generate")
     ap.add_argument("--speed", type=float, default=1.0)
     
-    # Fixed defaults so it saves locally in the fyp-pipeline folder!
     ap.add_argument("--output", default="evaluation/")
     ap.add_argument("--input", default="evaluation/events_1950.jsonl")
     
     a = ap.parse_args()
 
-    seg = SyntheticEventGenerator(replay_speed=a.speed) # Passed speed into the class!
+    seg = SyntheticEventGenerator(replay_speed=a.speed)
     if a.mode == "generate":
         seg.save_corpus(seg.generate_corpus(), a.output)
     else:

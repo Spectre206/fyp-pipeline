@@ -10,8 +10,8 @@
     "virtual_host": "fyp",
     "username": "fyp_user",
     "password": "fyp_pass_2026",
-    "exchange": "raw.events",
-    "routing_key": "anomaly.raw"
+    "exchange": "fyp.events", 
+    "routing_key": "event.raw"
   },
   "event_counts": {
     "NORMAL": 1000,
