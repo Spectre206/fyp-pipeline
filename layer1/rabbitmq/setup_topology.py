@@ -46,7 +46,7 @@ ch.queue_declare("dead.letters", durable=True)
 # 1. Ingestion Routing
 ch.queue_bind("raw.events", "fyp.events", "event.raw")
 ch.queue_bind("validated.event", "fyp.events", "event.valid")
-
+ch.queue_bind("fusion.results", "fyp.events", "fusion.result")
 # 2. Parallel Model Fanout Routing (Routing keys are ignored by fanout exchanges, routing string can be empty)
 ch.queue_bind("detect.cpu", "detection.fanout", "")
 ch.queue_bind("detect.error", "detection.fanout", "")
