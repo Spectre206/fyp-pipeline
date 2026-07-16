@@ -1,18 +1,19 @@
 {
   "seed": 42,
   "output_dir": "evaluation/",
-  "corpus_filename": "evaluation_corpus.jsonl",
+  "corpus_filename": "events_1950.jsonl",
   "labels_filename": "labels.csv",
   "replay_speed": 1.0,
   "rabbitmq": {
-    "host": "192.168.18.101",
+    "host": "stream-node",
     "port": 5672,
     "virtual_host": "fyp",
     "username": "fyp_user",
     "password": "fyp_pass_2026",
-    "exchange": "fyp.events", 
+    "exchange": "fyp.events",
     "routing_key": "event.raw"
   },
+  "nodes": ["stream-node", "ai-brain-node", "gateway-node"],
   "event_counts": {
     "NORMAL": 1000,
     "cpu_memory_spike": 200,

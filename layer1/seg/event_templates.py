@@ -105,8 +105,11 @@ class EventTemplateFactory:
     Ground truth is stripped by save_corpus() before writing to JSONL.
     """
 
-    def __init__(self, rng):
+    def __init__(self, rng, nodes=None):
         self.rng = rng
+        # Nodes list now sourced from seg_config.json (single source of truth)
+        # via seg.py; falls back to the module-level NODES only if not provided.
+        self.nodes = nodes if nodes is not None else NODES
 
     def _sample(self, lo, hi):
         return round(float(self.rng.uniform(lo, hi)), 4)
@@ -115,7 +118,7 @@ class EventTemplateFactory:
         return str(self.rng.choice(COMPONENTS[atype]))
 
     def _node(self):
-        return str(self.rng.choice(NODES))
+        return str(self.rng.choice(self.nodes))
 
     # ── Normal event ──────────────────────────────────────────────────
     def normal(self, node=None) -> dict:
