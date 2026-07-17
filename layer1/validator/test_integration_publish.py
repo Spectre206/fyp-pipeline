@@ -1,16 +1,34 @@
-import json, pika, sys
+import json, pika, sys, argparse
+from pathlib import Path
 sys.path.insert(0, '.')
 
-# ── CORRECTED CONNECTION PARAMS ────────────────────────────────────────
+from validator import load_config, DEFAULT_CONFIG_PATH, FALLBACK_RABBITMQ
+
+# ── v1.3: connection params now come from validator_config.json, same
+#    source of truth the validator itself uses -- not a second hardcoded
+#    copy. Use --host to override for a quick one-off test. ─────────────
+ap = argparse.ArgumentParser()
+ap.add_argument("--config", default=str(DEFAULT_CONFIG_PATH))
+ap.add_argument("--host", default=None, help="Override RabbitMQ hostname for this test run only")
+a = ap.parse_args()
+
+cfg = load_config(Path(a.config))
+rmq = cfg.get("rabbitmq", FALLBACK_RABBITMQ)
+host = a.host or rmq.get("host", FALLBACK_RABBITMQ["host"])
+
 RMQPARAMS = pika.ConnectionParameters(
-    host='192.168.18.101',
-    virtual_host='fyp',
-    credentials=pika.PlainCredentials('fyp_user', 'fyp_pass_2026')
+    host=host,
+    port=rmq.get("port", FALLBACK_RABBITMQ["port"]),
+    virtual_host=rmq.get("virtual_host", FALLBACK_RABBITMQ["virtual_host"]),
+    credentials=pika.PlainCredentials(
+        rmq.get("username", FALLBACK_RABBITMQ["username"]),
+        rmq.get("password", FALLBACK_RABBITMQ["password"]),
+    ),
 )
 
 # ── Publish test events ────────────────────────────────────────────────
 conn = pika.BlockingConnection(RMQPARAMS)
-ch   = conn.channel()
+ch = conn.channel()
 
 # Event 1: valid
 valid_event = {
@@ -35,28 +53,27 @@ invalid_event = {
 }
 
 ch.basic_publish(
-    exchange='fyp.events', routing_key='event.raw',
+    exchange=rmq.get("exchange", FALLBACK_RABBITMQ["exchange"]),
+    routing_key='event.raw',
     body=json.dumps(valid_event).encode(),
     properties=pika.BasicProperties(delivery_mode=2)
 )
-print("[TEST] Published 1 VALID event to raw.events")
+print(f"[TEST] Published 1 VALID event to raw.events (via {host})")
 
 ch.basic_publish(
-    exchange='fyp.events', routing_key='event.raw',
+    exchange=rmq.get("exchange", FALLBACK_RABBITMQ["exchange"]),
+    routing_key='event.raw',
     body=json.dumps(invalid_event).encode(),
     properties=pika.BasicProperties(delivery_mode=2)
 )
-print("[TEST] Published 1 INVALID event to raw.events")
+print(f"[TEST] Published 1 INVALID event to raw.events (via {host})")
 
 conn.close()
 
 print("\nNow check RabbitMQ queues:")
-print("  • raw.events        should have 2 messages waiting")
-print("  • Start the validator: python validator.py")
-print("  • After processing:")
+print("  - raw.events        should have 2 messages waiting")
+print("  - Start the validator: python validator.py")
+print("  - After processing:")
 print("    - validated.event  queue should have 1 message (valid event)")
 print("    - anomaly.detected queue should have 1 message (schema_drift)")
 print("    - raw.events       queue should be empty")
-print("    - Prometheus at http://localhost:8002/metrics:")
-print("      fyp_validation_passed_total 1")
-print("      fyp_validation_errors_total{error_type='MISSING_FIELD'} 1")

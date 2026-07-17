@@ -1,0 +1,14 @@
+{
+  "rabbitmq": {
+    "host": "stream-node",
+    "port": 5672,
+    "virtual_host": "fyp",
+    "username": "fyp_user",
+    "password": "fyp_pass_2026",
+    "exchange": "fyp.events",
+    "input_queue": "raw.events",
+    "valid_routing_key": "event.valid",
+    "schema_drift_routing_key": "anomaly.schema_drift"
+  },
+  "prefetch_count": 100
+}

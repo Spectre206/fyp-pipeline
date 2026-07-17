@@ -11,31 +11,45 @@ a non-empty affected_component string.
 Events that pass validation are returned as PipelineEvent objects and forwarded
 to the Feature Store. Events that fail validation are caught, re-packaged as
 schema_drift anomaly events with severity determined by violation type
-(missing field → MEDIUM, type mutation → HIGH), and published directly to the
-anomaly.detected RabbitMQ queue — bypassing the Feature Store entirely since
+(missing field -> MEDIUM, type mutation -> HIGH), and published directly to the
+anomaly.detected RabbitMQ queue -- bypassing the Feature Store entirely since
 they cannot be safely featurised.
 """
 # layer1/validator/validator.py
 #
-# Pydantic Validator — v1.2
+# Pydantic Validator -- v1.4 (config-driven, hostname-based, no Prometheus)
 #
 # Consumes raw events from fyp.events exchange (routing key: event.raw).
-# Valid events → published to fyp.events with routing key: validated.event
-# Invalid events → SchemaDriftRouter → anomaly.detected directly
+# Valid events -> published to fyp.events with routing key: validated.event
+# Invalid events -> SchemaDriftRouter -> anomaly.detected directly
 #
-# Exposes Prometheus metrics on port 8002.
 # Run: python validator.py
+#
+# CHANGELOG v1.3 -> v1.4:
+#   - Prometheus metrics removed entirely. Project decision: only the
+#     Fusion Engine is scraped from Layer 1 -- no other Layer 1 component
+#     (Validator, Feature Store, ADM detectors) exposes or is scraped for
+#     metrics. This also removes the start_http_server() call and the
+#     import-time port-binding issue that came with it.
+#
+# CHANGELOG v1.2 -> v1.3 (for reference):
+#   - Loads validator_config.json (was previously fully hardcoded, no config
+#     file existed at all) -- matches the pattern established in SEG v1.3.
+#   - RabbitMQ host defaults to the "stream-node" hostname, not a hardcoded
+#     IP.
+#   - SchemaDriftRouter receives the exchange/routing key from config
+#     instead of hardcoding them a second time in a separate file.
 
 import json
 import logging
 import sys
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Dict, Optional, Literal
 
 import pika
 import structlog
 from pydantic import BaseModel, Field, field_validator, ValidationError
-from prometheus_client import Counter, start_http_server
 
 from schema_drift_router import SchemaDriftRouter
 
@@ -46,28 +60,44 @@ logging.basicConfig(
 )
 log = structlog.get_logger()
 
-# ── Prometheus metrics (port 8002) ────────────────────────────────────
-start_http_server(8002)
+DEFAULT_CONFIG_PATH = Path(__file__).parent / "config" / "validator_config.json"
 
-VAL_PASSED = Counter(
-    "fyp_validation_passed_total",
-    "Events that passed Pydantic validation"
-)
-VAL_ERRORS = Counter(
-    "fyp_validation_errors_total",
-    "Events that failed Pydantic validation",
-    ["error_type"]
-)
-VAL_DUPLICATES = Counter(
-    "fyp_validation_duplicates_total",
-    "Duplicate event_ids detected within session"
-)
+FALLBACK_RABBITMQ = {
+    "host": "stream-node", "port": 5672, "virtual_host": "fyp",
+    "username": "fyp_user", "password": "fyp_pass_2026",
+    "exchange": "fyp.events", "input_queue": "raw.events",
+    "valid_routing_key": "event.valid",
+    "schema_drift_routing_key": "anomaly.schema_drift",
+}
+
+
+def load_config(path: Path) -> dict:
+    if not path.exists():
+        raise FileNotFoundError(
+            f"validator_config.json not found at {path}. "
+            f"The Validator requires this file for RabbitMQ connection "
+            f"settings. Pass a different path via "
+            f"ValidatorConsumer(config_path=...) if needed."
+        )
+    with open(path) as f:
+        cfg = json.load(f)
+    log.info(f"Loaded config from {path}")
+    return cfg
 
 
 # ══════════════════════════════════════════════════════════════════════
 #  PYDANTIC EVENT SCHEMA
 #  This is the single source of truth for the event schema on Node 1.
 #  All fields must match the SEG output schema exactly.
+#
+#  NOTE on "node": includes "external" in addition to the 3 physical
+#  cluster nodes. SEG itself never generates "external" (its node list
+#  comes from seg_config.json's 3-entry "nodes" array) -- this 4th value
+#  is a deliberately wider validation contract than what SEG currently
+#  produces, reserved for events that might one day arrive from outside
+#  the 3-node cluster. Not a bug or inconsistency with SEG; it's the
+#  Validator's schema contract being intentionally more permissive than
+#  its current only producer.
 # ══════════════════════════════════════════════════════════════════════
 
 class PipelineEvent(BaseModel):
@@ -129,48 +159,66 @@ class PipelineEvent(BaseModel):
 # ══════════════════════════════════════════════════════════════════════
 #  VALIDATOR CONSUMER
 #  Consumes from the raw.events queue (bound to fyp.events/event.raw).
-#  One message at a time (prefetch_count=1).
+#  One message at a time (prefetch controlled by config).
 # ══════════════════════════════════════════════════════════════════════
 
 class ValidatorConsumer:
 
-    # Queue this consumer reads from
-    INPUT_QUEUE = "raw.events"
-
-    def __init__(self):
+    def __init__(self, config_path: Path = DEFAULT_CONFIG_PATH):
         self._seen_ids: set = set()   # session-scoped dedup store
 
-        # ── CORRECTED RabbitMQ connection ──────────────────────────────
+        self.config = load_config(Path(config_path))
+        rmq = self.config.get("rabbitmq", FALLBACK_RABBITMQ)
+
+        self.host = rmq.get("host", FALLBACK_RABBITMQ["host"])
+        self.port = rmq.get("port", FALLBACK_RABBITMQ["port"])
+        self.vhost = rmq.get("virtual_host", FALLBACK_RABBITMQ["virtual_host"])
+        self.username = rmq.get("username", FALLBACK_RABBITMQ["username"])
+        self.password = rmq.get("password", FALLBACK_RABBITMQ["password"])
+        self.exchange = rmq.get("exchange", FALLBACK_RABBITMQ["exchange"])
+        self.INPUT_QUEUE = rmq.get("input_queue", FALLBACK_RABBITMQ["input_queue"])
+        self.valid_routing_key = rmq.get("valid_routing_key", FALLBACK_RABBITMQ["valid_routing_key"])
+        self.schema_drift_routing_key = rmq.get(
+            "schema_drift_routing_key", FALLBACK_RABBITMQ["schema_drift_routing_key"]
+        )
+        self.prefetch_count = self.config.get("prefetch_count", 100)
+
+        # RabbitMQ connection -- hostname, not a hardcoded IP.
         params = pika.ConnectionParameters(
-            host="192.168.18.101",          # Explicit node IP
-            virtual_host="fyp",             # MUST specify the vhost
-            credentials=pika.PlainCredentials("fyp_user", "fyp_pass_2026"),
+            host=self.host,
+            port=self.port,
+            virtual_host=self.vhost,
+            credentials=pika.PlainCredentials(self.username, self.password),
             heartbeat=60,
             blocked_connection_timeout=30,
         )
         self.conn = pika.BlockingConnection(params)
-        self.ch   = self.conn.channel()
+        self.ch = self.conn.channel()
 
-        # ── Declare raw.events queue (binds to fyp.events/event.raw) ─
+        # Declare raw.events queue (binds to fyp.events/event.raw).
         # This queue receives events published by the SEG in replay mode.
         self.ch.queue_declare(
-            queue="raw.events",
+            queue=self.INPUT_QUEUE,
             durable=True,
             arguments={"x-dead-letter-exchange": "fyp.dlx",
                        "x-dead-letter-routing-key": "dead"}
         )
         self.ch.queue_bind(
-            queue="raw.events",
-            exchange="fyp.events",
+            queue=self.INPUT_QUEUE,
+            exchange=self.exchange,
             routing_key="event.raw"
         )
 
-        # ── Schema drift router (publishes to anomaly.detected) ───────
-        self.router = SchemaDriftRouter(self.ch)
+        # Schema drift router (publishes to anomaly.detected via fyp.events)
+        self.router = SchemaDriftRouter(
+            self.ch,
+            exchange=self.exchange,
+            routing_key=self.schema_drift_routing_key,
+        )
 
         log.info("validator_initialised",
-                 input_queue=self.INPUT_QUEUE,
-                 metrics_port=8002)
+                 host=self.host,
+                 input_queue=self.INPUT_QUEUE)
 
     # ── Main message handler ──────────────────────────────────────────
 
@@ -180,34 +228,27 @@ class ValidatorConsumer:
         1. Parse JSON
         2. Check for duplicate event_id
         3. Validate with Pydantic
-        4. Route: valid → validated.event | invalid → anomaly.detected
+        4. Route: valid -> validated.event | invalid -> anomaly.detected
         """
-        # Step 1: Parse JSON
         try:
             raw = json.loads(body)
         except json.JSONDecodeError as exc:
             log.error("json_parse_error", error=str(exc))
-            VAL_ERRORS.labels(error_type="JSON_PARSE").inc()
             ch.basic_nack(method.delivery_tag, requeue=False)
             return
 
         event_id = raw.get("event_id", "MISSING")
 
-        # Step 2: Duplicate detection (session-scoped)
         dedup_flag = event_id in self._seen_ids
         if dedup_flag:
             log.warning("duplicate_event_id", event_id=event_id)
-            VAL_DUPLICATES.inc()
         self._seen_ids.add(event_id)
 
-        # Step 3: Pydantic validation
         try:
             event = PipelineEvent(**raw)
 
         except ValidationError as exc:
-            # Classify the error type for severity assignment
             error_type = self._classify_error(exc, raw)
-            VAL_ERRORS.labels(error_type=error_type).inc()
 
             log.warning(
                 "validation_failed",
@@ -216,29 +257,23 @@ class ValidatorConsumer:
                 errors=exc.error_count()
             )
 
-            # Route directly to anomaly.detected — bypass Feature Store and Fusion Engine
             self.router.route(raw, exc, error_type)
             ch.basic_ack(method.delivery_tag)
             return
 
         except Exception as exc:
-            # Unexpected error — nack and route to dead letters
             log.error("unexpected_validation_error",
                       event_id=event_id, error=str(exc))
-            VAL_ERRORS.labels(error_type="UNEXPECTED").inc()
             ch.basic_nack(method.delivery_tag, requeue=False)
             return
 
-        # Step 4: Valid event — enrich and publish to Feature Store
-        VAL_PASSED.inc()
-
         enriched = event.model_dump(mode="json")
-        enriched["dedup_flag"]   = dedup_flag
+        enriched["dedup_flag"] = dedup_flag
         enriched["validated_at"] = datetime.now(timezone.utc).isoformat()
 
         self.ch.basic_publish(
-            exchange="fyp.events",
-            routing_key="event.valid",
+            exchange=self.exchange,
+            routing_key=self.valid_routing_key,
             body=json.dumps(enriched).encode("utf-8"),
             properties=pika.BasicProperties(
                 delivery_mode=2,
@@ -259,23 +294,28 @@ class ValidatorConsumer:
     def _classify_error(self, exc: ValidationError, raw: dict) -> str:
         """
         Classifies the Pydantic error into one of three categories:
-          MISSING_FIELD    → severity MEDIUM
-          TYPE_MUTATION    → severity HIGH
-          SCHEMA_VIOLATION → severity MEDIUM (enum violations, value errors)
+          MISSING_FIELD    -> severity MEDIUM
+          TYPE_MUTATION    -> severity HIGH
+          SCHEMA_VIOLATION -> severity MEDIUM (enum violations, value errors)
 
-        Classification is based on the error 'type' field from Pydantic v2.
+        NOTE: missing-field is checked first, so a compound violation (a
+        field missing AND another field's type mutated in the same event)
+        is classified as MISSING_FIELD/MEDIUM even though it also contains
+        a HIGH-severity issue. SEG's synthetic corpus never generates
+        compound violations (each schema_drift event is exactly one
+        subtype), so this doesn't affect the 1,950-event evaluation --
+        flagged here in case real/malformed production-like input is ever
+        fed through this path.
         """
         required_fields = {
             "event_id", "timestamp", "anomaly_type",
             "severity", "affected_component", "node", "metric_values"
         }
 
-        # Check for missing required fields first
         for field in required_fields:
             if field not in raw:
                 return "MISSING_FIELD"
 
-        # Inspect Pydantic error types
         errors = exc.errors()
         if not errors:
             return "UNKNOWN"
@@ -283,26 +323,22 @@ class ValidatorConsumer:
         for err in errors:
             etype = err.get("type", "")
 
-            # Pydantic v2 missing field error types
             if "missing" in etype:
                 return "MISSING_FIELD"
 
-            # Type errors: int_type, float_type, str_type, dict_type, etc.
             if "type" in etype:
                 return "TYPE_MUTATION"
 
-            # Value errors: literal_error, enum violation
             if "literal" in etype or "value" in etype:
                 return "SCHEMA_VIOLATION"
 
-        return "SCHEMA_VIOLATION"   # default fallback
+        return "SCHEMA_VIOLATION"
 
     # ── Consume loop ──────────────────────────────────────────────────
 
     def run(self):
-        # ── OPTIMIZED Prefetch Count for High Throughput ──────────────
-        self.ch.basic_qos(prefetch_count=100) 
-        
+        self.ch.basic_qos(prefetch_count=self.prefetch_count)
+
         self.ch.basic_consume(
             queue=self.INPUT_QUEUE,
             on_message_callback=self.on_message
