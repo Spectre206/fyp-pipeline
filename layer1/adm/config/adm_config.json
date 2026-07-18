@@ -1,0 +1,11 @@
+{
+  "rabbitmq": {
+    "host": "stream-node",
+    "port": 5672,
+    "virtual_host": "fyp",
+    "username": "fyp_user",
+    "password": "fyp_pass_2026",
+    "input_queue": "validated.event",
+    "fanout_exchange": "detection.fanout"
+  }
+}

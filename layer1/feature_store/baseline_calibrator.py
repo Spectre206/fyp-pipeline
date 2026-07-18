@@ -14,6 +14,14 @@ Once a component's calibration is complete, the calibrator signals the Feature
 Store to activate anomaly detection for that component. The calibration status
 of all components is logged at startup so the operator can see which components
 are still warming up.
+
+v1.1 CHANGELOG (Feature Store issues review):
+  - FIX #3: save()/load() implemented. Previously this docstring's
+    persistence claim was aspirational only -- no file I/O existed anywhere
+    in this class, so a restart lost all calibration state. FeatureStore
+    now calls save() the moment a component's baseline freezes, and
+    attempts load() before creating a fresh calibrator for a
+    (node, component) key -- see feature_store.py.
 """
 # layer1/feature_store/baseline_calibrator.py
 #
@@ -21,8 +29,10 @@ are still warming up.
 # After N events the baseline is frozen and PSI scoring becomes active.
 # One BaselineCalibrator instance per (node, component) pair.
 
+import json
 from collections import defaultdict
-from typing import Dict, List, Optional
+from pathlib import Path
+from typing import Dict, List, Optional, Union
 
 
 class BaselineCalibrator:
@@ -35,7 +45,7 @@ class BaselineCalibrator:
       - PSI scores computed by FeatureComputer will be 0.0
 
     After calibration:
-      - self.baseline is frozen (dict of metric → list of float values)
+      - self.baseline is frozen (dict of metric -> list of float values)
       - is_calibrated() returns True
       - PSI scoring is active
     """
@@ -74,3 +84,50 @@ class BaselineCalibrator:
         if self.is_calibrated():
             return 0
         return self.calibration_n - self._count
+
+    # ── FIX #3: persistence across restarts ───────────────────────────
+
+    def save(self, path: Union[str, Path]) -> None:
+        """
+        Persists the frozen baseline to a JSON file. Only meaningful once
+        is_calibrated() is True -- calling this before calibration is
+        complete raises, since there is nothing durable to save yet
+        (calling code should only call save() right after the transition
+        to calibrated, e.g. in FeatureStore.process()).
+        """
+        if self.baseline is None:
+            raise ValueError(
+                "Cannot save an uncalibrated BaselineCalibrator -- "
+                "baseline is still None. Only call save() after "
+                "is_calibrated() becomes True."
+            )
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "calibration_n": self.calibration_n,
+            "count": self._count,
+            "baseline": self.baseline,
+        }
+        with open(path, "w") as f:
+            json.dump(payload, f)
+
+    @classmethod
+    def load(cls, path: Union[str, Path], calibration_n: int = 100) -> "BaselineCalibrator":
+        """
+        Restores a previously-frozen baseline from disk. The returned
+        instance is already calibrated (is_calibrated() -> True) and will
+        not accept further updates via update(), same as any calibrator
+        that reached calibration_n naturally.
+
+        Raises FileNotFoundError if the path doesn't exist -- callers
+        (FeatureStore._get_calibrator) should check existence first and
+        fall back to a fresh BaselineCalibrator if there's nothing to load.
+        """
+        path = Path(path)
+        with open(path, "r") as f:
+            payload = json.load(f)
+
+        cal = cls(calibration_n=payload.get("calibration_n", calibration_n))
+        cal._count = payload.get("count", cal.calibration_n)
+        cal.baseline = payload["baseline"]
+        return cal
