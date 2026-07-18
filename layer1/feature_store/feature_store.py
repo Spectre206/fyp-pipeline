@@ -87,11 +87,11 @@ class FeatureStore:
             self._windows[key] = deque(maxlen=MAX_DEQUE_SIZE)
         return self._windows[key]
 
-    def _baseline_path(self, key: Tuple[str, str]) -> Path:
-        node, component = key
-        safe_node      = _SANITIZE_RE.sub("_", node)
+    def _baseline_path(self, key: Tuple[str, ...]) -> Path:
+    # key is now (component,) after calibration key coarsening
+        component = key[0]
         safe_component = _SANITIZE_RE.sub("_", component)
-        return self.baseline_dir / f"{safe_node}__{safe_component}.json"
+        return self.baseline_dir / f"{safe_component}.json"
 
     def _get_calibrator(self, key: Tuple) -> BaselineCalibrator:
         if key not in self._calibrators:

@@ -93,7 +93,7 @@ class ADMRunner:
         self.fanout_exchange = rmq.get("fanout_exchange", FALLBACK_RABBITMQ["fanout_exchange"])
 
         # Feature Store (stateful, in‑process)
-        self.feature_store = FeatureStore(calibration_n=100)
+        self.feature_store = FeatureStore(calibration_n=20)
         log.info("feature_store_initialised")
 
         # RabbitMQ connection

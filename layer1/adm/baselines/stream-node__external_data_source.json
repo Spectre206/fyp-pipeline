@@ -1,1 +1,0 @@
-{"calibration_n": 5, "count": 5, "baseline": {"cpu_percent": [95.3031, 89.3711, 103.1551, 80.213, 85.5133], "distribution_shift_marker": [1.0387, 0.9489, 0.9255, 1.0592, 1.0227]}}
