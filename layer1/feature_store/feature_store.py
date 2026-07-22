@@ -1,38 +1,4 @@
-"""
-Feature Store — Stateful Rolling Window Manager
-
-This module is the central stateful component of Layer 1. It maintains a
-separate collections.deque per (node, affected_component) pair, with a
-configurable maximum length (default: 30 events, max: 1,000 events).
-
-On each incoming validated event, the Feature Store:
-  1. Appends the event to the appropriate deque.
-  2. Calls feature_computers.py to recompute the full feature vector for
-     that component's current window (restricted to the most recent
-     window_size events -- see FIX #1 in feature_computers.py).
-  3. Attaches the feature vector to the event as a new "feature_vector" field.
-  4. Forwards the enriched event to the ADM Runner.
-
-During the first 100 events per component (calibration mode), the Feature Store
-records the baseline distribution for PSI scoring and DOES NOT forward events
-to the ADM — process() returns None for these events. Anomaly detection only
-begins once process() starts returning a non-None enriched event, i.e. once
-that component's baseline is established.
-
-v1.1 CHANGELOG (Feature Store issues review):
-  - FIX #2: process() now actually enforces the calibration gate described
-    above. Previously it always returned the enriched event regardless of
-    calibration state, contradicting this module's own docstring. Callers
-    (ADM Runner) MUST check for a None return value and skip fan-out to
-    detection.fanout when they see one.
-  - FIX #3: baseline persistence wired in. FeatureStore now attempts to
-    load a previously-saved baseline for a (node, component) key before
-    creating a fresh BaselineCalibrator, and saves it to disk the moment
-    calibration completes. See baseline_dir constructor argument.
-"""
-# layer1/feature_store/feature_store.py
-# Feature Store — In-process library (NOT a standalone consumer in v1.2)
-# Called by adm/adm_runner.py before fanning out to detection.fanout.
+# feature_store.py — v1.2.1 (split window/calibration keys)
 
 import logging
 import re
@@ -47,7 +13,7 @@ log = logging.getLogger(__name__)
 
 WINDOW_SIZE       = 30
 MAX_DEQUE_SIZE    = 1000
-CALIBRATION_N     = 100
+CALIBRATION_N     = 20          # final settled value
 DEFAULT_BASELINE_DIR = "baselines"
 
 _SANITIZE_RE = re.compile(r"[^A-Za-z0-9_-]+")
@@ -56,14 +22,14 @@ _SANITIZE_RE = re.compile(r"[^A-Za-z0-9_-]+")
 class FeatureStore:
     """
     Stateful in-memory rolling window store.
-    Called directly by ADMRunner — NOT a RabbitMQ consumer.
+    Called directly by ADMRunner.
 
     ADMRunner flow:
         event = consume from validated.event
         enriched = feature_store.process(event)
-        if enriched is None:
-            continue   # still calibrating -- do not fan out (FIX #2)
-        fan out enriched to detection.fanout (all 5 detectors)
+        if enriched is None:   # still calibrating
+            continue
+        fan out enriched to detection.fanout
     """
 
     def __init__(
@@ -76,24 +42,33 @@ class FeatureStore:
         self.calibration_n  = calibration_n
         self.baseline_dir   = Path(baseline_dir)
         self._windows:     Dict[Tuple[str, str], deque]              = {}
-        self._calibrators: Dict[Tuple[str, str], BaselineCalibrator] = {}
+        self._calibrators: Dict[Tuple[str],     BaselineCalibrator]  = {}
         self._computers    = FeatureComputer()
 
-    def _key(self, evt: dict) -> Tuple[str, str]:
-        return (evt.get("affected_component", "unknown"),)   # tuple with one element
+    # ── Two separate keys ─────────────────────────────────────────────
+    def _window_key(self, evt: dict) -> Tuple[str, str]:
+        """Rolling window is per (node, component) – no cross-node mixing."""
+        return (evt.get("node", "unknown"),
+                evt.get("affected_component", "unknown"))
 
-    def _get_window(self, key: Tuple) -> deque:
+    def _calibration_key(self, evt: dict) -> Tuple[str]:
+        """Calibrator is per component only – pools nodes to speed up baseline."""
+        return (evt.get("affected_component", "unknown"),)
+
+    # ── Window management (uses _window_key) ─────────────────────────
+    def _get_window(self, key: Tuple[str, str]) -> deque:
         if key not in self._windows:
             self._windows[key] = deque(maxlen=MAX_DEQUE_SIZE)
         return self._windows[key]
 
-    def _baseline_path(self, key: Tuple[str, ...]) -> Path:
-    # key is now (component,) after calibration key coarsening
+    # ── Calibrator management (uses _calibration_key) ────────────────
+    def _baseline_path(self, key: Tuple[str]) -> Path:
+        """Builds a safe filename from a calibration key (component,)."""
         component = key[0]
         safe_component = _SANITIZE_RE.sub("_", component)
         return self.baseline_dir / f"{safe_component}.json"
 
-    def _get_calibrator(self, key: Tuple) -> BaselineCalibrator:
+    def _get_calibrator(self, key: Tuple[str]) -> BaselineCalibrator:
         if key not in self._calibrators:
             path = self._baseline_path(key)
             if path.exists():
@@ -110,53 +85,52 @@ class FeatureStore:
                 self._calibrators[key] = BaselineCalibrator(self.calibration_n)
         return self._calibrators[key]
 
+    # ── Main processing method ────────────────────────────────────────
     def process(self, evt: dict) -> Optional[dict]:
         """
         Called by ADMRunner for every validated event.
 
         Returns the same event dict with feature_vector appended, UNLESS
         this component is still in its calibration window -- in that case
-        returns None (FIX #2). ADMRunner must handle this by skipping
-        fan-out for that event rather than treating None as an error.
+        returns None.
         """
-        key        = self._key(evt)
-        window     = self._get_window(key)
-        calibrator = self._get_calibrator(key)
+        # Separate keys
+        window_key      = self._window_key(evt)
+        calibration_key = self._calibration_key(evt)
+
+        window     = self._get_window(window_key)
+        calibrator = self._get_calibrator(calibration_key)
         metrics    = evt.get("metric_values", {})
 
         was_calibrated = calibrator.is_calibrated()
 
-        # Update calibrator
+        # Update calibrator (per-component)
         if isinstance(metrics, dict):
             calibrator.update(metrics)
 
-        # FIX #3: the instant calibration completes, persist it so a
-        # restart doesn't lose this component's baseline.
+        # On calibration completion: persist baseline
         if not was_calibrated and calibrator.is_calibrated():
-            path = self._baseline_path(key)
+            path = self._baseline_path(calibration_key)
             try:
                 calibrator.save(path)
-                log.info(f"Calibration complete for {key} -- saved to {path}")
+                log.info(f"Calibration complete for {calibration_key} -- saved to {path}")
             except Exception as exc:
                 log.error(f"Failed to save baseline to {path}: {exc}")
 
-        # Push to rolling window
+        # Push to rolling window (per node-component)
         window.append({
             "metrics":   metrics if isinstance(metrics, dict) else {},
             "timestamp": evt.get("timestamp", ""),
         })
 
-        # FIX #2: enforce the calibration gate. Still-warming-up components
-        # get their window/calibrator updated (above) so calibration
-        # progresses, but no enriched event is returned for detection.
+        # Enforce calibration gate
         if not calibrator.is_calibrated():
-            log.debug(f"{key} still calibrating "
+            log.debug(f"{calibration_key} still calibrating "
                       f"({calibrator.events_until_calibrated()} events left) "
                       f"-- withholding from ADM fan-out")
             return None
 
-        # Compute features (restricted to the most recent window_size
-        # entries -- see FIX #1 in feature_computers.py)
+        # Compute features (rolling window is per node-component)
         try:
             features = self._computers.compute(
                 list(window), calibrator.baseline, self.window_size
@@ -165,7 +139,6 @@ class FeatureStore:
             log.error(f"Feature computation error: {exc}")
             features = {}
 
-        # Return enriched event
         enriched = dict(evt)
         enriched["feature_vector"]          = features
         enriched["calibrated"]              = True

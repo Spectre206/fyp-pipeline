@@ -10,6 +10,8 @@ class NoiseInjector:
     Applies ±5% Gaussian noise to all float values in metric_values.
     Skips events where metric_values is not a dict (e.g. type_mutation
     schema drift events where metric_values is deliberately a string).
+    Also skips distribution_shift_marker — it's a deliberate flag field,
+    not a real metric, so adding noise would corrupt its exact value.
     """
 
     def __init__(self, rng: np.random.Generator, noise_pct: float = 0.05):
@@ -30,7 +32,7 @@ class NoiseInjector:
 
         noisy = {}
         for k, v in mv.items():
-            if isinstance(v, (int, float)):
+            if isinstance(v, (int, float)) and k != "distribution_shift_marker":
                 noise = self.rng.normal(0, abs(float(v)) * self.noise_pct)
                 noisy[k] = max(0.0, round(float(v) + noise, 4))
             else:

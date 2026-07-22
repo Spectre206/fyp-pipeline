@@ -201,18 +201,17 @@ class EventTemplateFactory:
             "ground_truth_action":    GROUND_TRUTH_ACTIONS[risk],
         }
 
-        # Deliberately corrupt the event to simulate the violation type
         if subtype == "missing_field":
-            base.pop("severity")          # remove a required field
+            base.pop("severity")
 
         elif subtype == "type_mutation":
-            base["metric_values"] = "corrupted_string"   # wrong type
+            base["metric_values"] = "corrupted_string"
 
         elif subtype == "value_shift":
-            # Metric values look valid but distribution is shifted
             base["metric_values"] = {
                 "cpu_percent": self._sample(60.0, 99.0),
                 "distribution_shift_marker": 1.0,
             }
+            base["affected_component"] = "Loghub replay adapter"
 
         return base
