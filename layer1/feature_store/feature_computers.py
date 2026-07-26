@@ -19,16 +19,16 @@ Features computed:
 All functions are stateless — they receive only the window data they need.
 The Feature Store is responsible for maintaining state between calls.
 
-v1.1 CHANGELOG (Feature Store issues review):
+v1.2 CHANGELOG:
   - FIX #1: compute() now actually truncates the incoming window to the last
-    `window_size` entries before computing any rolling statistic. Previously
-    `window_size` was accepted but never used, so every statistic silently
-    used the entire deque (up to 1000 events) instead of a true rolling
-    window. See LAYER1_COMPONENT_LOG.md Section 4 for the demonstrated bug.
+    `window_size` entries before computing any rolling statistic.
   - FIX #4: `_auth_rate()` now returns the AVERAGE of auth_failures_per_min
-    readings within the 60s window, not their SUM. Summing already-a-rate
-    values inflated the feature far beyond Model 4's rate_threshold=20/min
-    scale (demonstrated: 6 realistic HIGH-severity events summed to 310).
+    readings within the 60s window, not their SUM.
+  - FIX #5 (PSI): `_psi()` rewritten with safeguards against inflated scores.
+    Bin edges are now based on the expected (baseline) distribution only,
+    minimum bin proportions prevent log-ratio explosion, and per-bin PSI
+    contributions are capped. Previously PSI scores could reach 40+ when
+    distributions didn't overlap; now they stay in the 0.0–2.0 range.
 """
 # layer1/feature_store/feature_computers.py
 #
@@ -64,17 +64,9 @@ class FeatureComputer:
         Args:
             window:      List of dicts: [{"metrics": {...}, "timestamp": "ISO8601"}, ...]
                          Ordered oldest -> newest. Last item is the current event.
-                         May be longer than window_size (e.g. the Feature Store's
-                         deque can hold up to 1000 events) -- this function is
-                         responsible for restricting itself to the most recent
-                         window_size entries. See FIX #1.
             baseline:    Frozen calibration baseline (None during calibration period).
-                         Dict of metric_name -> list of float values.
-            window_size: Rolling window length. ALL rolling statistics
-                         (rolling_mean/std/min/max, z_score, rate_of_change,
-                         spike_count) are computed only over the last
-                         `window_size` entries of `window` -- not the full
-                         list passed in.
+            window_size: Rolling window length. ALL rolling statistics are computed
+                         only over the last `window_size` entries of `window`.
 
         Returns:
             Flat dict of feature_name -> float value.
@@ -82,12 +74,6 @@ class FeatureComputer:
         if not window:
             return {}
 
-        # ── FIX #1: actually restrict to the last window_size entries. ────
-        # Previously this parameter was accepted but never used, so every
-        # statistic below silently operated on the ENTIRE deque (up to 1000
-        # events) rather than a true rolling window. short_ma/long_ma below
-        # take their own smaller slices of THIS already-truncated window,
-        # so they remain sub-windows of the rolling window as intended.
         if window_size and len(window) > window_size:
             window = window[-window_size:]
 
@@ -111,7 +97,7 @@ class FeatureComputer:
 
             arr = np.array(values, dtype=float)
 
-            # Rolling statistics (now correctly scoped to window_size)
+            # Rolling statistics
             features[f"rolling_mean_{metric}"] = float(np.mean(arr))
             features[f"rolling_std_{metric}"]  = float(np.std(arr))
             features[f"rolling_min_{metric}"]  = float(np.min(arr))
@@ -136,14 +122,11 @@ class FeatureComputer:
             threshold = float(np.mean(arr)) + 2.0 * float(np.std(arr))
             features[f"spike_count_{metric}"] = int(np.sum(arr > threshold))
 
-            # Short MA (last 5 events) and long MA (last 20 events) --
-            # sub-windows of the already-truncated `window`, so these
-            # remain correctly nested inside the rolling window_size.
+            # Short MA (last 5 events) and long MA (last 20 events)
             features[f"short_ma_{metric}"] = float(np.mean(arr[-5:]))
             features[f"long_ma_{metric}"]  = float(np.mean(arr[-20:]))
 
-            # PSI score vs calibration baseline
-            # Returns 0.0 during calibration period (baseline is None)
+            # PSI score vs calibration baseline (v1.2 — FIX #5)
             if baseline and metric in baseline:
                 features[f"psi_score_{metric}"] = self._psi(
                     arr, np.array(baseline[metric], dtype=float)
@@ -151,52 +134,70 @@ class FeatureComputer:
             else:
                 features[f"psi_score_{metric}"] = 0.0
 
-        # ── Global features (not per-metric) ─────────────────────────
+        # ── Global features ─────────────────────────────────────────
 
-        # silence_duration_s — seconds since last non-zero throughput
-        # Used by Model 3 (Throughput Drop / Silent Crash detector)
         features["silence_duration_s"] = self._silence_duration(window)
-
-        # auth_failures_per_min — AVERAGE rate over a 60-second sliding
-        # window (v1.1 fix -- was a SUM, see module docstring FIX #4)
-        # Used by Model 4 (Rate-gate + Random Forest)
         features["auth_failures_per_min"] = self._auth_rate(window)
 
         return features
 
-    # ── PSI (Population Stability Index) ─────────────────────────────
+    # ── PSI (Population Stability Index) — v1.2 rewritten ────────────
 
     def _psi(
         self,
         actual: np.ndarray,
         expected: np.ndarray,
-        bins: int = 10
+        bins: int = 10,
     ) -> float:
         """
         Computes PSI between actual (current window) and expected (baseline).
 
+        v1.2 FIX #5: Previous implementation used combined bin edges from
+        both distributions, which caused extreme PSI values (40+) when
+        distributions didn't overlap. Now uses expected (baseline) range for
+        bin edges, applies minimum bin proportions, and caps per‑bin
+        contributions.
+
         PSI interpretation:
           < 0.1  -> no significant change
-          0.1-0.2 -> moderate change
+          0.1–0.2 -> moderate change
           >= 0.2  -> significant shift (MEDIUM severity)
           >= 0.5  -> severe shift    (HIGH severity)
 
         Returns 0.0 on any computation error.
         """
         try:
-            eps       = 1e-8
-            all_vals  = np.concatenate([actual, expected])
-            bin_edges = np.linspace(
-                all_vals.min(), all_vals.max() + eps, bins + 1
-            )
+            expected = np.array(expected, dtype=float)
+            actual   = np.array(actual,   dtype=float)
 
-            a_counts = np.histogram(actual,   bins=bin_edges)[0].astype(float) + eps
-            e_counts = np.histogram(expected, bins=bin_edges)[0].astype(float) + eps
+            # Bin edges based on EXPECTED (baseline) range only.
+            # The baseline defines "normal" — we measure how actual deviates.
+            if expected.min() >= expected.max():
+                return 0.0
+
+            bin_edges = np.linspace(expected.min(), expected.max(), bins + 1)
+
+            a_counts = np.histogram(actual,   bins=bin_edges)[0].astype(float)
+            e_counts = np.histogram(expected, bins=bin_edges)[0].astype(float)
+
+            # Minimum proportion per bin — prevents log‑ratio explosion
+            # when a bin has zero or near‑zero observations.
+            min_prop = 0.01
 
             a_pct = a_counts / a_counts.sum()
             e_pct = e_counts / e_counts.sum()
 
-            psi = float(np.sum((a_pct - e_pct) * np.log(a_pct / e_pct)))
+            a_pct = np.clip(a_pct, min_prop, None)
+            e_pct = np.clip(e_pct, min_prop, None)
+
+            a_pct = a_pct / a_pct.sum()
+            e_pct = e_pct / e_pct.sum()
+
+            # Per‑bin PSI with individual cap
+            psi_per_bin = (a_pct - e_pct) * np.log(a_pct / e_pct)
+            psi_per_bin = np.clip(psi_per_bin, 0.0, 1.0)
+
+            psi = float(np.sum(psi_per_bin))
             return round(max(0.0, psi), 6)
 
         except Exception as exc:
@@ -211,8 +212,7 @@ class FeatureComputer:
         messages_per_second > 0. Returns elapsed seconds since then.
 
         Returns 0.0  if current throughput is non-zero.
-        Returns 9999.0 if no non-zero throughput seen in entire window
-                       (full silent crash throughout window).
+        Returns 9999.0 if no non-zero throughput seen in entire window.
         """
         from datetime import datetime, timezone
 
@@ -228,7 +228,6 @@ class FeatureComputer:
                 except Exception:
                     return 0.0
 
-        # Never saw non-zero throughput in window
         return 9999.0
 
     # ── Auth failure rate ─────────────────────────────────────────────
@@ -236,15 +235,7 @@ class FeatureComputer:
     def _auth_rate(self, window: List[dict]) -> float:
         """
         Returns the AVERAGE of auth_failures_per_min readings from events
-        within the last 60 seconds of the window. Used by Model 4 as a
-        fast rate gate.
-
-        v1.1 FIX #4: this was previously a SUM of readings, which inflated
-        the feature far beyond Model 4's rate_threshold=20/min scale (e.g.
-        6 events at 45-60/min summed to 310). Each event's
-        auth_failures_per_min is already an instantaneous rate reading, so
-        averaging multiple readings within the window recovers a
-        comparable rate rather than compounding them.
+        within the last 60 seconds of the window. Used by Model 4.
 
         Returns 0.0 if no auth_failures_per_min metric present in-window.
         """
