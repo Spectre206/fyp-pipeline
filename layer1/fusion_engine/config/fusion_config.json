@@ -1,0 +1,24 @@
+{
+  "rabbitmq": {
+    "host": "stream-node",
+    "port": 5672,
+    "virtual_host": "fyp",
+    "username": "fyp_user",
+    "password": "fyp_pass_2026",
+    "input_exchange": "fyp.events",
+    "input_queue": "fusion.results",
+    "output_exchange": "fyp.events",
+    "output_routing_key": "anomaly.fused"
+  },
+  "correlation_window_s": 3.0,
+  "min_confidence_to_publish": 0.3,
+  "fast_path_critical": true,
+  "fast_path_model_weight_threshold": 0.80,
+  "model_weights": {
+    "z_score_error_rate": 0.80,
+    "moving_average_throughput": 0.75,
+    "rate_gate_auth_rf": 0.85,
+    "z_score_cpu_memory": 0.80,
+    "psi_detector": 0.70
+  }
+}
