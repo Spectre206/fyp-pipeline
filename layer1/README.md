@@ -1,13 +1,17 @@
 # Layer 1 — Real-Time Data Plane
 
 > **Node:** stream-node — `192.168.18.101`
-> **Hardware:** AMD Ryzen 5, 8GB RAM, Ubuntu 24.04 Desktop
+> **Hardware:** AMD Ryzen 5 7340U, 8 GB RAM, 256 GB NVMe, Ubuntu 24.04 Desktop
 
 ---
 
 ## What This Layer Does
 
-Layer 1 is the entry point of the entire pipeline. It generates or ingests raw events, enforces schema validity, computes derived feature vectors over per-component rolling windows, and runs five independent anomaly detection models in parallel. When any model flags an anomaly, Layer 1 publishes the full event — enriched with feature vectors and detection metadata — to the RabbitMQ Topic Exchange for Layer 2 to consume. Layer 1 has no runtime dependency on Nodes 2 or 3.
+Layer 1 is the entry point of the entire pipeline. It generates a fixed, labeled
+synthetic corpus of 1 950 system‑health events, enforces schema validity, computes
+derived feature vectors over per‑component rolling windows, runs five independent
+anomaly detectors in parallel, and fuses their results into a single decision
+published to `anomaly.detected`. Layer 1 has no runtime dependency on Nodes 2 or 3.
 
 ---
 
@@ -15,56 +19,101 @@ Layer 1 is the entry point of the entire pipeline. It generates or ingests raw e
 
 | Component | Directory | Role |
 |:----------|:----------|:-----|
-| Synthetic Event Generator | `seg/` | Generates the 1,950-event corpus and replays events into the live pipeline at configurable speed. Seeds are fixed for reproducibility. |
-| Pydantic Validator | `validator/` | Schema enforcement gate. Structural failures (missing fields, type mutations) are immediately published as `schema_drift` anomalies — they bypass the Feature Store and go directly to `anomaly.detected`. |
-| Feature Store | `feature_store/` | Stateful in-memory rolling windows per (node, component) pair. Computes Z-scores, moving averages, rate-of-change, spike counts, PSI scores, and silence duration for all five detectors. |
-| Anomaly Detection Module | `adm/` | Five detectors running in parallel: Isolation Forest (CPU/memory), Z-Score (error rate), Moving Average (throughput), Rate-gate + Random Forest (auth flood), PSI Detector (schema drift). |
-| RabbitMQ Producer | `rabbitmq/` | Publishes anomaly events to the `anomaly.detected` queue on the Topic Exchange. Handles connection retries and message persistence. |
+| **Synthetic Event Generator** | `seg/` | Generates the 1 950‑event corpus and replays events into the live pipeline at configurable speed. Seeds are fixed for reproducibility. |
+| **RabbitMQ Topology** | `rabbitmq/` | One‑time setup script that declares all exchanges, queues, and bindings. |
+| **Pydantic Validator** | `validator/` | Schema enforcement gate. Structural failures (missing fields, type mutations) are immediately published as `schema_drift` anomalies — they bypass the Feature Store and ADM Runner and go directly to `anomaly.detected`. |
+| **Feature Store** | `feature_store/` | Stateful in‑process library. Maintains per‑`(node, component)` rolling windows and per‑`component` calibration baselines. Computes Z‑scores, moving averages, rate‑of‑change, spike counts, PSI scores, silence duration, and auth failure rate for all five detectors. |
+| **ADM Runner + Detectors** | `adm/` | ADM Runner fans out enriched events to `detection.fanout`. Five standalone detectors consume from their own queues and publish to `fusion.results`. |
+| **Fusion Engine** | `fusion_engine/` | Correlates detector results by `event_id`, suppresses normal events, and publishes fused anomalies to `anomaly.detected`. Exposes Prometheus metrics on port 8003. |
 
 ---
 
 ## Data Flow
 
 ```
-SEG  ──► Pydantic Validator
-              │
-              ├─ [structural violation] ───────────────────────► anomaly.detected
-              │                                                   (schema_drift type)
-              └─ [valid event] ──► Feature Store
-                                        │
-                                        └──► ADM Runner (5 detectors in parallel)
-                                                  │
-                                                  └─ [anomaly flagged] ──► RabbitMQ Producer
-                                                                               │
-                                                                               └──► anomaly.detected
+SEG ──► Validator
+           │
+           ├─ [structural violation] ──────────────────────────► anomaly.detected (100)
+           │
+           └─ [valid event] ──► Feature Store + ADM Runner
+                                      │
+                                      └──► detection.fanout
+                                              │
+                                              ├──► detect.cpu       ──┐
+                                              ├──► detect.error     ──┤
+                                              ├──► detect.throughput──┼──► fusion.results
+                                              ├──► detect.auth      ──┤
+                                              └──► detect.schema    ──┘
+                                                      │
+                                                      ▼
+                                              Fusion Engine
+                                                      │
+                                                      ├─ [all normal] → suppress
+                                                      └─ [≥1 anomaly] → anomaly.detected (~603)
 ```
 
----
-
-## Implementation Order (Phase 1)
-
-| Week | Component | Key Dependency |
-|:-----|:----------|:---------------|
-| 1 | SEG + Pydantic Validator | None — these are the foundation |
-| 1 | Feature Store + Baseline Calibrator | Valid events from Validator |
-| 2 | Isolation Forest — CPU/Memory Spike (Model 1) | Feature vectors + NAB dataset |
-| 2 | Z-Score — Error Rate Surge (Model 2) | Feature vectors |
-| 3 | Moving Average Deviation — Throughput Drop (Model 3) | Feature vectors |
-| 4 | Rate-gate + Random Forest — Auth Flood (Model 4) | Feature vectors + KDD99 dataset |
-| 5 | PSI Detector — Schema Drift (Model 5) | Feature vectors + PSI baseline from calibrator |
+![Layer 1 Data Flow](docs/layer1_data_flow.png)
 
 ---
 
-## RabbitMQ Queues Used
+## RabbitMQ Topology
 
-| Queue | Direction | Purpose |
-|:------|:----------|:--------|
-| `anomaly.detected` | Layer 1 → Layer 2 | All anomaly events published here |
-| `dead.letters` | Internal | Unroutable messages — reviewed manually |
+| Exchange | Type | Purpose |
+|:---------|:-----|:--------|
+| `fyp.events` | Topic | Shared bus — raw events, validated events, fusion results, anomaly decisions, and Layer 2/3 agent communication |
+| `detection.fanout` | Fanout | Broadcasts each enriched event to all five detector queues simultaneously |
+| `fyp.dlx` | Direct | Dead Letter Exchange — failed deliveries routed to `dead.letters` |
+
+| Queue | Bound To | Routing Key | Consumer |
+|:------|:---------|:------------|:---------|
+| `raw.events` | `fyp.events` | `event.raw` | Validator |
+| `validated.event` | `fyp.events` | `event.valid` | ADM Runner |
+| `detect.cpu` | `detection.fanout` | `""` (fanout) | CPU/Memory Spike Detector |
+| `detect.error` | `detection.fanout` | `""` (fanout) | Error Rate Surge Detector |
+| `detect.throughput` | `detection.fanout` | `""` (fanout) | Throughput Drop Detector |
+| `detect.auth` | `detection.fanout` | `""` (fanout) | Auth Failure Flood Detector |
+| `detect.schema` | `detection.fanout` | `""` (fanout) | Schema Drift Detector |
+| `fusion.results` | `fyp.events` | `fusion.result` | Fusion Engine |
+| `anomaly.detected` | `fyp.events` | `anomaly.#` | Layer 2 Triage Agent |
+| `dead.letters` | `fyp.dlx` | `dead` | Manual inspection |
+
+---
+
+## Detectors Summary
+
+| # | Detector | Algorithm | Queue | Target Class | TP | FP | Precision | Recall |
+|---|----------|-----------|-------|--------------|----|----|-----------|--------|
+| 1 | CPU/Memory Spike | Z‑Score + raw threshold | `detect.cpu` | `cpu_memory_spike` (200) | 188 | 9 | 95.4% | 94.0% |
+| 2 | Error Rate Surge | Z‑Score + step‑change | `detect.error` | `error_rate_surge` (200) | 148 | 2 | 98.7% | 74.0% |
+| 3 | Throughput Drop | Moving Avg + raw threshold | `detect.throughput` | `throughput_drop` (200) | 141 | 0 | 100% | 70.5% |
+| 4 | Auth Failure Flood | Rate‑Gate + Random Forest | `detect.auth` | `auth_failure_flood` (200) | 124 | 0 | 100% | 62.0% |
+| 5 | Schema Drift | PSI + Shift Marker | `detect.schema` | `schema_drift` value_shift (50) | 31 | 0 | 100% | 62.0% |
+
+*TP = true positives on target class.  FP = false positives.  Recall is on the target anomaly type only; false negatives include other anomaly types correctly passed by each detector.*
+
+---
+
+## Prometheus Metrics
+
+Only the **Fusion Engine** exports Prometheus metrics (port **8003**):
+
+| Metric | Description |
+|:-------|:------------|
+| `fyp_fusion_published_total` | Total fused anomalies published to `anomaly.detected` |
+| `fyp_fusion_suppressed_total` | Events where all detectors returned normal (suppressed) |
+| `fyp_fusion_compound_total` | Compound incidents (≥2 detectors flagged the same event) |
+| `fyp_fusion_fast_path_total` | Events fast‑pathed (CRITICAL with high‑weight model) |
+
+Prometheus on `gateway-node` (port 9090) scrapes `stream-node:8003`.  
+Grafana dashboard "Agent Pipeline & Fusion Engine" visualises these metrics.
 
 ---
 
 ## Setup
 
-See `User_Guide.md` in this directory for full Node 1 installation and startup instructions.
-All Python dependencies are in `requirements_node1.txt`.
+See **[User Guide](User_Guide.md)** for full installation, configuration, and
+step‑by‑step run instructions.  All Python dependencies are in
+`requirements_node1.txt`.
+
+For a complete cold‑start run from scratch, follow the command sequence in
+**Section 12** of the User Guide.

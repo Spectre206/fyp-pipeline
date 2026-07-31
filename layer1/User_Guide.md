@@ -1,63 +1,360 @@
 # Layer 1 User Guide — stream-node (192.168.18.101)
 
-This guide covers installing, configuring, and running the full Layer 1 stack on Node 1 from scratch. Complete `Phase_0_Infrastructure/User_Guide.md` before starting here — RabbitMQ, static IP, passwordless SSH, and NTP must all be verified first.
+This guide covers installing, configuring, and running the full Layer 1 stack on Node 1
+from scratch.  Complete **Phase 0 Infrastructure** before starting here — RabbitMQ,
+static IPs, passwordless SSH, and NTP must all be verified first.
 
 ---
 
 ## 1. Prerequisites Checklist
 
-Before running any Layer 1 component, confirm that all Phase 0 infrastructure items are in place: static IP `192.168.18.101` is set, hostname is `stream-node`, RabbitMQ is running with the `fypadmin` user, the `/etc/hosts` cluster mapping is present on all three nodes, and NTP is synchronised. This section will provide the exact verification commands for each.
+Before running any Layer 1 component, verify the following on `stream-node`:
+
+```bash
+# Static IP and hostname
+hostname          # must return "stream-node"
+ip addr show      # 192.168.18.101 must be present
+
+# RabbitMQ running with the fyp vhost
+sudo systemctl status rabbitmq-server
+sudo rabbitmqctl list_vhosts | grep fyp
+
+# /etc/hosts cluster mapping (all three nodes)
+grep "192.168.18" /etc/hosts
+# Expected:
+# 192.168.18.101  stream-node
+# 192.168.18.102  ai-brain-node
+# 192.168.18.103  gateway-node
+
+# NTP synchronised
+chronyc tracking | grep "Leap status"
+```
 
 ---
 
 ## 2. Python Environment Setup
 
-This section will cover creating a Python 3.10+ virtual environment on Node 1, activating it, and installing all dependencies from `requirements_node1.txt`. It will also document which packages correspond to which component (scikit-learn for ADM, pydantic for the validator, pika for RabbitMQ, river for PSI streaming).
+```bash
+cd ~/fyp-pipeline
+python3 -m venv .venv
+source .venv/bin/activate
+
+# Install all Layer 1 dependencies
+pip install -r layer1/requirements_node1.txt
+```
+
+Key packages and their roles:
+
+| Package | Used by |
+|---|---|
+| `pika` | All RabbitMQ consumers (Validator, ADM Runner, detectors, Fusion Engine) |
+| `pydantic` | Validator (PipelineEvent schema) |
+| `numpy`, `scikit-learn`, `joblib` | ADM detectors (Isolation Forest, Random Forest) |
+| `prometheus_client` | Fusion Engine metrics |
+| `structlog` | Structured logging across all components |
 
 ---
 
 ## 3. Dataset Download and Placement
 
-This section will describe how to download the three evaluation datasets — NAB (Numenta Anomaly Benchmark), Loghub HDFS, and KDD99 — and where to place them on Node 1 so the ADM training scripts can find them. Refer to `datasets/README.md` for download links. Expected directory paths and approximate download sizes will be documented here.
+The three evaluation datasets must be placed in `~/fyp-pipeline/datasets/`:
+
+```
+datasets/
+├── KDD99/
+│   └── kddcup.data_10_percent
+├── Loghub/
+│   └── HDFS/
+│       └── HDFS_1/
+│           ├── anomaly_label.csv
+│           └── HDFS.log
+├── NAB/
+│   └── realKnownCause/
+│       ├── ambient_temperature_system_failure.csv
+│       ├── cpu_utilization_asg_misconfiguration.csv
+│       └── machine_temperature_system_failure.csv
+└── README.md
+```
+
+See `datasets/README.md` for download links and expected sizes.
 
 ---
 
-## 4. Running the Synthetic Event Generator (SEG)
+## 4. Layer 1 Data Flow (Overview)
 
-This section will explain the two SEG operating modes: corpus generation mode (writes 1,950 events + `labels.csv` to disk) and live replay mode (publishes events to the pipeline at the speed configured in `seg/config/seg_config.json`). It will cover how to set the random seed, adjust replay speed, and verify that events are being produced with the correct distribution across categories.
+![Layer 1 Data Flow](docs/layer1_data_flow.png)
 
----
+The pipeline path: **SEG → Validator → Feature Store + ADM Runner → 5 detectors → Fusion Engine → anomaly.detected**.
 
-## 5. Running the Pydantic Validator
-
-This section will describe starting the validator, how it connects to the SEG output, and how to verify it is correctly classifying structural violations as `schema_drift` anomalies and routing them directly to `anomaly.detected`. Expected log lines for valid events and for each violation type (missing field, type mutation) will be shown.
-
----
-
-## 6. Running the Feature Store
-
-This section will cover starting the Feature Store, how to monitor the per-component rolling windows via the built-in status endpoint, and how to confirm that the baseline calibration window (first 100 events per component) has completed before PSI scoring becomes active. Memory usage monitoring commands will be included.
+Schema‑drift events (`missing_field` / `type_mutation`) bypass the detectors and go directly
+to `anomaly.detected`.  Normal events are suppressed by the Fusion Engine.
 
 ---
 
-## 7. Training and Running the ADM Models
+## 5. Cold-Start vs. Warm-Start
 
-This section will cover the two-step process for each ML-based detector: (1) training on the relevant dataset and saving the model to `adm/models/`, and (2) running `adm_runner.py` which loads all five detectors and processes feature vectors in parallel. It will include expected training time on Node 1 hardware, how to verify each detector is publishing to `anomaly.detected`, and how to check RabbitMQ queue depth from the management UI at `192.168.18.101:15672`.
+The Feature Store maintains per‑component baselines that are persisted to disk
+(`adm/baselines/`).  Two evaluation modes exist:
 
----
+| Mode | How to activate | Expected behaviour |
+|---|---|---|
+| **Cold-start** | Delete `adm/baselines/*.json` before the run | Every component undergoes the 20‑event calibration phase. ~1 527 events forwarded to detectors, ~323 withheld. |
+| **Warm-start** | Keep baselines from a previous run | Most components reload their frozen baseline and skip calibration. ~1 820 events forwarded. |
 
-## 8. Verifying End-to-End Layer 1 Output
-
-This section will describe how to confirm that the complete Layer 1 pipeline is working: events flowing from the SEG through the validator and feature store and out of the ADM into `anomaly.detected`. It will cover how to use the RabbitMQ management UI to inspect message payloads, how to check the Dead Letter Exchange for unroutable messages, and what a correctly formed `anomaly.detected` message should look like.
-
----
-
-## 9. Running as Background Services
-
-This section will document how to configure each Layer 1 component as a `systemd` service so it survives SSH disconnection and restarts automatically on reboot. Template `systemd` unit files and `journalctl` log commands will be included.
+**For reproducible evaluation results, always use cold‑start mode.**  
+The commands in this guide assume a cold start unless stated otherwise.
 
 ---
 
-## 10. Troubleshooting
+## 6. Running the Synthetic Event Generator (SEG)
 
-Common issues encountered during Layer 1 implementation will be documented here, including: RabbitMQ connection refused (firewall or service not running), Feature Store memory growing unboundedly (window size misconfiguration), ADM not detecting known anomalies (model not trained on correct dataset split), and Pydantic validation errors from unexpected SEG output fields.
+### 6.1 Generate the corpus (do once)
+
+```bash
+cd ~/fyp-pipeline/layer1/seg
+python3 seg.py --mode generate --output ../../evaluation/
+```
+
+This creates `evaluation/events_1950.jsonl` (1 950 events) and `evaluation/labels.csv` (ground truth).
+
+### 6.2 Replay the corpus onto RabbitMQ
+
+```bash
+cd ~/fyp-pipeline/layer1/seg
+python3 seg.py --mode replay --speed 50 --input ../../evaluation/events_1950.jsonl
+```
+
+- `--speed 50` replays at 50× real‑time (finishes in ~30 s).
+- Use `--speed 1` for a realistic 30‑minute HDFS‑style stream test.
+- Events are published to `fyp.events` with routing key `event.raw`.
+
+Verify events are flowing:
+
+```bash
+watch -n 1 'sudo rabbitmqctl list_queues -p fyp name messages | grep raw.events'
+```
+
+---
+
+## 7. Running the Pydantic Validator
+
+```bash
+cd ~/fyp-pipeline/layer1/validator
+python3 validator.py
+```
+
+**What to expect:**
+- `Loaded config from .../validator_config.json`
+- `validator_initialised`
+- `validator_started ... waiting_for_messages=True`
+
+The Validator consumes from `raw.events`, validates every event against the
+`PipelineEvent` schema, and routes:
+- **Valid events** → `validated.event` (routing key `event.valid`)
+- **Invalid events** → `anomaly.detected` directly (routing key `anomaly.schema_drift`)
+
+Out of the 1 950‑event corpus, exactly **100 events** bypass to `anomaly.detected`
+and **1 850** proceed to `validated.event`.
+
+---
+
+## 8. Running the Feature Store + ADM Runner
+
+The Feature Store is an in‑process library called by the ADM Runner — no separate process needed.
+
+```bash
+cd ~/fyp-pipeline/layer1/adm
+python3 adm_runner.py
+```
+
+**What to expect:**
+- `feature_store_initialised`
+- `adm_runner_started`
+
+The ADM Runner consumes from `validated.event`, enriches each event with a
+`feature_vector` (Z‑scores, rolling statistics, PSI scores, etc.), and fans out
+the enriched event **once** to `detection.fanout`.  All five `detect.*` queues
+receive identical copies.
+
+During calibration (first 20 events per component), events are **withheld** — the
+ADM Runner logs `event_withheld_calibrating` and does not fan them out.
+
+### 8.1 Verify calibration progress
+
+```bash
+ls ~/fyp-pipeline/layer1/adm/baselines/
+```
+
+Baseline JSON files appear as components reach 20 events.  After a cold‑start run,
+expect **17 baseline files**.
+
+---
+
+## 9. Running the Anomaly Detectors
+
+Each detector is a standalone RabbitMQ consumer.  Run them in any order after the
+ADM Runner has filled the `detect.*` queues.
+
+```bash
+cd ~/fyp-pipeline/layer1/adm
+
+# 1. Error Rate Surge (Z‑Score)
+python3 detectors/error_rate.py
+
+# 2. Throughput Drop (Moving Average)
+python3 detectors/throughput_drop.py
+
+# 3. Auth Failure Flood (Rate‑Gate + Random Forest)
+python3 detectors/auth_flood.py
+
+# 4. CPU/Memory Spike (Z‑Score)
+python3 detectors/cpu_spike.py
+
+# 5. Schema Drift (PSI + Shift Marker)
+python3 detectors/schema_spike.py
+```
+
+Each detector publishes **every** result to `fusion.results` (routing key `fusion.result`),
+whether it detected an anomaly or not.  This allows the Fusion Engine to know all
+five detectors have processed the event.
+
+### 9.1 Training the ML models (do once before first run)
+
+Two detectors use pre‑trained models.  Train them once and the models are saved to `adm/models/`:
+
+```bash
+cd ~/fyp-pipeline/layer1/adm
+
+# Random Forest for auth detector (KDD99 dataset)
+python3 detectors/train_auth_model.py
+
+# Isolation Forest for CPU detector (NAB dataset — trained but currently unused; Z‑score is primary)
+python3 detectors/train_cpu_model.py
+```
+
+The CPU detector currently uses Z‑scores from the Feature Store; the Isolation Forest
+model is saved for future hybrid confidence‑adjustment.
+
+---
+
+## 10. Running the Fusion Engine
+
+```bash
+cd ~/fyp-pipeline/layer1/fusion_engine
+python3 fusion_engine.py
+```
+
+The Fusion Engine:
+- Consumes all detector results from `fusion.results`
+- Groups them by `event_id` within a 3‑second correlation window
+- Publishes a single fused decision to `anomaly.detected` (routing key `anomaly.fused`)
+- Suppresses events where all five detectors return normal
+
+Prometheus metrics are exposed on port **8003**.
+
+---
+
+## 11. Verifying End-to-End Layer 1 Output
+
+After running all components, check the final queue depths:
+
+```bash
+sudo rabbitmqctl list_queues -p fyp name messages | grep -E "raw.events|validated.event|detect\.|fusion.results|anomaly.detected"
+```
+
+**Expected cold‑start results:**
+
+| Queue | Messages |
+|---|---|
+| `raw.events` | 0 |
+| `validated.event` | 0 |
+| `detect.cpu` | 0 |
+| `detect.error` | 0 |
+| `detect.throughput` | 0 |
+| `detect.auth` | 0 |
+| `detect.schema` | 0 |
+| `fusion.results` | 0 |
+| `anomaly.detected` | ~703 (100 bypass + ~603 fused) |
+
+### 11.1 Inspect fused results
+
+```bash
+wc -l ~/fyp-pipeline/layer1/fusion_engine/fusion_results.jsonl
+head -1 ~/fyp-pipeline/layer1/fusion_engine/fusion_results.jsonl | python3 -m json.tool
+```
+
+### 11.2 Prometheus / Grafana
+
+Prometheus on `gateway-node` scrapes the Fusion Engine at `stream-node:8003`.
+Grafana dashboard "Agent Pipeline & Fusion Engine" displays live metrics.
+
+---
+
+## 12. Complete Cold‑Start Run (single sequence)
+
+```bash
+# 1. Purge everything
+rm -f ~/fyp-pipeline/layer1/adm/baselines/*.json
+rm -f ~/fyp-pipeline/layer1/adm/*_results.jsonl
+rm -f ~/fyp-pipeline/layer1/fusion_engine/fusion_results.jsonl
+
+sudo rabbitmqctl purge_queue raw.events -p fyp
+sudo rabbitmqctl purge_queue validated.event -p fyp
+sudo rabbitmqctl purge_queue detect.cpu -p fyp
+sudo rabbitmqctl purge_queue detect.error -p fyp
+sudo rabbitmqctl purge_queue detect.throughput -p fyp
+sudo rabbitmqctl purge_queue detect.auth -p fyp
+sudo rabbitmqctl purge_queue detect.schema -p fyp
+sudo rabbitmqctl purge_queue fusion.results -p fyp
+sudo rabbitmqctl purge_queue anomaly.detected -p fyp
+
+# 2. Terminal A — Validator
+cd ~/fyp-pipeline/layer1/validator && python3 validator.py
+
+# 3. Terminal B — ADM Runner
+cd ~/fyp-pipeline/layer1/adm && python3 adm_runner.py
+
+# 4. Terminal C — Replay
+cd ~/fyp-pipeline/layer1/seg && python3 seg.py --mode replay --speed 50 --input ../../evaluation/events_1950.jsonl
+
+# 5. After replay finishes — run all five detectors (Terminal D, sequentially)
+cd ~/fyp-pipeline/layer1/adm
+python3 detectors/error_rate.py
+python3 detectors/throughput_drop.py
+python3 detectors/auth_flood.py
+python3 detectors/cpu_spike.py
+python3 detectors/schema_drift.py
+
+# 6. Run Fusion Engine
+cd ~/fyp-pipeline/layer1/fusion_engine && python3 fusion_engine.py
+
+# 7. Verify
+sudo rabbitmqctl list_queues -p fyp name messages | grep -E "raw.events|validated.event|detect\.|fusion.results|anomaly.detected"
+```
+
+---
+
+## 13. Warm‑Start Run
+
+If you want to skip calibration (e.g., for quick re‑testing), **do not delete** the
+`adm/baselines/` directory before the run.  The Feature Store will reload previously
+frozen baselines and forward nearly all events immediately.
+
+---
+
+## 14. Running as Background Services
+
+*(Systemd unit files — to be added when Layer 1 is production‑hardened.)*
+
+---
+
+## 15. Troubleshooting
+
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| `connection refused` to RabbitMQ | RabbitMQ not running or firewall blocking port 5672 | `sudo systemctl start rabbitmq-server` |
+| Detector queues show 1 850 events instead of 1 527 | Baselines not cleared (warm‑start) | `rm -f adm/baselines/*.json` and re‑run |
+| `fusion_results.jsonl` is empty | Fusion Engine started before detectors finished | Run detectors first, then Fusion Engine |
+| PSI scores are inflated (10–40 range) | Old Feature Store code without PSI fix | Update `feature_computers.py` to v1.2 |
+| Prometheus target `stream-node:8003` shows "down" | Fusion Engine not running | Start Fusion Engine first |
+| `ai-brain-node:9100` down in Prometheus | Node 2 is offline | Expected during Layer 1‑only development |
