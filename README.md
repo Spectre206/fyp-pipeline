@@ -82,7 +82,7 @@ Node 3 — gateway-node                        Layer 3: HITL & Observability
 
 ## RabbitMQ Topology Diagram
 
-![RabbitMQ Topology](docs/rabbitmq_topology.png)
+<img src="docs/rabbitmq_topology.png" width="800" alt="RabbitMQ Topology" style="max-height:1200px;">
 
 ---
 
