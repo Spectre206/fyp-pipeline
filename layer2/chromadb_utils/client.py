@@ -1,15 +1,37 @@
-"""
-ChromaDB Client — Connection and Collection Initialisation
+"""ChromaDB Client — Connection and Collection Initialisation."""
+import os
 
-This module handles the ChromaDB connection and ensures the incident_history
-collection exists with the correct configuration before any agent tries to
-use it. It uses sentence-transformers (all-MiniLM-L6-v2) as the embedding
-function, producing 384-dimensional vectors.
+# Force offline mode to prevent HuggingFace connection attempts
+# (model is already cached locally; no internet on ai-brain-node)
+os.environ["HF_HUB_OFFLINE"] = "1"
 
-On startup, it checks whether the incident_history collection already exists
-(existing deployment with accumulated knowledge) or needs to be created fresh
-(first run). The collection name, embedding model, and distance metric (cosine)
-are defined here as constants so they are consistent across all agents that
-access ChromaDB. This module is imported by both the Triage Agent (for queries)
-and the Learning Agent (for upserts).
-"""
+import chromadb
+from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
+from dotenv import load_dotenv
+
+load_dotenv()
+
+CHROMA_PATH = "./chromadb_data"
+COLLECTION_NAME = "incident_history"
+EMBEDDING_MODEL = "all-MiniLM-L6-v2"  # 384-dimensional, cosine distance
+
+_client = None
+_collection = None
+
+def get_collection():
+    """Return the incident_history collection. Creates if not exists. Singleton."""
+    global _client, _collection
+    if _collection is not None:
+        return _collection
+
+    _client = chromadb.PersistentClient(path=CHROMA_PATH)
+    ef = SentenceTransformerEmbeddingFunction(model_name=EMBEDDING_MODEL)
+    _collection = _client.get_or_create_collection(
+        name=COLLECTION_NAME,
+        embedding_function=ef,
+        metadata={"hnsw:space": "cosine"},
+    )
+    return _collection
+
+def get_document_count() -> int:
+    return get_collection().count()
