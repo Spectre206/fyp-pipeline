@@ -189,3 +189,53 @@ flowchart TD
 - The 25.6% timeout rate is the primary factor limiting AUTO throughput — all timeouts go to HITL.
 - Of the successful LLM responses, LOW risk tier was assigned to 135 events, but only 114 had confidence ≥0.65 and thus passed the threshold. The remaining 21 LOW-tier events had low confidence and were routed to HITL as LOW_CONFIDENCE.
 - The 5 MEDIUM risk tier events are invalid (the LLM should never output MEDIUM as risk_tier) — these also went to HITL.
+
+## 4. Learning Agent
+
+**Files:** `chromadb_utils/upsert.py`, `agents/learning_agent.py`  
+**Status:** ✅ **v1.0 – qwen3:0.6b summarisation, ChromaDB upsert, EMA threshold update, tested with simulated outcome.feedback.**
+
+### 4.1 Files built
+
+| File | Action | Purpose |
+|---|---|---|
+| `chromadb_utils/upsert.py` | Replaced stub | Upserts incident summaries into ChromaDB with metadata |
+| `agents/learning_agent.py` | Replaced stub | Consumes `outcome.feedback`, calls qwen3:0.6b, upserts ChromaDB, updates EMA threshold |
+
+### 4.2 Flow
+
+```mermaid
+flowchart TD
+    A[outcome.feedback queue] --> B[Receive outcome message]
+    B --> C[Build summary prompt<br/>from incident + outcome]
+    C --> D[Call qwen3:0.6b via Ollama<br/>timeout=10s, num_predict=256]
+    D --> E{LLM response?}
+    E -- Success --> F[Extract summary sentence]
+    E -- Timeout/Error --> G[Use fallback summary]
+    F --> H[Build ChromaDB metadata<br/>including negative_example flag]
+    G --> H
+    H --> I[upsert_incident to ChromaDB]
+    I --> J[Update EMA threshold<br/>α=0.9, bounds [0.60, 0.90]]
+    J --> K[Acknowledge message]
+```
+
+### 4.3 Key design decisions
+
+- **Zero latency impact on main pipeline** – fires post‑dispatch, consuming `outcome.feedback` asynchronously.
+- **qwen3:0.6b** chosen for RAM budget compliance (~400 MB).
+- **Fallback summary** – if Ollama call fails, uses a static text `"Incident {id} — {outcome_type}"` to ensure ChromaDB always gets a record.
+- **EMA formula:** `new = α × old + (1−α) × signal`, with `α=0.9`. Outcome signals: AUTO_EXECUTE_SUCCESS→0.80, HITL_APPROVED→0.75, etc. Negative outcomes lower the threshold.
+- **Prometheus** metrics on port 8013 (outcomes processed, threshold updates, ChromaDB upserts).
+
+### 4.4 Test results (simulated outcome.feedback)
+
+- **Single AUTO_EXECUTE_SUCCESS outcome published manually.**
+- ChromaDB document count: 0 → 1 ✅
+- EMA threshold updated: 0.65 → 0.665 ✅ (verified against formula)
+- Learning Agent logs confirmed upsert and EMA update.
+
+### 4.5 Open items
+
+- Full testing requires Layer 3 to produce real `outcome.feedback` messages.
+- ChromaDB growth rate (OQ4) and EMA convergence (OQ6) will be measured during full end‑to‑end evaluation.
+- Currently the Learning Agent’s summarisation quality (OQ5) has not been formally evaluated – planned for Phase 2 week 8.
