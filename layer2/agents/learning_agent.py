@@ -92,13 +92,18 @@ class LearningAgent:
     def _build_summary_prompt(self, outcome: dict) -> str:
         """Create a prompt for qwen3:0.6b summarisation."""
         pr = outcome.get("full_policy_result", {})
-        st = pr.get("full_reasoning_chain", {}).get("strategy_result", {})
+        chain = pr.get("full_reasoning_chain", {})
+        st = chain.get("strategy_result", {})
         llm = st.get("llm_response", {})
-        ev = pr.get("full_reasoning_chain", {}).get("triage_result", {})
-        ev = ev.get("original_event", {})
+        triage = chain.get("triage_result", {})
+        ev = triage.get("original_event", {})
+        # Use triage's normalized fields when original_event lacks them
+        anomaly_type = triage.get("anomaly_type") or ev.get("anomaly_type", "?")
+        component = ev.get("affected_component") or triage.get("anomaly_type", "?")
+        node = ev.get("node") or "?"
         return (
-            f"Incident: {ev.get('anomaly_type','?')} on {ev.get('affected_component','?')}\n"
-            f"Severity: {ev.get('severity','?')} | Risk tier: {llm.get('risk_tier','?')}\n"
+            f"Incident: {anomaly_type} on {component}\n"
+            f"Severity: {triage.get('severity','?')} | Risk tier: {llm.get('risk_tier','?')}\n"
             f"Outcome: {outcome.get('outcome_type','?')}\n"
             f"Actions taken: {outcome.get('actual_actions_taken',[])}\n"
             f"Operator notes: {outcome.get('operator_notes','none')}\n"
@@ -131,21 +136,22 @@ class LearningAgent:
 
             # Build metadata
             pr = outcome.get("full_policy_result", {})
-            st = pr.get("full_reasoning_chain", {}).get("strategy_result", {})
+            chain = pr.get("full_reasoning_chain", {})
+            st = chain.get("strategy_result", {})
             llm = st.get("llm_response", {})
-            ev = pr.get("full_reasoning_chain", {}).get("triage_result", {})
-            ev = ev.get("original_event", {})
+            triage = chain.get("triage_result", {})
+            ev = triage.get("original_event", {})
 
             metadata = {
                 "incident_id": event_id,
-                "anomaly_type": ev.get("anomaly_type", "unknown"),
+                "anomaly_type": triage.get("anomaly_type") or ev.get("anomaly_type", "unknown"),
                 "risk_tier": llm.get("risk_tier", "HIGH"),
                 "outcome_type": outcome_type,
                 "confidence_at_decision": float(llm.get("confidence", 0.0)),
                 "fusion_type": ev.get("fusion_type", "single"),
-                "severity": ev.get("severity", "MEDIUM"),
-                "node": ev.get("node", "unknown"),
-                "affected_component": ev.get("affected_component", "unknown"),
+                "severity": triage.get("severity") or ev.get("severity", "MEDIUM"),
+                "node": ev.get("node") or triage.get("original_event", {}).get("node") or "unknown",
+                "affected_component": ev.get("affected_component") or "unknown",
                 "timestamp": datetime.now(timezone.utc).isoformat(),
                 "operator_approved": outcome_type in {"HITL_APPROVED", "HITL_MODIFIED"},
                 "negative_example": outcome_type in NEGATIVE_OUTCOMES,
