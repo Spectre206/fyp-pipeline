@@ -1,18 +1,26 @@
-"""
-ChromaDB Upsert — Learning Agent Write Operations
+"""ChromaDB Upsert — Learning Agent write operations."""
+from .client import get_collection
+import structlog
 
-This module handles all write operations to the ChromaDB incident_history
-collection. It is called exclusively by the Learning Agent — no other agent
-writes to ChromaDB.
+log = structlog.get_logger()
 
-For each resolved incident, it upserts a document whose text field is the
-qwen3:0.6b-generated summary (the text that will be embedded and used for
-future similarity retrieval). The metadata fields stored alongside the
-embedding include: incident_id, anomaly_type, risk_tier, outcome_type,
-confidence_at_decision, severity, node, affected_component, timestamp,
-operator_approved, and negative_example flag.
 
-The upsert operation uses the incident_id as the ChromaDB document ID so
-that re-running the same incident (e.g. after a retry) overwrites the
-existing record rather than creating a duplicate.
-"""
+def upsert_incident(incident_id: str, summary: str, metadata: dict):
+    """
+    Upsert a resolved incident into ChromaDB.
+    Uses incident_id as document ID — safe to call multiple times.
+    negative_example=True incidents are stored but excluded from RAG retrieval
+    by the query module's outcome filter.
+    """
+    col = get_collection()
+    col.upsert(
+        ids=[incident_id],
+        documents=[summary],
+        metadatas=[metadata],
+    )
+    log.info(
+        "chromadb_upserted",
+        incident_id=incident_id,
+        outcome=metadata.get("outcome_type"),
+        negative=metadata.get("negative_example", False),
+    )
