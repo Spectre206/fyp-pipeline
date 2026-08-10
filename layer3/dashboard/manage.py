@@ -1,9 +1,17 @@
-"""
-Django manage.py — HITL Dashboard Project Entry Point
+#!/usr/bin/env python3
+"""Django manage.py — HITL Dashboard Project Entry Point."""
+import os
+import sys
 
-Standard Django management script. Used to run migrations, start the development
-server, create superusers, and run management commands. The Django project
-is configured in settings.py in this directory. Run with:
-  python manage.py runserver 0.0.0.0:8000
-to make the dashboard accessible from other nodes on the cluster network.
-"""
+def main():
+    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "settings")
+    try:
+        from django.core.management import execute_from_command_line
+    except ImportError as exc:
+        raise ImportError(
+            "Couldn't import Django. Is it installed and is the virtual environment active?"
+        ) from exc
+    execute_from_command_line(sys.argv)
+
+if __name__ == "__main__":
+    main()

@@ -1,18 +1,47 @@
-"""
-HITL Dashboard Django ORM Models — Decision Log
+"""Django ORM model mapping to the existing decisions table."""
+from django.db import models
 
-This module defines the Django ORM model for the decisions table in SQLite.
-The Decision model maps to the schema specified in System Design Section 8.2:
+class Decision(models.Model):
+    event_id = models.CharField(max_length=255)
+    anomaly_type = models.CharField(max_length=100, blank=True, null=True)
+    severity = models.CharField(max_length=50, blank=True, null=True)
+    affected_component = models.CharField(max_length=255, blank=True, null=True)
+    node = models.CharField(max_length=100, blank=True, null=True)
+    routing_reason = models.CharField(max_length=100, blank=True, null=True)
+    risk_tier_from_llm = models.CharField(max_length=50, blank=True, null=True)
+    confidence_from_llm = models.FloatField(blank=True, null=True)
+    decision_type = models.CharField(max_length=50)
+    decision_timestamp = models.CharField(max_length=100, blank=True, null=True)
+    time_in_queue_seconds = models.FloatField(blank=True, null=True)
+    original_actions = models.TextField(blank=True, null=True)
+    final_actions = models.TextField(blank=True, null=True)
+    operator_notes = models.TextField(blank=True, null=True)
+    auto_execute_outcome = models.CharField(max_length=100, blank=True, null=True)
+    created_at = models.CharField(max_length=100, blank=True, null=True)
 
-  Fields: id, event_id, anomaly_type, severity, affected_component, node,
-  routing_reason, risk_tier_from_llm, confidence_from_llm, decision_type,
-  decision_timestamp, time_in_queue_seconds, original_actions (JSON),
-  final_actions (JSON, may differ from original if operator used Modify),
-  operator_notes, auto_execute_outcome, created_at.
+    class Meta:
+        managed = False
+        db_table = "decisions"
 
-The decision_type field takes one of: APPROVE, REJECT, MODIFY, AUTO_EXECUTE.
-This model is also used by sqlite_logger.py as the write target — the logger
-does not interact with Django's ORM directly but writes to the same SQLite
-file via a direct sqlite3 connection to avoid the Django app context dependency
-from within the Auto-Execution Engine process.
-"""
+    def __str__(self):
+        return f"{self.event_id} — {self.decision_type}"
+
+class HitlIncident(models.Model):
+    """Incident awaiting operator action in the HITL dashboard."""
+    STATUS_CHOICES = [
+        ("PENDING", "Pending"),
+        ("APPROVED", "Approved"),
+        ("REJECTED", "Rejected"),
+        ("MODIFIED", "Modified"),
+    ]
+
+    event_id = models.CharField(max_length=255, unique=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="PENDING")
+    payload_json = models.TextField(help_text="Full Policy Agent message as JSON")
+    arrived_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["arrived_at"]
+
+    def __str__(self):
+        return f"{self.event_id} ({self.status})"

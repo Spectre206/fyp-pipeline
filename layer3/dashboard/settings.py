@@ -1,16 +1,50 @@
-"""
-Django Settings — HITL Dashboard
+"""Django Settings — HITL Dashboard (evaluation deployment)."""
+import os
+from pathlib import Path
 
-This file contains all Django configuration for the HITL Dashboard application.
-Key settings include:
+BASE_DIR = Path(__file__).resolve().parent
 
-  - INSTALLED_APPS: includes the hitl app and django.channels for SSE support
-  - DATABASES: SQLite database stored at layer3/sqlite_logger/decisions.db
-  - ALLOWED_HOSTS: set to ['192.168.18.103', 'gateway-node', 'localhost']
-    for cluster access
-  - CHANNEL_LAYERS: configured for in-memory channel layer (sufficient for
-    single-node SSE — no Redis required)
-  - DEBUG: True for development/evaluation. Review before any external deployment.
-  - SECRET_KEY: loaded from environment variable or .env file (never hardcoded)
-  - Static files configuration for the dashboard CSS/JS assets
-"""
+SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "evaluation-secret-key-not-for-production")
+DEBUG = True
+ALLOWED_HOSTS = ["192.168.18.103", "gateway-node", "localhost", "127.0.0.1"]
+
+INSTALLED_APPS = [
+    "django.contrib.staticfiles",
+    "hitl",
+]
+
+MIDDLEWARE = [
+    "django.middleware.security.SecurityMiddleware",
+    "django.middleware.common.CommonMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
+]
+
+ROOT_URLCONF = "urls"
+WSGI_APPLICATION = "wsgi.application"
+
+TEMPLATES = [
+    {
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [],
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                "django.template.context_processors.request",
+            ],
+        },
+    },
+]
+
+DATABASES = {
+    "default": {
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": BASE_DIR.parent / "sqlite_logger" / "decisions.db",
+    }
+}
+
+LANGUAGE_CODE = "en-us"
+TIME_ZONE = "UTC"
+USE_I18N = False
+USE_TZ = True
+STATIC_URL = "/static/"
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
