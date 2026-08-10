@@ -1,0 +1,197 @@
+{
+  "title": "Agent Pipeline & Fusion Engine Performance",
+  "uid": "fyp-agent-pipeline",
+  "timezone": "utc",
+  "refresh": "5s",
+  "schemaVersion": 16,
+  "version": 0,
+  "panels": [
+    {
+      "title": "Fusion Engine - Published vs Suppressed",
+      "type": "stat",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 8,
+        "h": 4
+      },
+      "targets": [
+        {
+          "expr": "fyp_fusion_published_total",
+          "legendFormat": "Published"
+        },
+        {
+          "expr": "fyp_fusion_suppressed_total",
+          "legendFormat": "Suppressed"
+        }
+      ]
+    },
+    {
+      "title": "Fusion Engine - Compound Events",
+      "type": "stat",
+      "gridPos": {
+        "x": 8,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "expr": "fyp_fusion_compound_total",
+          "legendFormat": "Compound"
+        }
+      ]
+    },
+    {
+      "title": "Fusion Engine - Fast Path Events",
+      "type": "stat",
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "expr": "fyp_fusion_fast_path_total",
+          "legendFormat": "Fast Path"
+        }
+      ]
+    },
+    {
+      "title": "Triage Agent Latency (ms)",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "1000 * rate(fyp_triage_latency_s_sum[1m]) / rate(fyp_triage_latency_s_count[1m])",
+          "legendFormat": "avg latency"
+        }
+      ]
+    },
+    {
+      "title": "Strategy Agent Latency (s)",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 8,
+        "y": 4,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "rate(fyp_strategy_latency_s_sum[1m]) / rate(fyp_strategy_latency_s_count[1m])",
+          "legendFormat": "avg latency"
+        }
+      ]
+    },
+    {
+      "title": "Strategy Schema Valid Rate",
+      "type": "stat",
+      "gridPos": {
+        "x": 0,
+        "y": 12,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "expr": "sum(fyp_strategy_schema_valid_total) / (sum(fyp_strategy_schema_valid_total) + sum(fyp_strategy_schema_invalid_total))",
+          "legendFormat": "valid rate"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    {
+      "title": "Strategy Tokens per Second",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 4,
+        "y": 12,
+        "w": 8,
+        "h": 4
+      },
+      "targets": [
+        {
+          "expr": "fyp_strategy_tokens_per_s",
+          "legendFormat": "tokens/s"
+        }
+      ]
+    },
+    {
+      "title": "Policy Routing Decisions",
+      "type": "piechart",
+      "gridPos": {
+        "x": 12,
+        "y": 12,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "expr": "sum by (decision) (fyp_routing_decision_total)",
+          "legendFormat": "{{decision}}"
+        }
+      ]
+    },
+    {
+      "title": "Policy Agent Latency (ms)",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 8,
+        "h": 4
+      },
+      "targets": [
+        {
+          "expr": "1000 * rate(fyp_policy_latency_s_sum[1m]) / rate(fyp_policy_latency_s_count[1m])",
+          "legendFormat": "avg latency"
+        }
+      ]
+    },
+    {
+      "title": "EMA Confidence Threshold Updates",
+      "type": "stat",
+      "gridPos": {
+        "x": 8,
+        "y": 16,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "expr": "fyp_learning_threshold_updates_total",
+          "legendFormat": "updates"
+        }
+      ]
+    },
+    {
+      "title": "ChromaDB Upserts",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 12,
+        "y": 16,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "expr": "rate(fyp_learning_chromadb_upserts_total[1m])",
+          "legendFormat": "upserts/s"
+        }
+      ]
+    }
+  ]
+}
