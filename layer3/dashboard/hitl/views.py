@@ -75,3 +75,44 @@ def reject(request, incident_id):
     incident.status = "REJECTED"
     incident.save()
     return redirect("queue")
+
+def modify_form(request, incident_id):
+    """Show a form to edit the recommended actions."""
+    incident = HitlIncident.objects.get(id=incident_id, status="PENDING")
+    payload = json.loads(incident.payload_json)
+    actions = payload.get("full_reasoning_chain", {}).get("strategy_result", {}).get("llm_response", {}).get("recommended_actions", [])
+    return render(request, "hitl/modify.html", {
+        "incident": incident,
+        "actions": actions,
+    })
+
+def modify_submit(request, incident_id):
+    """Process the modified actions form."""
+    incident = HitlIncident.objects.get(id=incident_id, status="PENDING")
+    payload = json.loads(incident.payload_json)
+
+    if request.method == "POST":
+        # Get edited actions from the form
+        action1 = request.POST.get("action1", "").strip()
+        action2 = request.POST.get("action2", "").strip()
+        action3 = request.POST.get("action3", "").strip()
+        final_actions = [a for a in [action1, action2, action3] if a]
+        notes = request.POST.get("operator_notes", "Modified by operator").strip()
+
+        #1. Write to SQLite (always succeeds locally)
+        write_decision(_build_decision(payload, "MODIFY", notes, final_actions))
+
+        # 2. Update status immediately (so dashboard reflects change even if RabbitMQ is down)
+        incident.status = "MODIFIED"
+        incident.save()
+
+        # 3. Try to publish outcome.feedback (may fail if Node 1 is offline — status already saved)
+        try:
+            _publish_outcome(payload, "HITL_MODIFIED", final_actions, notes)
+        except Exception as e:
+            # Log the failure, but don't fail the operation
+            print(f"Warning: Could not publish outcome.feedback: {e}")
+
+    return redirect("queue")
+
+       

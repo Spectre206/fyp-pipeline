@@ -13,6 +13,7 @@
         .approve { background-color: #4CAF50; }
         .reject { background-color: #f44336; }
         .back { background-color: #555; color: white; padding: 8px 16px; text-decoration: none; border-radius: 4px; }
+        .modify { background-color: #FF9800; }
         pre { white-space: pre-wrap; word-break: break-word; }
     </style>
 </head>
@@ -35,6 +36,7 @@
     <div class="actions">
         <a href="{% url 'approve' incident.id %}" class="approve">APPROVE</a>
         <a href="{% url 'reject' incident.id %}" class="reject">REJECT</a>
+        <a href="{% url 'modify_form' incident.id %}" class="modify" style="background-color: #FF9800;">MODIFY</a>
     </div>
     <br>
     <a href="{% url 'queue' %}" class="back">← Back to Queue</a>
