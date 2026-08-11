@@ -1,0 +1,167 @@
+================================================================================
+  FULL SYSTEM RERUN — STEP-BY-STEP PROCEDURE
+  Distributed Multi-Agent Coordination for Self-Healing Data Pipelines
+================================================================================
+
+PREREQUISITES:
+  - All three nodes powered on and network reachable.
+  - RabbitMQ running on stream-node (Node 1).
+  - Ollama running on ai-brain-node (Node 2).
+  - Prometheus & Grafana installed on gateway-node (Node 3).
+
+================================================================================
+  PHASE 1 — PREPARATION (Node 1)
+================================================================================
+
+1. SSH into stream-node (192.168.18.101).
+
+2. Purge all RabbitMQ queues (fresh start):
+   sudo rabbitmqctl purge_queue raw.events -p fyp
+   sudo rabbitmqctl purge_queue validated.event -p fyp
+   sudo rabbitmqctl purge_queue detect.cpu -p fyp
+   sudo rabbitmqctl purge_queue detect.error -p fyp
+   sudo rabbitmqctl purge_queue detect.throughput -p fyp
+   sudo rabbitmqctl purge_queue detect.auth -p fyp
+   sudo rabbitmqctl purge_queue detect.schema -p fyp
+   sudo rabbitmqctl purge_queue fusion.results -p fyp
+   sudo rabbitmqctl purge_queue anomaly.detected -p fyp
+   sudo rabbitmqctl purge_queue triage.result -p fyp
+   sudo rabbitmqctl purge_queue strategy.result -p fyp
+   sudo rabbitmqctl purge_queue auto.execute -p fyp
+   sudo rabbitmqctl purge_queue hitl.queue -p fyp
+   sudo rabbitmqctl purge_queue outcome.feedback -p fyp
+
+3. Delete old Feature Store baselines (cold‑start calibration):
+   rm -f ~/fyp-pipeline/layer1/adm/baselines/*.json
+
+4. Start the Validator (Terminal 1 – keep running):
+   cd ~/fyp-pipeline/layer1/validator
+   source ../.venv/bin/activate   # if venv not auto-activated
+   python3 validator.py
+
+5. Start the ADM Runner (Terminal 2 – keep running):
+   cd ~/fyp-pipeline/layer1/adm
+   python3 adm_runner.py
+
+================================================================================
+  PHASE 2 — START LAYER 2 AGENTS (Node 2)
+================================================================================
+
+6. SSH into ai-brain-node (192.168.18.102).
+
+7. Start all four agents in separate terminals, in this exact order:
+
+   Terminal A – Triage Agent:
+   cd ~/fyp-pipeline/layer2
+   python3 agents/triage_agent.py
+
+   Terminal B – Strategy Agent:
+   cd ~/fyp-pipeline/layer2
+   python3 agents/strategy_agent.py
+
+   Terminal C – Policy Agent:
+   cd ~/fyp-pipeline/layer2
+   python3 agents/policy_agent.py
+
+   Terminal D – Learning Agent:
+   cd ~/fyp-pipeline/layer2
+   python3 agents/learning_agent.py
+
+   Each agent should print a “*_consuming” log line and wait.
+
+================================================================================
+  PHASE 3 — START LAYER 3 COMPONENTS (Node 3)
+================================================================================
+
+8. SSH into gateway-node (192.168.18.103).
+
+9. Start Auto‑Executor (Terminal 1):
+   cd ~/fyp-pipeline/layer3
+   python3 auto_executor/executor.py
+
+10. Start HITL queue consumer (Terminal 2):
+    cd ~/fyp-pipeline/layer3/dashboard
+    python3 manage.py consume_hitl
+
+11. Start Django web server (Terminal 3):
+    cd ~/fyp-pipeline/layer3/dashboard
+    python3 manage.py runserver 0.0.0.0:8000
+
+12. Ensure Prometheus & Grafana are running:
+    sudo systemctl restart prometheus grafana-server
+    Open http://192.168.18.103:3000 → check the Agent Pipeline dashboard.
+
+================================================================================
+  PHASE 4 — TRIGGER THE CORPUS REPLAY (Node 1)
+================================================================================
+
+13. Back on stream-node, start SEG replay (Terminal 3):
+    cd ~/fyp-pipeline/layer1/seg
+    python3 seg.py --mode replay --speed 50 --input ../../evaluation/events_1950.jsonl
+
+    Wait until the replay finishes (takes ~30 seconds at speed 50).
+
+14. Run the five detectors (Terminal 4 – one after another):
+    cd ~/fyp-pipeline/layer1/adm
+    python3 detectors/error_rate.py
+    python3 detectors/throughput_drop.py
+    python3 detectors/auth_flood.py
+    python3 detectors/cpu_spike.py
+    python3 detectors/schema_drift.py
+
+15. Start the Fusion Engine (Terminal 5):
+    cd ~/fyp-pipeline/layer1/fusion_engine
+    python3 fusion_engine.py
+
+================================================================================
+  PHASE 5 — MONITOR & INTERACT
+================================================================================
+
+- Watch queue depths on any node:
+  python3 -c "
+  import sys; sys.path.insert(0,'/home/spectre/fyp-pipeline/layer3')  # or layer2 path
+  from rabbitmq.connection import get_connection
+  conn=get_connection(); ch=conn.channel()
+  for q in ['anomaly.detected','triage.result','strategy.result','auto.execute','hitl.queue','outcome.feedback']:
+      r=ch.queue_declare(q,passive=True)
+      print(f'{q}: {r.method.message_count}')
+  conn.close()
+  "
+
+- HITL Dashboard: open http://192.168.18.103:8000
+  Approve/Reject/Modify a few incidents to exercise the full loop.
+
+- Grafana: http://192.168.18.103:3000
+  Watch the “Agent Pipeline & Fusion Engine Performance” dashboard.
+
+================================================================================
+  PHASE 6 — POST-RUN CHECKS
+================================================================================
+
+After all queues drain:
+
+- On ai-brain-node:
+  ChromaDB document count:
+  python3 -c "from chromadb_utils.client import get_document_count; print(get_document_count())"
+
+  Current EMA threshold:
+  cat config/threshold_config.json
+
+- On gateway-node:
+  Decision tally:
+  python3 -c "
+  import sqlite3
+  conn = sqlite3.connect('sqlite_logger/decisions.db')
+  rows = conn.execute('SELECT decision_type, COUNT(*) FROM decisions GROUP BY decision_type').fetchall()
+  for r in rows: print(r[0], r[1])
+  conn.close()
+  "
+
+================================================================================
+  PHASE 7 — SHUTDOWN
+================================================================================
+
+- Press Ctrl+C in each agent terminal to stop gracefully.
+- Prometheus/Grafana can be left running for continuous monitoring.
+
+================================================================================
