@@ -38,7 +38,8 @@ MTTR_HISTOGRAM = Histogram(
 
 start_http_server(8013)
 
-SYSTEM_PROMPT = Path("prompts/learning_system_prompt.txt").read_text()
+BASE_DIR = Path(__file__).resolve().parent.parent
+SYSTEM_PROMPT = (BASE_DIR / "prompts" / "learning_system_prompt.txt").read_text()
 THRESHOLD_PATH = Path("config/threshold_config.json")
 MODEL = "qwen3:0.6b"
 LEARNING_TIMEOUT = 10
