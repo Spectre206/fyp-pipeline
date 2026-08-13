@@ -1,0 +1,358 @@
+{
+  "dashboard": {
+    "title": "FYP Self-Healing Pipeline — Complete Observability",
+    "uid": "fyp-final-complete",
+    "timezone": "utc",
+    "refresh": "5s",
+    "panels": [
+      {
+        "type": "row",
+        "title": "System Overview",
+        "gridPos": {"x": 0, "y": 0, "w": 24, "h": 1},
+        "collapsed": false
+      },
+      {
+        "title": "Events Processed / Anomalies",
+        "type": "stat",
+        "gridPos": {"x": 0, "y": 1, "w": 6, "h": 4},
+        "targets": [
+          {"expr": "sum(fyp_fusion_published_total) + sum(fyp_fusion_suppressed_total)", "legendFormat": "Total"},
+          {"expr": "sum(fyp_fusion_published_total)", "legendFormat": "Anomalies"}
+        ]
+      },
+      {
+        "title": "Fusion Published",
+        "type": "stat",
+        "gridPos": {"x": 6, "y": 1, "w": 4, "h": 4},
+        "targets": [{"expr": "sum(fyp_fusion_published_total)", "legendFormat": "Published"}]
+      },
+      {
+        "title": "Fusion Suppressed",
+        "type": "stat",
+        "gridPos": {"x": 10, "y": 1, "w": 4, "h": 4},
+        "targets": [{"expr": "sum(fyp_fusion_suppressed_total)", "legendFormat": "Suppressed"}]
+      },
+      {
+        "title": "System Health",
+        "type": "stat",
+        "gridPos": {"x": 14, "y": 1, "w": 4, "h": 4},
+        "targets": [
+          {"expr": "up{job=~'fyp-agent-pipeline|fyp-layer3-autoexec|fyp-cluster'}", "legendFormat": "{{instance}}"}
+        ],
+        "fieldConfig": {"defaults": {"mappings": [{"type": "value", "value": "1", "text": "UP"}, {"type": "value", "value": "0", "text": "DOWN"}]}}
+      },
+      {
+        "title": "Pipeline Health (components up)",
+        "type": "stat",
+        "gridPos": {"x": 18, "y": 1, "w": 6, "h": 4},
+        "targets": [{"expr": "count(up == 1)", "legendFormat": "Components Up"}]
+      },
+      {
+        "type": "row",
+        "title": "Validator",
+        "gridPos": {"x": 0, "y": 5, "w": 24, "h": 1},
+        "collapsed": false
+      },
+      {
+        "title": "Validator Events",
+        "type": "stat",
+        "gridPos": {"x": 0, "y": 6, "w": 4, "h": 4},
+        "targets": [{"expr": "sum(fyp_validator_events_total)", "legendFormat": "Received"}]
+      },
+      {
+        "title": "Valid Events",
+        "type": "stat",
+        "gridPos": {"x": 4, "y": 6, "w": 4, "h": 4},
+        "targets": [{"expr": "sum(fyp_validator_valid_total)", "legendFormat": "Valid"}]
+      },
+      {
+        "title": "Schema Violations",
+        "type": "stat",
+        "gridPos": {"x": 8, "y": 6, "w": 4, "h": 4},
+        "targets": [{"expr": "sum(fyp_validator_schema_violations_total)", "legendFormat": "Violations"}]
+      },
+      {
+        "title": "Validator Success Rate",
+        "type": "gauge",
+        "gridPos": {"x": 12, "y": 6, "w": 4, "h": 4},
+        "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0, "max": 1}},
+        "targets": [{"expr": "sum(fyp_validator_valid_total) / sum(fyp_validator_events_total)", "legendFormat": "Success"}]
+      },
+      {
+        "title": "Validator Latency (ms)",
+        "type": "timeseries",
+        "gridPos": {"x": 16, "y": 6, "w": 8, "h": 4},
+        "targets": [{"expr": "histogram_quantile(0.95, rate(fyp_validator_latency_seconds_bucket[5m])) * 1000", "legendFormat": "p95"}]
+      },
+      {
+        "type": "row",
+        "title": "Detectors",
+        "gridPos": {"x": 0, "y": 10, "w": 24, "h": 1},
+        "collapsed": false
+      },
+      {
+        "title": "Detector Evaluations",
+        "type": "barchart",
+        "gridPos": {"x": 0, "y": 11, "w": 8, "h": 6},
+        "targets": [{"expr": "sum by (detector) (fyp_detector_evaluations_total)", "legendFormat": "{{detector}}"}]
+      },
+      {
+        "title": "Anomalies by Detector",
+        "type": "barchart",
+        "gridPos": {"x": 8, "y": 11, "w": 8, "h": 6},
+        "targets": [{"expr": "sum by (detector) (fyp_detector_anomalies_total)", "legendFormat": "{{detector}}"}]
+      },
+      {
+        "title": "Detector Latency (ms)",
+        "type": "timeseries",
+        "gridPos": {"x": 16, "y": 11, "w": 8, "h": 6},
+        "targets": [{"expr": "histogram_quantile(0.95, rate(fyp_detector_latency_seconds_bucket[5m])) * 1000", "legendFormat": "{{detector}}"}]
+      },
+      {
+        "title": "Detector Errors",
+        "type": "timeseries",
+        "gridPos": {"x": 0, "y": 17, "w": 12, "h": 4},
+        "targets": [{"expr": "sum by (detector) (rate(fyp_detector_errors_total[5m]))", "legendFormat": "{{detector}}"}]
+      },
+      {
+        "title": "Detector Consensus",
+        "type": "piechart",
+        "gridPos": {"x": 12, "y": 17, "w": 12, "h": 4},
+        "targets": [{"expr": "sum by (consensus) (fyp_detector_consensus_total)", "legendFormat": "{{consensus}}"}]
+      },
+      {
+        "type": "row",
+        "title": "Fusion Engine",
+        "gridPos": {"x": 0, "y": 21, "w": 24, "h": 1},
+        "collapsed": false
+      },
+      {
+        "title": "Fusion Suppression Rate",
+        "type": "gauge",
+        "gridPos": {"x": 0, "y": 22, "w": 6, "h": 4},
+        "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0, "max": 1}},
+        "targets": [{"expr": "sum(fyp_fusion_suppressed_total) / (sum(fyp_fusion_published_total) + sum(fyp_fusion_suppressed_total))", "legendFormat": "Suppression"}]
+      },
+      {
+        "title": "Compound Events",
+        "type": "stat",
+        "gridPos": {"x": 6, "y": 22, "w": 4, "h": 4},
+        "targets": [{"expr": "sum(fyp_fusion_compound_total)", "legendFormat": "Compound"}]
+      },
+      {
+        "title": "Fast Path Events",
+        "type": "stat",
+        "gridPos": {"x": 10, "y": 22, "w": 4, "h": 4},
+        "targets": [{"expr": "sum(fyp_fusion_fast_path_total)", "legendFormat": "Fast Path"}]
+      },
+      {
+        "title": "Fusion Activity",
+        "type": "timeseries",
+        "gridPos": {"x": 14, "y": 22, "w": 10, "h": 4},
+        "targets": [
+          {"expr": "rate(fyp_fusion_published_total[1m])", "legendFormat": "Published"},
+          {"expr": "rate(fyp_fusion_suppressed_total[1m])", "legendFormat": "Suppressed"},
+          {"expr": "rate(fyp_fusion_compound_total[1m])", "legendFormat": "Compound"},
+          {"expr": "rate(fyp_fusion_fast_path_total[1m])", "legendFormat": "Fast Path"}
+        ]
+      },
+      {
+        "type": "row",
+        "title": "AI Control Plane",
+        "gridPos": {"x": 0, "y": 26, "w": 24, "h": 1},
+        "collapsed": false
+      },
+      {
+        "title": "Triage Latency (ms)",
+        "type": "timeseries",
+        "gridPos": {"x": 0, "y": 27, "w": 8, "h": 6},
+        "targets": [
+          {"expr": "histogram_quantile(0.5, rate(fyp_triage_latency_s_bucket[5m])) * 1000", "legendFormat": "p50"},
+          {"expr": "histogram_quantile(0.95, rate(fyp_triage_latency_s_bucket[5m])) * 1000", "legendFormat": "p95"}
+        ]
+      },
+      {
+        "title": "Strategy Latency (s)",
+        "type": "timeseries",
+        "gridPos": {"x": 8, "y": 27, "w": 8, "h": 6},
+        "targets": [
+          {"expr": "histogram_quantile(0.5, rate(fyp_strategy_latency_s_bucket[5m]))", "legendFormat": "p50"},
+          {"expr": "histogram_quantile(0.95, rate(fyp_strategy_latency_s_bucket[5m]))", "legendFormat": "p95"}
+        ]
+      },
+      {
+        "title": "Policy Latency (ms)",
+        "type": "timeseries",
+        "gridPos": {"x": 16, "y": 27, "w": 8, "h": 6},
+        "targets": [
+          {"expr": "histogram_quantile(0.5, rate(fyp_policy_latency_s_bucket[5m])) * 1000", "legendFormat": "p50"},
+          {"expr": "histogram_quantile(0.95, rate(fyp_policy_latency_s_bucket[5m])) * 1000", "legendFormat": "p95"}
+        ]
+      },
+      {
+        "type": "row",
+        "title": "Strategy Agent — Outcome Breakdown",
+        "gridPos": {"x": 0, "y": 33, "w": 24, "h": 1},
+        "collapsed": false
+      },
+      {
+        "title": "Strategy Outcome Counts",
+        "type": "bargauge",
+        "gridPos": {"x": 0, "y": 34, "w": 8, "h": 5},
+        "targets": [
+          {"expr": "fyp_strategy_schema_valid_total", "legendFormat": "Valid"},
+          {"expr": "fyp_strategy_schema_invalid_total", "legendFormat": "Invalid"},
+          {"expr": "fyp_strategy_timeout_total", "legendFormat": "Timeout"}
+        ]
+      },
+      {
+        "title": "Schema Valid Rate (excl. timeouts)",
+        "type": "gauge",
+        "gridPos": {"x": 8, "y": 34, "w": 4, "h": 5},
+        "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0, "max": 1}},
+        "targets": [
+          {"expr": "sum(fyp_strategy_schema_valid_total) / (sum(fyp_strategy_schema_valid_total) + sum(fyp_strategy_schema_invalid_total))", "legendFormat": "Valid Rate"}
+        ]
+      },
+      {
+        "title": "Timeout Rate",
+        "type": "gauge",
+        "gridPos": {"x": 12, "y": 34, "w": 4, "h": 5},
+        "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0, "max": 1}},
+        "targets": [
+          {"expr": "sum(fyp_strategy_timeout_total) / (sum(fyp_strategy_schema_valid_total) + sum(fyp_strategy_schema_invalid_total) + sum(fyp_strategy_timeout_total))", "legendFormat": "Timeout Rate"}
+        ]
+      },
+      {
+        "title": "Tokens / Second",
+        "type": "timeseries",
+        "gridPos": {"x": 16, "y": 34, "w": 8, "h": 5},
+        "targets": [{"expr": "fyp_strategy_tokens_per_s", "legendFormat": "tokens/s"}]
+      },
+      {
+        "type": "row",
+        "title": "Policy & Remediation",
+        "gridPos": {"x": 0, "y": 39, "w": 24, "h": 1},
+        "collapsed": false
+      },
+      {
+        "title": "Policy Routing",
+        "type": "piechart",
+        "gridPos": {"x": 0, "y": 40, "w": 6, "h": 5},
+        "targets": [{"expr": "sum by (decision) (fyp_routing_decision_total)", "legendFormat": "{{decision}}"}]
+      },
+      {
+        "title": "Remediation Outcomes",
+        "type": "bargauge",
+        "gridPos": {"x": 6, "y": 40, "w": 6, "h": 5},
+        "targets": [{"expr": "fyp_auto_executor_outcomes_total", "legendFormat": "{{outcome}}"}]
+      },
+      {
+        "title": "HITL vs AUTO",
+        "type": "stat",
+        "gridPos": {"x": 12, "y": 40, "w": 4, "h": 5},
+        "targets": [
+          {"expr": "sum(fyp_routing_decision_total{decision=\"AUTO\"})", "legendFormat": "AUTO"},
+          {"expr": "sum(fyp_routing_decision_total{decision=\"HITL\"})", "legendFormat": "HITL"}
+        ]
+      },
+      {
+        "title": "Auto Executor Success Rate",
+        "type": "gauge",
+        "gridPos": {"x": 16, "y": 40, "w": 4, "h": 5},
+        "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0, "max": 1}},
+        "targets": [{"expr": "sum(fyp_auto_executor_outcomes_total{outcome=\"SUCCESS\"}) / (sum(fyp_auto_executor_outcomes_total))", "legendFormat": "Success"}]
+      },
+      {
+        "type": "row",
+        "title": "End‑to‑End Performance",
+        "gridPos": {"x": 0, "y": 45, "w": 24, "h": 1},
+        "collapsed": false
+      },
+      {
+        "title": "MTTA (Original Timestamp)",
+        "type": "stat",
+        "gridPos": {"x": 0, "y": 46, "w": 6, "h": 4},
+        "targets": [
+          {"expr": "histogram_quantile(0.5, rate(fyp_mtta_seconds_bucket[5m]))", "legendFormat": "p50"},
+          {"expr": "histogram_quantile(0.95, rate(fyp_mtta_seconds_bucket[5m]))", "legendFormat": "p95"}
+        ],
+        "fieldConfig": {"defaults": {"unit": "s"}}
+      },
+      {
+        "title": "MTTR (Original Timestamp)",
+        "type": "stat",
+        "gridPos": {"x": 6, "y": 46, "w": 6, "h": 4},
+        "targets": [
+          {"expr": "histogram_quantile(0.5, rate(fyp_mttr_seconds_bucket[5m]))", "legendFormat": "p50"},
+          {"expr": "histogram_quantile(0.95, rate(fyp_mttr_seconds_bucket[5m]))", "legendFormat": "p95"}
+        ],
+        "fieldConfig": {"defaults": {"unit": "s"}}
+      },
+      {
+        "title": "Control‑Plane Latency (fused_at → Policy)",
+        "type": "timeseries",
+        "gridPos": {"x": 12, "y": 46, "w": 12, "h": 4},
+        "targets": [
+          {"expr": "rate(fyp_strategy_latency_s_sum[5m]) / rate(fyp_strategy_latency_s_count[5m]) + rate(fyp_triage_latency_s_sum[5m]) / rate(fyp_triage_latency_s_count[5m]) + rate(fyp_policy_latency_s_sum[5m]) / rate(fyp_policy_latency_s_count[5m])", "legendFormat": "Total CP latency"}
+        ]
+      },
+      {
+        "type": "row",
+        "title": "Infrastructure / RabbitMQ / Learning",
+        "gridPos": {"x": 0, "y": 50, "w": 24, "h": 1},
+        "collapsed": false
+      },
+      {
+        "title": "RabbitMQ Queue Depth",
+        "type": "timeseries",
+        "gridPos": {"x": 0, "y": 51, "w": 12, "h": 5},
+        "targets": [{"expr": "sum by (queue) (rabbitmq_queue_messages_ready)", "legendFormat": "{{queue}}"}]
+      },
+      {
+        "title": "Dead Letter Queue Depth",
+        "type": "stat",
+        "gridPos": {"x": 12, "y": 51, "w": 4, "h": 5},
+        "targets": [{"expr": "sum(rabbitmq_queue_messages_ready{queue=\"dead.letters\"})", "legendFormat": "DLX"}]
+      },
+      {
+        "title": "ChromaDB Upserts",
+        "type": "timeseries",
+        "gridPos": {"x": 16, "y": 51, "w": 8, "h": 5},
+        "targets": [{"expr": "rate(fyp_learning_chromadb_upserts_total[5m])", "legendFormat": "upserts/s"}]
+      },
+      {
+        "title": "EMA Confidence Threshold",
+        "type": "gauge",
+        "gridPos": {"x": 0, "y": 56, "w": 6, "h": 4},
+        "fieldConfig": {"defaults": {"min": 0.6, "max": 0.9}},
+        "targets": [{"expr": "fyp_learning_confidence_threshold", "legendFormat": "threshold"}]
+      },
+      {
+        "title": "Learning Outcomes",
+        "type": "timeseries",
+        "gridPos": {"x": 6, "y": 56, "w": 10, "h": 4},
+        "targets": [{"expr": "sum by (outcome_type) (rate(fyp_learning_outcomes_total[5m]))", "legendFormat": "{{outcome_type}}"}]
+      },
+      {
+        "title": "System Health (all targets)",
+        "type": "stat",
+        "gridPos": {"x": 16, "y": 56, "w": 8, "h": 4},
+        "targets": [{"expr": "up", "legendFormat": "{{instance}}"}],
+        "fieldConfig": {"defaults": {"mappings": [{"type": "value", "value": "1", "text": "UP"}, {"type": "value", "value": "0", "text": "DOWN"}]}}
+      }
+    ],
+    "schemaVersion": 16,
+    "version": 0
+  },
+  "overwrite": true,
+  "folderId": 0,
+  "inputs": [
+    {
+      "name": "DS_PROMETHEUS",
+      "type": "datasource",
+      "pluginId": "prometheus",
+      "value": "Prometheus"
+    }
+  ]
+}
