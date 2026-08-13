@@ -29,8 +29,8 @@ TIMESTAMP_MISSING = Counter(
 )
 
 start_http_server(8012)
-
-THRESHOLD_PATH = Path("config/threshold_config.json")
+BASE_DIR = Path(__file__).resolve().parent.parent
+THRESHOLD_PATH = BASE_DIR / "config" / "threshold_config.json"
 
 
 def load_threshold() -> float:
