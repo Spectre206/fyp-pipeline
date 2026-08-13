@@ -10,24 +10,52 @@ Publishes EVERY result to fusion.results (detected=True or False),
 so the Fusion Engine always knows this model processed the event.
 """
 
+"""
+Error Rate Surge Detector — Statistical Z-Score (Model 2) with Prometheus Metrics
+"""
+
 import json
 import logging
-import sys
+import time
 from pathlib import Path
 
 import pika
 import structlog
+from prometheus_client import Counter, Histogram, start_http_server
 
-# ── Logging ───────────────────────────────────────────────────────────
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [ERROR_DETECTOR] %(levelname)s %(message)s"
 )
 log = structlog.get_logger()
 
-# ── Constants ─────────────────────────────────────────────────────────
-Z_SCORE_THRESHOLD = 2.0        # |Z| > 2.0 → anomaly (3-sigma rule)
-ERROR_RATE_THRESHOLD = 10.0    # raw error_rate_percent > 10% → immediate flag
+DETECTOR_NAME = "error_rate"
+PROM_PORT = 8004
+start_http_server(PROM_PORT)
+
+EVAL_COUNT = Counter(
+    "fyp_detector_evaluations_total",
+    "Detector evaluations",
+    ["detector", "anomaly_type"]
+)
+ANOMALY_COUNT = Counter(
+    "fyp_detector_anomalies_total",
+    "Detector anomalies",
+    ["detector", "anomaly_type"]
+)
+ERROR_COUNT = Counter(
+    "fyp_detector_errors_total",
+    "Detector errors",
+    ["detector"]
+)
+LATENCY = Histogram(
+    "fyp_detector_latency_seconds",
+    "Detector latency",
+    ["detector"]
+)
+
+Z_SCORE_THRESHOLD = 2.0
+ERROR_RATE_THRESHOLD = 10.0
 
 INPUT_QUEUE      = "detect.error"
 OUTPUT_EXCHANGE  = "fyp.events"
@@ -36,122 +64,95 @@ MODEL_NAME       = "z_score_error_rate"
 
 
 class ErrorRateDetector:
-    """
-    Stateless Z-Score detector for error rate surges.
-    All state (rolling window, mean, std) is maintained by the Feature Store.
-    This detector only reads the pre-computed z_score_error_rate_percent.
-    """
-
     def __init__(self, host: str = "stream-node", port: int = 5672):
-        self.host = host
-        self.port = port
-
         params = pika.ConnectionParameters(
-            host=self.host,
-            port=self.port,
-            virtual_host="fyp",
+            host=host, port=port, virtual_host="fyp",
             credentials=pika.PlainCredentials("fyp_user", "fyp_pass_2026"),
-            heartbeat=60,
-            blocked_connection_timeout=30,
+            heartbeat=60, blocked_connection_timeout=30,
         )
         self.conn = pika.BlockingConnection(params)
         self.ch = self.conn.channel()
-
         log.info("error_detector_initialised",
                  input_queue=INPUT_QUEUE,
-                 output_exchange=OUTPUT_EXCHANGE,
-                 routing_key=ROUTING_KEY,
-                 z_threshold=Z_SCORE_THRESHOLD,
-                 error_rate_threshold=ERROR_RATE_THRESHOLD)
+                 z_threshold=Z_SCORE_THRESHOLD)
 
     def detect(self, event: dict) -> dict:
-        """
-        Core detection logic.
-
-        Args:
-            event: enriched event dict with feature_vector
-
-        Returns:
-            result dict with detection decision, confidence, and metadata.
-        """
+        start = time.time()
         event_id = event.get("event_id", "UNKNOWN")
-        fv = event.get("feature_vector", {})
+        anomaly_type = event.get("anomaly_type", "UNKNOWN")
+        EVAL_COUNT.labels(detector=DETECTOR_NAME, anomaly_type=anomaly_type).inc()
 
-        # Extract the pre-computed Z-score for error_rate_percent
-        z_score = fv.get("z_score_error_rate_percent", 0.0)
+        try:
+            fv = event.get("feature_vector", {})
+            z_score = fv.get("z_score_error_rate_percent", 0.0)
+            error_rate = event.get("metric_values", {}).get("error_rate_percent", 0.0)
 
-        # Also check the raw error rate for step-change detection
-        error_rate = event.get("metric_values", {}).get("error_rate_percent", 0.0)
+            detected = False
+            severity = "N/A"
+            reason = ""
 
-        # ── Detection logic ──────────────────────────────────────────
-        detected = False
-        severity = "N/A"
-        reason = ""
+            if abs(z_score) > Z_SCORE_THRESHOLD:
+                detected = True
+                severity = self._severity_from_z(abs(z_score))
+                reason = f"Z-score |{z_score:.2f}| > {Z_SCORE_THRESHOLD}"
+            elif error_rate > ERROR_RATE_THRESHOLD:
+                detected = True
+                severity = self._severity_from_rate(error_rate)
+                reason = f"error_rate_percent {error_rate:.2f}% > {ERROR_RATE_THRESHOLD}%"
 
-        # Primary: Z-score > threshold
-        if abs(z_score) > Z_SCORE_THRESHOLD:
-            detected = True
-            severity = self._severity_from_z(abs(z_score))
-            reason = f"Z-score |{z_score:.2f}| > {Z_SCORE_THRESHOLD}"
+            confidence = self._confidence(abs(z_score), error_rate)
 
-        # Secondary: raw error rate step-change catch
-        elif error_rate > ERROR_RATE_THRESHOLD:
-            detected = True
-            severity = self._severity_from_rate(error_rate)
-            reason = f"error_rate_percent {error_rate:.2f}% > {ERROR_RATE_THRESHOLD}% (step-change)"
+            if detected:
+                ANOMALY_COUNT.labels(
+                    detector=DETECTOR_NAME, anomaly_type=anomaly_type
+                ).inc()
 
-        # Compute confidence
-        confidence = self._confidence(abs(z_score), error_rate)
-
-        return {
-            "event_id": event_id,
-            "detected": detected,
-            "anomaly_type": "error_rate_surge" if detected else "NORMAL",
-            "severity": severity,
-            "confidence": confidence,
-            "model_name": MODEL_NAME,
-            "metadata": {
-                "z_score_error_rate_percent": round(z_score, 4),
-                "error_rate_percent": round(error_rate, 4),
-                "reason": reason,
-                "threshold_z": Z_SCORE_THRESHOLD,
-                "threshold_rate": ERROR_RATE_THRESHOLD,
+            return {
+                "event_id": event_id,
+                "timestamp": event.get("timestamp"),
+                "detected": detected,
+                "anomaly_type": "error_rate_surge" if detected else "NORMAL",
+                "severity": severity,
+                "confidence": confidence,
+                "model_name": MODEL_NAME,
+                "metadata": {
+                    "z_score_error_rate_percent": round(z_score, 4),
+                    "error_rate_percent": round(error_rate, 4),
+                    "reason": reason,
+                }
             }
-        }
+        except Exception as exc:
+            ERROR_COUNT.labels(detector=DETECTOR_NAME).inc()
+            log.error("detector_error", error=str(exc))
+            return {
+                "event_id": event_id,
+                "timestamp": event.get("timestamp"),
+                "detected": False,
+                "anomaly_type": "NORMAL",
+                "severity": "N/A",
+                "confidence": 0.0,
+                "model_name": MODEL_NAME,
+                "metadata": {"reason": "error"}
+            }
+        finally:
+            LATENCY.labels(detector=DETECTOR_NAME).observe(time.time() - start)
 
     def _severity_from_z(self, abs_z: float) -> str:
-        """Map Z-score magnitude to severity."""
-        if abs_z >= 5.0:
-            return "CRITICAL"
-        elif abs_z >= 4.0:
-            return "HIGH"
-        else:
-            return "MEDIUM"
+        if abs_z >= 5.0: return "CRITICAL"
+        elif abs_z >= 4.0: return "HIGH"
+        return "MEDIUM"
 
     def _severity_from_rate(self, rate: float) -> str:
-        """Map raw error rate to severity."""
-        if rate >= 30.0:
-            return "CRITICAL"
-        elif rate >= 18.0:
-            return "HIGH"
-        else:
-            return "MEDIUM"
+        if rate >= 30.0: return "CRITICAL"
+        elif rate >= 18.0: return "HIGH"
+        return "MEDIUM"
 
     def _confidence(self, abs_z: float, error_rate: float) -> float:
-        """
-        Compute a confidence score (0.0–1.0).
-        Higher Z-score or higher error rate → higher confidence.
-        """
-        # Z-score based confidence: saturates around 0.95 at Z=6+
         z_conf = min(0.95, abs_z / 6.0)
-
-        # Rate-based confidence: saturates at 0.90 at 30%+
         rate_conf = min(0.90, error_rate / 30.0)
-
         return round(max(z_conf, rate_conf), 4)
 
     def on_message(self, ch, method, props, body):
-        """RabbitMQ callback for each event."""
         try:
             event = json.loads(body)
         except json.JSONDecodeError as exc:
@@ -159,10 +160,8 @@ class ErrorRateDetector:
             ch.basic_nack(method.delivery_tag, requeue=False)
             return
 
-        # Run detection
         result = self.detect(event)
 
-        # Always publish to fusion.results
         try:
             self.ch.basic_publish(
                 exchange=OUTPUT_EXCHANGE,
@@ -177,15 +176,10 @@ class ErrorRateDetector:
                 f.write(json.dumps(result) + "\n")
 
             if result["detected"]:
-                log.info("anomaly_detected",
-                         event_id=result["event_id"],
-                         severity=result["severity"],
-                         confidence=result["confidence"],
-                         z_score=result["metadata"]["z_score_error_rate_percent"])
+                log.info("anomaly_detected", event_id=result["event_id"],
+                         severity=result["severity"], confidence=result["confidence"])
             else:
-                log.debug("event_clean",
-                          event_id=result["event_id"],
-                          z_score=result["metadata"]["z_score_error_rate_percent"])
+                log.debug("event_clean", event_id=result["event_id"])
 
         except Exception as exc:
             log.error("publish_error", event_id=result["event_id"], error=str(exc))
@@ -195,7 +189,6 @@ class ErrorRateDetector:
         ch.basic_ack(method.delivery_tag)
 
     def run(self):
-        """Start consuming from detect.error queue."""
         self.ch.basic_qos(prefetch_count=1)
         self.ch.basic_consume(
             queue=INPUT_QUEUE,
@@ -210,10 +203,7 @@ class ErrorRateDetector:
         finally:
             if self.conn and not self.conn.is_closed:
                 self.conn.close()
-                log.info("error_detector_connection_closed")
 
 
-# ── Entry point ────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    detector = ErrorRateDetector()
-    detector.run()
+    ErrorRateDetector().run()

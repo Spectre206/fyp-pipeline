@@ -32,7 +32,12 @@ PREREQUISITES:
    sudo rabbitmqctl purge_queue outcome.feedback -p fyp
 
 3. Delete old Feature Store baselines (cold‑start calibration):
-   rm -f ~/fyp-pipeline/layer1/adm/baselines/*.json
+  rm -f ~/fyp-pipeline/layer1/adm/baselines/*.json
+  rm -f ~/fyp-pipeline/layer1/adm/error_results.jsonl
+  rm -f ~/fyp-pipeline/layer1/adm/throughput_results.jsonl
+  rm -f ~/fyp-pipeline/layer1/adm/auth_results.jsonl
+  rm -f ~/fyp-pipeline/layer1/adm/cpu_results.jsonl
+  rm -f ~/fyp-pipeline/layer1/adm/schema_results.jsonl
 
 4. Start the Validator (Terminal 1 – keep running):
    cd ~/fyp-pipeline/layer1/validator

@@ -1,6 +1,11 @@
 # layer1/fusion_engine/fusion_engine.py
 """
-Fusion Engine — Multi‑Detector Signal Correlation (v1.0)
+Fusion Engine — Multi‑Detector Signal Correlation (v1.1)
+
+v1.1 CHANGELOG:
+  - Preserves original event timestamp in fused event (timestamp field).
+  - Adds Fusion latency histogram and error counter (Prometheus on port 8003).
+  - Existing counters (published, suppressed, compound, fast_path) unchanged.
 
 Consumes individual detector results from fusion.results,
 groups them by event_id within a configurable correlation window,
@@ -20,7 +25,7 @@ from typing import Dict, List, Optional
 
 import pika
 import structlog
-from prometheus_client import Counter, start_http_server
+from prometheus_client import Counter, Histogram, start_http_server
 
 logging.basicConfig(
     level=logging.INFO,
@@ -48,6 +53,15 @@ FUSION_COMPOUND = Counter(
 FUSION_FASTPATH = Counter(
     "fyp_fusion_fast_path_total",
     "Events fast‑pathed (CRITICAL with high‑weight model)"
+)
+FUSION_LATENCY = Histogram(
+    "fyp_fusion_latency_seconds",
+    "Fusion decision latency in seconds",
+    buckets=(0.0001, 0.0005, 0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2)
+)
+FUSION_ERRORS = Counter(
+    "fyp_fusion_errors_total",
+    "Fusion processing errors"
 )
 
 
@@ -183,17 +197,25 @@ class FusionEngine:
 
         results = entry["results"]
         methods = entry["methods"]
-        fused = self._fuse(event_id, results, fast_path)
 
-        if fused is not None:
-            self._publish(fused)
-            FUSION_PUBLISHED.inc()
-            if fused["fusion_type"] == "compound":
-                FUSION_COMPOUND.inc()
-            if fast_path:
-                FUSION_FASTPATH.inc()
-        else:
-            FUSION_SUPPRESSED.inc()
+        start = time.time()
+        try:
+            fused = self._fuse(event_id, results, fast_path)
+
+            if fused is not None:
+                self._publish(fused)
+                FUSION_PUBLISHED.inc()
+                if fused["fusion_type"] == "compound":
+                    FUSION_COMPOUND.inc()
+                if fast_path:
+                    FUSION_FASTPATH.inc()
+            else:
+                FUSION_SUPPRESSED.inc()
+        except Exception as exc:
+            FUSION_ERRORS.inc()
+            log.error("fusion_error", event_id=event_id, error=str(exc))
+        finally:
+            FUSION_LATENCY.observe(time.time() - start)
 
         for method in methods:
             self.ch.basic_ack(method.delivery_tag)
@@ -232,13 +254,18 @@ class FusionEngine:
         if fusion_type == "single" and fused_confidence < self.min_confidence:
             return None
 
+        # Preserve original event timestamp from the first detector result.
+        # All detector results for the same event should carry the same timestamp.
+        original_ts = results[0].get("timestamp") if results else None
+
         fused_event = {
             "event_id": event_id,
+            "timestamp": original_ts,  # ← original anomaly time
             "fused_severity": fused_severity,
             "fused_confidence": fused_confidence,
             "fusion_type": fusion_type,
             "contributing_models": contributing,
-            "fused_at": datetime.now(timezone.utc).isoformat(),
+            "fused_at": datetime.now(timezone.utc).isoformat(),  # fusion processing time
             "note": "fast_path" if fast_path else "standard_window"
         }
         return fused_event
