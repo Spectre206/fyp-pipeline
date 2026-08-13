@@ -19,6 +19,15 @@ POLICY_LATENCY = Histogram("fyp_policy_latency_s", "Policy Agent latency")
 ROUTING_DECISION = Counter(
     "fyp_routing_decision_total", "Routing decisions", ["decision", "reason"]
 )
+MTTA_HISTOGRAM = Histogram(
+    "fyp_mtta_seconds",
+    "Mean Time To Acknowledge (anomaly timestamp → policy decision)",
+    buckets=[10, 20, 30, 40, 50, 60, 90, 120, 180, 300]
+)
+TIMESTAMP_MISSING = Counter(
+    "fyp_timestamp_missing_total", "Events missing original timestamp", ["agent"]
+)
+
 start_http_server(8012)
 
 THRESHOLD_PATH = Path("config/threshold_config.json")
@@ -78,6 +87,31 @@ class PolicyAgent:
             threshold = load_threshold()
 
             decision, reason, target_queue = self.route(strategy, threshold)
+
+            # ---------- MTTA calculation ----------
+            # Extract the original anomaly timestamp from the triage result
+            try:
+                triage_result = strategy.get("triage_result", {})
+                original_event = triage_result.get("original_event", {})
+                ts = original_event.get("timestamp")
+                if ts:
+                    try:
+                        anomaly_time = datetime.fromisoformat(ts)
+                        # If the timestamp is naive (no tzinfo), assume UTC
+                        if anomaly_time.tzinfo is None:
+                            anomaly_time = anomaly_time.replace(tzinfo=timezone.utc)
+                        else:
+                            anomaly_time = anomaly_time.astimezone(timezone.utc)
+                        mtta = (datetime.now(timezone.utc) - anomaly_time).total_seconds()
+                        MTTA_HISTOGRAM.observe(mtta)
+                    except Exception:
+                        log.warning("mtta_timestamp_parse_failed", event_id=event_id, ts=ts)
+                        TIMESTAMP_MISSING.labels(agent="policy").inc()
+                else:
+                    TIMESTAMP_MISSING.labels(agent="policy").inc()
+            except Exception:
+                pass
+            # ---------------------------------------
 
             result = {
                 "event_id": event_id,

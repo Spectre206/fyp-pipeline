@@ -9,7 +9,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import structlog
 from datetime import datetime, timezone
 from pathlib import Path
-from prometheus_client import Counter, start_http_server
+from prometheus_client import Counter, Gauge, Histogram, start_http_server
 
 from rabbitmq.connection import get_connection
 from chromadb_utils.upsert import upsert_incident
@@ -26,6 +26,15 @@ THRESHOLD_UPDATES = Counter(
 CHROMADB_UPSERTS = Counter(
     "fyp_learning_chromadb_upserts_total", "ChromaDB upserts"
 )
+THRESHOLD_GAUGE = Gauge(
+    "fyp_learning_confidence_threshold",
+    "Current EMA confidence threshold"
+)
+MTTR_HISTOGRAM = Histogram(
+    "fyp_mttr_seconds",
+    "Mean Time To Recovery (anomaly timestamp -> outcome feedback received)",
+    buckets=[30, 60, 120, 180, 300, 600, 900]
+)
 
 start_http_server(8013)
 
@@ -34,7 +43,6 @@ THRESHOLD_PATH = Path("config/threshold_config.json")
 MODEL = "qwen3:0.6b"
 LEARNING_TIMEOUT = 10
 
-# Outcome → signal for EMA update
 OUTCOME_SIGNALS = {
     "AUTO_EXECUTE_SUCCESS": 0.80,
     "AUTO_EXECUTE_FAILURE": 0.50,
@@ -52,12 +60,15 @@ def load_threshold_config() -> dict:
         return {"confidence_threshold": 0.65, "update_count": 0, "ema_alpha": 0.9}
 
 
+current_cfg = load_threshold_config()
+THRESHOLD_GAUGE.set(current_cfg.get("confidence_threshold", 0.65))
+
+
 def save_threshold_config(data: dict):
     THRESHOLD_PATH.write_text(json.dumps(data, indent=2))
 
 
 def update_ema(outcome_type: str):
-    """Apply EMA update to confidence threshold."""
     signal = OUTCOME_SIGNALS.get(outcome_type)
     if signal is None:
         return
@@ -66,13 +77,14 @@ def update_ema(outcome_type: str):
     alpha = float(cfg.get("ema_alpha", 0.9))
     current = float(cfg.get("confidence_threshold", 0.65))
     new_t = alpha * current + (1 - alpha) * signal
-    new_t = max(0.60, min(0.90, new_t))  # hard bounds
+    new_t = max(0.60, min(0.90, new_t))
 
     cfg["confidence_threshold"] = round(new_t, 4)
     cfg["last_updated"] = datetime.now(timezone.utc).isoformat()
     cfg["update_count"] = cfg.get("update_count", 0) + 1
     save_threshold_config(cfg)
 
+    THRESHOLD_GAUGE.set(new_t)
     THRESHOLD_UPDATES.inc()
     log.info(
         "ema_updated",
@@ -90,17 +102,17 @@ class LearningAgent:
         log.info("learning_agent_started", model=MODEL)
 
     def _build_summary_prompt(self, outcome: dict) -> str:
-        """Create a prompt for qwen3:0.6b summarisation."""
         pr = outcome.get("full_policy_result", {})
         chain = pr.get("full_reasoning_chain", {})
         st = chain.get("strategy_result", {})
         llm = st.get("llm_response", {})
         triage = chain.get("triage_result", {})
         ev = triage.get("original_event", {})
-        # Use triage's normalized fields when original_event lacks them
+
         anomaly_type = triage.get("anomaly_type") or ev.get("anomaly_type", "?")
         component = ev.get("affected_component") or triage.get("anomaly_type", "?")
         node = ev.get("node") or "?"
+
         return (
             f"Incident: {anomaly_type} on {component}\n"
             f"Severity: {triage.get('severity','?')} | Risk tier: {llm.get('risk_tier','?')}\n"
@@ -120,8 +132,21 @@ class LearningAgent:
 
             OUTCOMES_PROCESSED.labels(outcome_type=outcome_type).inc()
 
-            # Generate summary using qwen3:0.6b
-            summary = f"Incident {event_id} — {outcome_type}"  # fallback
+            # MTTR calculation
+            try:
+                ev = outcome.get("full_policy_result", {}).get(
+                    "full_reasoning_chain", {}
+                ).get("triage_result", {}).get("original_event", {})
+                ts = ev.get("timestamp")
+                if ts:
+                    anomaly_time = datetime.fromisoformat(ts).replace(tzinfo=timezone.utc)
+                    mttr = (datetime.now(timezone.utc) - anomaly_time).total_seconds()
+                    MTTR_HISTOGRAM.observe(mttr)
+            except Exception:
+                pass
+
+            # Summarise with qwen3:0.6b
+            summary = f"Incident {event_id} - {outcome_type}"
             try:
                 resp = generate(
                     MODEL,
@@ -134,7 +159,7 @@ class LearningAgent:
             except Exception as e:
                 log.warning("learning_llm_failed", error=str(e))
 
-            # Build metadata
+            # Build ChromaDB metadata
             pr = outcome.get("full_policy_result", {})
             chain = pr.get("full_reasoning_chain", {})
             st = chain.get("strategy_result", {})
@@ -144,24 +169,26 @@ class LearningAgent:
 
             metadata = {
                 "incident_id": event_id,
-                "anomaly_type": triage.get("anomaly_type") or ev.get("anomaly_type", "unknown"),
+                "anomaly_type": triage.get("anomaly_type")
+                or ev.get("anomaly_type", "unknown"),
                 "risk_tier": llm.get("risk_tier", "HIGH"),
                 "outcome_type": outcome_type,
                 "confidence_at_decision": float(llm.get("confidence", 0.0)),
                 "fusion_type": ev.get("fusion_type", "single"),
                 "severity": triage.get("severity") or ev.get("severity", "MEDIUM"),
-                "node": ev.get("node") or triage.get("original_event", {}).get("node") or "unknown",
+                "node": ev.get("node")
+                or triage.get("original_event", {}).get("node")
+                or "unknown",
                 "affected_component": ev.get("affected_component") or "unknown",
                 "timestamp": datetime.now(timezone.utc).isoformat(),
-                "operator_approved": outcome_type in {"HITL_APPROVED", "HITL_MODIFIED"},
+                "operator_approved": outcome_type
+                in {"HITL_APPROVED", "HITL_MODIFIED"},
                 "negative_example": outcome_type in NEGATIVE_OUTCOMES,
             }
 
-            # Upsert to ChromaDB
             upsert_incident(event_id, summary, metadata)
             CHROMADB_UPSERTS.inc()
 
-            # Update EMA threshold
             update_ema(outcome_type)
 
             ch.basic_ack(method.delivery_tag)
