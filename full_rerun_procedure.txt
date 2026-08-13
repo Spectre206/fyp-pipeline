@@ -100,8 +100,9 @@ PREREQUISITES:
   PHASE 4 — TRIGGER THE CORPUS REPLAY (Node 1)
 ================================================================================
 
-13. Back on stream-node, start SEG replay (Terminal 3):
+13. Back on stream-node, genrate the corpus start SEG replay (Terminal 3):
     cd ~/fyp-pipeline/layer1/seg
+    python3 seg.py --mode generate --output ../../evaluation/
     python3 seg.py --mode replay --speed 50 --input ../../evaluation/events_1950.jsonl
 
     Wait until the replay finishes (takes ~30 seconds at speed 50).

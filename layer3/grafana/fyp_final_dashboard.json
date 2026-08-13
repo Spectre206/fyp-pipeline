@@ -8,40 +8,6 @@
   "graphTooltip": 0,
   "panels": [
     {
-      "id": 1,
-      "title": "Validator Bypassed Events",
-      "type": "stat",
-      "gridPos": {
-        "x": 12,
-        "y": 4,
-        "w": 4,
-        "h": 4
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "fyp_validator_bypassed_total",
-          "legendFormat": "Bypassed"
-        }
-      ],
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "orientation": "auto",
-        "textMode": "auto",
-        "colorMode": "value"
-      }
-    },
-    {
       "type": "row",
       "title": "System Overview",
       "gridPos": {
@@ -73,7 +39,7 @@
       ],
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "bfg3227zf71tsd"
       }
     },
     {
@@ -93,7 +59,7 @@
       ],
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "bfg3227zf71tsd"
       }
     },
     {
@@ -113,7 +79,7 @@
       ],
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "bfg3227zf71tsd"
       }
     },
     {
@@ -132,24 +98,11 @@
         }
       ],
       "fieldConfig": {
-        "defaults": {
-          "mappings": [
-            {
-              "type": "value",
-              "value": "1",
-              "text": "UP"
-            },
-            {
-              "type": "value",
-              "value": "0",
-              "text": "DOWN"
-            }
-          ]
-        }
+        "defaults": {}
       },
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "bfg3227zf71tsd"
       }
     },
     {
@@ -169,7 +122,7 @@
       ],
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "bfg3227zf71tsd"
       }
     },
     {
@@ -200,7 +153,7 @@
       ],
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "bfg3227zf71tsd"
       }
     },
     {
@@ -220,7 +173,7 @@
       ],
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "bfg3227zf71tsd"
       }
     },
     {
@@ -240,7 +193,7 @@
       ],
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "bfg3227zf71tsd"
       }
     },
     {
@@ -267,7 +220,7 @@
       ],
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "bfg3227zf71tsd"
       }
     },
     {
@@ -287,7 +240,7 @@
       ],
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "bfg3227zf71tsd"
       }
     },
     {
@@ -318,7 +271,7 @@
       ],
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "bfg3227zf71tsd"
       }
     },
     {
@@ -338,7 +291,7 @@
       ],
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "bfg3227zf71tsd"
       }
     },
     {
@@ -358,47 +311,7 @@
       ],
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      }
-    },
-    {
-      "title": "Detector Errors",
-      "type": "timeseries",
-      "gridPos": {
-        "x": 0,
-        "y": 17,
-        "w": 12,
-        "h": 4
-      },
-      "targets": [
-        {
-          "expr": "sum by (detector) (rate(fyp_detector_errors_total[5m]))",
-          "legendFormat": "{{detector}}"
-        }
-      ],
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      }
-    },
-    {
-      "title": "Detector Consensus",
-      "type": "piechart",
-      "gridPos": {
-        "x": 12,
-        "y": 17,
-        "w": 12,
-        "h": 4
-      },
-      "targets": [
-        {
-          "expr": "sum by (consensus) (fyp_detector_consensus_total)",
-          "legendFormat": "{{consensus}}"
-        }
-      ],
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "bfg3227zf71tsd"
       }
     },
     {
@@ -436,7 +349,7 @@
       ],
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "bfg3227zf71tsd"
       }
     },
     {
@@ -456,7 +369,7 @@
       ],
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "bfg3227zf71tsd"
       }
     },
     {
@@ -476,7 +389,7 @@
       ],
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "bfg3227zf71tsd"
       }
     },
     {
@@ -508,7 +421,7 @@
       ],
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "bfg3227zf71tsd"
       }
     },
     {
@@ -543,7 +456,7 @@
       ],
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "bfg3227zf71tsd"
       }
     },
     {
@@ -567,7 +480,7 @@
       ],
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "bfg3227zf71tsd"
       }
     },
     {
@@ -591,7 +504,7 @@
       ],
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "bfg3227zf71tsd"
       }
     },
     {
@@ -630,7 +543,7 @@
       ],
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "bfg3227zf71tsd"
       }
     },
     {
@@ -657,7 +570,7 @@
       ],
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "bfg3227zf71tsd"
       }
     },
     {
@@ -684,7 +597,7 @@
       ],
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "bfg3227zf71tsd"
       }
     },
     {
@@ -704,7 +617,7 @@
       ],
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "bfg3227zf71tsd"
       }
     },
     {
@@ -735,7 +648,7 @@
       ],
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "bfg3227zf71tsd"
       }
     },
     {
@@ -755,7 +668,7 @@
       ],
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "bfg3227zf71tsd"
       }
     },
     {
@@ -779,7 +692,7 @@
       ],
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "bfg3227zf71tsd"
       }
     },
     {
@@ -806,7 +719,7 @@
       ],
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "bfg3227zf71tsd"
       }
     },
     {
@@ -846,7 +759,7 @@
       },
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "bfg3227zf71tsd"
       }
     },
     {
@@ -875,7 +788,7 @@
       },
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "bfg3227zf71tsd"
       }
     },
     {
@@ -889,13 +802,13 @@
       },
       "targets": [
         {
-          "expr": "rate(fyp_strategy_latency_s_sum[5m]) / rate(fyp_strategy_latency_s_count[5m]) + rate(fyp_triage_latency_s_sum[5m]) / rate(fyp_triage_latency_s_count[5m]) + rate(fyp_policy_latency_s_sum[5m]) / rate(fyp_policy_latency_s_count[5m])",
+          "expr": "fyp_triage_latency_s_sum / fyp_triage_latency_s_count + fyp_strategy_latency_s_sum / fyp_strategy_latency_s_count + fyp_policy_latency_s_sum / fyp_policy_latency_s_count",
           "legendFormat": "Total CP latency"
         }
       ],
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "bfg3227zf71tsd"
       }
     },
     {
@@ -926,7 +839,7 @@
       ],
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "bfg3227zf71tsd"
       }
     },
     {
@@ -946,7 +859,7 @@
       ],
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "bfg3227zf71tsd"
       }
     },
     {
@@ -966,7 +879,7 @@
       ],
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "bfg3227zf71tsd"
       }
     },
     {
@@ -992,7 +905,7 @@
       ],
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "bfg3227zf71tsd"
       }
     },
     {
@@ -1012,7 +925,7 @@
       ],
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "bfg3227zf71tsd"
       }
     },
     {
@@ -1031,24 +944,11 @@
         }
       ],
       "fieldConfig": {
-        "defaults": {
-          "mappings": [
-            {
-              "type": "value",
-              "value": "1",
-              "text": "UP"
-            },
-            {
-              "type": "value",
-              "value": "0",
-              "text": "DOWN"
-            }
-          ]
-        }
+        "defaults": {}
       },
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "bfg3227zf71tsd"
       }
     }
   ]
