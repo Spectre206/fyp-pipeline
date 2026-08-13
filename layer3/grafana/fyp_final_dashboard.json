@@ -425,17 +425,6 @@
       }
     },
     {
-      "type": "row",
-      "title": "AI Control Plane",
-      "gridPos": {
-        "x": 0,
-        "y": 26,
-        "w": 24,
-        "h": 1
-      },
-      "collapsed": false
-    },
-    {
       "title": "Triage Latency (ms)",
       "type": "timeseries",
       "gridPos": {
@@ -792,26 +781,6 @@
       }
     },
     {
-      "title": "Control\u2011Plane Latency (fused_at \u2192 Policy)",
-      "type": "timeseries",
-      "gridPos": {
-        "x": 12,
-        "y": 46,
-        "w": 12,
-        "h": 4
-      },
-      "targets": [
-        {
-          "expr": "fyp_triage_latency_s_sum / fyp_triage_latency_s_count + fyp_strategy_latency_s_sum / fyp_strategy_latency_s_count + fyp_policy_latency_s_sum / fyp_policy_latency_s_count",
-          "legendFormat": "Total CP latency"
-        }
-      ],
-      "datasource": {
-        "type": "prometheus",
-        "uid": "bfg3227zf71tsd"
-      }
-    },
-    {
       "type": "row",
       "title": "Infrastructure / RabbitMQ / Learning",
       "gridPos": {
@@ -821,6 +790,48 @@
         "h": 1
       },
       "collapsed": false
+    },
+    {
+      "title": "Control-Plane Latency (Avg)",
+      "type": "stat",
+      "gridPos": {
+        "x": 12,
+        "y": 46,
+        "w": 12,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "targets": [
+        {
+          "expr": "(sum(fyp_triage_latency_s_sum) / sum(fyp_triage_latency_s_count)) + (sum(fyp_strategy_latency_s_sum) / sum(fyp_strategy_latency_s_count)) + (sum(fyp_policy_latency_s_sum) / sum(fyp_policy_latency_s_count))",
+          "legendFormat": "Avg CP latency",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      }
     },
     {
       "title": "RabbitMQ Queue Depth",
