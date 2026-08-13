@@ -35,6 +35,9 @@ MTTR_HISTOGRAM = Histogram(
     "Mean Time To Recovery (anomaly timestamp -> outcome feedback received)",
     buckets=[30, 60, 120, 180, 300, 600, 900]
 )
+TIMESTAMP_MISSING = Counter(
+    "fyp_timestamp_missing_total", "Events missing original timestamp", ["agent"]
+)
 
 start_http_server(8013)
 
@@ -140,9 +143,19 @@ class LearningAgent:
                 ).get("triage_result", {}).get("original_event", {})
                 ts = ev.get("timestamp")
                 if ts:
-                    anomaly_time = datetime.fromisoformat(ts).replace(tzinfo=timezone.utc)
-                    mttr = (datetime.now(timezone.utc) - anomaly_time).total_seconds()
-                    MTTR_HISTOGRAM.observe(mttr)
+                    try:
+                        anomaly_time = datetime.fromisoformat(ts)
+                        if anomaly_time.tzinfo is None:
+                            anomaly_time = anomaly_time.replace(tzinfo=timezone.utc)
+                        else:
+                            anomaly_time = anomaly_time.astimezone(timezone.utc)
+                        mttr = (datetime.now(timezone.utc) - anomaly_time).total_seconds()
+                        MTTR_HISTOGRAM.observe(mttr)
+                    except Exception:
+                        log.warning("mttr_timestamp_parse_failed", event_id=event_id, ts=ts)
+                        TIMESTAMP_MISSING.labels(agent="learning").inc()
+                else:
+                    TIMESTAMP_MISSING.labels(agent="learning").inc()
             except Exception:
                 pass
 
