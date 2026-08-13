@@ -25,7 +25,8 @@ STRATEGY_TPS = Gauge("fyp_strategy_tokens_per_s", "Tokens per second")
 
 start_http_server(8011)
 
-SYSTEM_PROMPT = Path("prompts/strategy_system_prompt.txt").read_text()
+BASE_DIR = Path(__file__).resolve().parent.parent
+SYSTEM_PROMPT = (BASE_DIR / "prompts" / "strategy_system_prompt.txt").read_text()
 LLM_TIMEOUT_S = 35
 MODEL = "qwen3:1.7b"
 
