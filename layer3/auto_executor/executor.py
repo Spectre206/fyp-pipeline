@@ -7,7 +7,15 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import structlog
+from prometheus_client import Counter, start_http_server
 from datetime import datetime, timezone
+AUTO_EXEC_OUTCOMES = Counter(
+    "fyp_auto_executor_outcomes_total",
+    "Auto-executor outcomes",
+    ["outcome"]
+)
+
+start_http_server(8014)
 
 from rabbitmq.connection import get_connection, publish
 from sqlite_logger.logger import init_db, write_decision
@@ -27,8 +35,10 @@ class AutoExecutor:
         All successes unless actions list is empty.
         """
         if not actions:
+            AUTO_EXEC_OUTCOMES.labels(outcome="FAILURE").inc()
             return ("AUTO_EXECUTE_FAILURE", 0)
         time.sleep(0.5)  # Simulate execution time
+        AUTO_EXEC_OUTCOMES.labels(outcome="SUCCESS").inc()
         return ("AUTO_EXECUTE_SUCCESS", 500)
 
     def on_message(self, ch, method, props, body):
