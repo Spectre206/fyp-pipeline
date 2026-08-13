@@ -84,3 +84,9 @@ layer3/grafana_data/
 layer1/adm/baselines/
 layer1/adm/*_results.jsonl
 layer1/fusion_engine/fusion_results.jsonl
+
+# SQLite runtime/database files
+*.db
+*.db-shm
+*.db-wal
+*.db-journal
