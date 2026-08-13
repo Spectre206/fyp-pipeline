@@ -15,34 +15,21 @@ schema_drift anomaly events with severity determined by violation type
 anomaly.detected RabbitMQ queue -- bypassing the Feature Store entirely since
 they cannot be safely featurised.
 """
-# layer1/validator/validator.py
-#
-# Pydantic Validator -- v1.4 (config-driven, hostname-based, no Prometheus)
-#
-# Consumes raw events from fyp.events exchange (routing key: event.raw).
-# Valid events -> published to fyp.events with routing key: validated.event
-# Invalid events -> SchemaDriftRouter -> anomaly.detected directly
-#
-# Run: python validator.py
-#
-# CHANGELOG v1.3 -> v1.4:
-#   - Prometheus metrics removed entirely. Project decision: only the
-#     Fusion Engine is scraped from Layer 1 -- no other Layer 1 component
-#     (Validator, Feature Store, ADM detectors) exposes or is scraped for
-#     metrics. This also removes the start_http_server() call and the
-#     import-time port-binding issue that came with it.
-#
-# CHANGELOG v1.2 -> v1.3 (for reference):
-#   - Loads validator_config.json (was previously fully hardcoded, no config
-#     file existed at all) -- matches the pattern established in SEG v1.3.
-#   - RabbitMQ host defaults to the "stream-node" hostname, not a hardcoded
-#     IP.
-#   - SchemaDriftRouter receives the exchange/routing key from config
-#     instead of hardcoding them a second time in a separate file.
+"""
+Pydantic Validator — Schema Enforcement Gate with Prometheus Metrics
+
+v1.5: Prometheus metrics added on port 8002:
+  - fyp_validator_events_total
+  - fyp_validator_valid_total
+  - fyp_validator_schema_violations_total{reason}
+  - fyp_validator_errors_total
+  - fyp_validator_latency_seconds
+"""
 
 import json
 import logging
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Optional, Literal
@@ -50,6 +37,7 @@ from typing import Dict, Optional, Literal
 import pika
 import structlog
 from pydantic import BaseModel, Field, field_validator, ValidationError
+from prometheus_client import Counter, Histogram, start_http_server
 
 from schema_drift_router import SchemaDriftRouter
 
@@ -61,6 +49,33 @@ logging.basicConfig(
 log = structlog.get_logger()
 
 DEFAULT_CONFIG_PATH = Path(__file__).parent / "config" / "validator_config.json"
+
+# ── Prometheus metrics (port 8002) ────────────────────────────────────
+start_http_server(8002)
+
+VAL_EVENTS = Counter(
+    "fyp_validator_events_total",
+    "Total events received by validator"
+)
+VAL_VALID = Counter(
+    "fyp_validator_valid_total",
+    "Events that passed Pydantic validation"
+)
+VAL_VIOLATIONS = Counter(
+    "fyp_validator_schema_violations_total",
+    "Events that failed Pydantic validation",
+    ["reason"]
+)
+VAL_ERRORS = Counter(
+    "fyp_validator_errors_total",
+    "Unexpected errors or JSON parse errors"
+)
+VAL_LATENCY = Histogram(
+    "fyp_validator_latency_seconds",
+    "Validation latency in seconds",
+    buckets=(0.0001, 0.0005, 0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1)
+)
+
 
 FALLBACK_RABBITMQ = {
     "host": "stream-node", "port": 5672, "virtual_host": "fyp",
@@ -85,51 +100,18 @@ def load_config(path: Path) -> dict:
     return cfg
 
 
-# ══════════════════════════════════════════════════════════════════════
-#  PYDANTIC EVENT SCHEMA
-#  This is the single source of truth for the event schema on Node 1.
-#  All fields must match the SEG output schema exactly.
-#
-#  NOTE on "node": includes "external" in addition to the 3 physical
-#  cluster nodes. SEG itself never generates "external" (its node list
-#  comes from seg_config.json's 3-entry "nodes" array) -- this 4th value
-#  is a deliberately wider validation contract than what SEG currently
-#  produces, reserved for events that might one day arrive from outside
-#  the 3-node cluster. Not a bug or inconsistency with SEG; it's the
-#  Validator's schema contract being intentionally more permissive than
-#  its current only producer.
-# ══════════════════════════════════════════════════════════════════════
-
 class PipelineEvent(BaseModel):
     event_id: str
-
     timestamp: datetime
-
     anomaly_type: Literal[
-        "cpu_memory_spike",
-        "error_rate_surge",
-        "throughput_drop",
-        "auth_failure_flood",
-        "schema_drift",
-        "NORMAL"
+        "cpu_memory_spike", "error_rate_surge", "throughput_drop",
+        "auth_failure_flood", "schema_drift", "NORMAL"
     ]
-
     severity: Literal["LOW", "MEDIUM", "HIGH", "CRITICAL", "N/A"]
-
     affected_component: str
-
-    node: Literal[
-        "stream-node",
-        "ai-brain-node",
-        "gateway-node",
-        "external"
-    ]
-
+    node: Literal["stream-node", "ai-brain-node", "gateway-node", "external"]
     metric_values: Dict[str, float] = Field(..., min_length=1)
-
     context: Optional[str] = ""
-
-    # ── Field-level validators ─────────────────────────────────────────
 
     @field_validator("metric_values")
     @classmethod
@@ -156,16 +138,10 @@ class PipelineEvent(BaseModel):
         return v.strip()
 
 
-# ══════════════════════════════════════════════════════════════════════
-#  VALIDATOR CONSUMER
-#  Consumes from the raw.events queue (bound to fyp.events/event.raw).
-#  One message at a time (prefetch controlled by config).
-# ══════════════════════════════════════════════════════════════════════
-
 class ValidatorConsumer:
 
     def __init__(self, config_path: Path = DEFAULT_CONFIG_PATH):
-        self._seen_ids: set = set()   # session-scoped dedup store
+        self._seen_ids: set = set()
 
         self.config = load_config(Path(config_path))
         rmq = self.config.get("rabbitmq", FALLBACK_RABBITMQ)
@@ -183,7 +159,6 @@ class ValidatorConsumer:
         )
         self.prefetch_count = self.config.get("prefetch_count", 100)
 
-        # RabbitMQ connection -- hostname, not a hardcoded IP.
         params = pika.ConnectionParameters(
             host=self.host,
             port=self.port,
@@ -195,8 +170,6 @@ class ValidatorConsumer:
         self.conn = pika.BlockingConnection(params)
         self.ch = self.conn.channel()
 
-        # Declare raw.events queue (binds to fyp.events/event.raw).
-        # This queue receives events published by the SEG in replay mode.
         self.ch.queue_declare(
             queue=self.INPUT_QUEUE,
             durable=True,
@@ -209,7 +182,6 @@ class ValidatorConsumer:
             routing_key="event.raw"
         )
 
-        # Schema drift router (publishes to anomaly.detected via fyp.events)
         self.router = SchemaDriftRouter(
             self.ch,
             exchange=self.exchange,
@@ -220,19 +192,14 @@ class ValidatorConsumer:
                  host=self.host,
                  input_queue=self.INPUT_QUEUE)
 
-    # ── Main message handler ──────────────────────────────────────────
-
     def on_message(self, ch, method, props, body):
-        """
-        Called for each raw event message.
-        1. Parse JSON
-        2. Check for duplicate event_id
-        3. Validate with Pydantic
-        4. Route: valid -> validated.event | invalid -> anomaly.detected
-        """
+        start = time.time()
+        VAL_EVENTS.inc()
+
         try:
             raw = json.loads(body)
         except json.JSONDecodeError as exc:
+            VAL_ERRORS.inc()
             log.error("json_parse_error", error=str(exc))
             ch.basic_nack(method.delivery_tag, requeue=False)
             return
@@ -246,9 +213,13 @@ class ValidatorConsumer:
 
         try:
             event = PipelineEvent(**raw)
+            VAL_VALID.inc()
+            VAL_LATENCY.observe(time.time() - start)
 
         except ValidationError as exc:
             error_type = self._classify_error(exc, raw)
+            VAL_VIOLATIONS.labels(reason=error_type).inc()
+            VAL_LATENCY.observe(time.time() - start)
 
             log.warning(
                 "validation_failed",
@@ -262,6 +233,7 @@ class ValidatorConsumer:
             return
 
         except Exception as exc:
+            VAL_ERRORS.inc()
             log.error("unexpected_validation_error",
                       event_id=event_id, error=str(exc))
             ch.basic_nack(method.delivery_tag, requeue=False)
@@ -289,24 +261,7 @@ class ValidatorConsumer:
         )
         ch.basic_ack(method.delivery_tag)
 
-    # ── Error classifier ──────────────────────────────────────────────
-
     def _classify_error(self, exc: ValidationError, raw: dict) -> str:
-        """
-        Classifies the Pydantic error into one of three categories:
-          MISSING_FIELD    -> severity MEDIUM
-          TYPE_MUTATION    -> severity HIGH
-          SCHEMA_VIOLATION -> severity MEDIUM (enum violations, value errors)
-
-        NOTE: missing-field is checked first, so a compound violation (a
-        field missing AND another field's type mutated in the same event)
-        is classified as MISSING_FIELD/MEDIUM even though it also contains
-        a HIGH-severity issue. SEG's synthetic corpus never generates
-        compound violations (each schema_drift event is exactly one
-        subtype), so this doesn't affect the 1,950-event evaluation --
-        flagged here in case real/malformed production-like input is ever
-        fed through this path.
-        """
         required_fields = {
             "event_id", "timestamp", "anomaly_type",
             "severity", "affected_component", "node", "metric_values"
@@ -322,23 +277,17 @@ class ValidatorConsumer:
 
         for err in errors:
             etype = err.get("type", "")
-
             if "missing" in etype:
                 return "MISSING_FIELD"
-
             if "type" in etype:
                 return "TYPE_MUTATION"
-
             if "literal" in etype or "value" in etype:
                 return "SCHEMA_VIOLATION"
 
         return "SCHEMA_VIOLATION"
 
-    # ── Consume loop ──────────────────────────────────────────────────
-
     def run(self):
         self.ch.basic_qos(prefetch_count=self.prefetch_count)
-
         self.ch.basic_consume(
             queue=self.INPUT_QUEUE,
             on_message_callback=self.on_message
@@ -357,6 +306,5 @@ class ValidatorConsumer:
                 log.info("validator_connection_closed")
 
 
-# ── Entry point ────────────────────────────────────────────────────────
 if __name__ == "__main__":
     ValidatorConsumer().run()
