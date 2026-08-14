@@ -62,29 +62,20 @@ NOTE ON REPLAY SPEED:
    cd ~/fyp-pipeline/layer2
    rm -rf chromadb_data/*
    cat > config/threshold_config.json << 'EOF'
-   {
-     "_comment": "EMA confidence threshold used by the Policy Agent for AUTO vs HITL routing. Hard bounds: [0.60, 0.90]. Reset for fresh evaluation.",
-     "confidence_threshold": 0.65,
-     "last_updated": "initialised",
-     "update_count": 0,
-     "ema_alpha": 0.9
-   }
-   EOF
+  {
+  "_comment": "EMA confidence threshold used by the Policy Agent for AUTO vs HITL routing. Hard bounds: [0.60, 0.90]. Reset for fresh evaluation.",
+  "confidence_threshold": 0.65,
+  "last_updated": "initialised",
+  "update_count": 0,
+  "ema_alpha": 0.9
+  }
+  EOF
    echo "ChromaDB cleared and threshold reset."
 
 ### Node 3 — gateway-node (user: spectre)
 5. Clear HITL dashboard and decision log (SQLite):
-   python3 - <<'PYEOF'
-   import sqlite3
-   db_path = "/home/spectre/fyp-pipeline/layer3/sqlite_logger/decisions.db"
-   conn = sqlite3.connect(db_path)
-   conn.execute("DELETE FROM hitl_hitlincident")
-   conn.execute("DELETE FROM decisions")
-   conn.commit()
-   conn.close()
-   print("HITL incidents and decision log cleared.")
-   PYEOF
-
+   cd ~/fyp-pipeline/layer3
+python3 -c "import sqlite3; conn = sqlite3.connect('/home/spectre/fyp-pipeline/layer3/sqlite_logger/decisions.db'); conn.execute('DELETE FROM hitl_hitlincident'); conn.execute('DELETE FROM decisions'); conn.commit(); conn.close(); print('HITL incidents and decision log cleared.')"
 ================================================================================
   PHASE 1 — START LAYER 1 (Node 1)
 ================================================================================
