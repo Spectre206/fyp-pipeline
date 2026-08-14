@@ -90,3 +90,5 @@ layer1/fusion_engine/fusion_results.jsonl
 *.db-shm
 *.db-wal
 *.db-journal
+# ChromaDB persistent vector store (runtime state)
+**/chromadb_data/
