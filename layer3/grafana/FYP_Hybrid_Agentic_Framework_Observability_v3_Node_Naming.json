@@ -1,0 +1,1472 @@
+{
+  "title": "Hybrid Agentic Framework \u2014 System Observability",
+  "uid": "fyp-observability-v2",
+  "timezone": "utc",
+  "schemaVersion": 39,
+  "version": 3,
+  "editable": true,
+  "graphTooltip": 0,
+  "panels": [
+    {
+      "type": "row",
+      "title": "System Overview",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false
+    },
+    {
+      "title": "Events Processed / Anomalies",
+      "type": "stat",
+      "gridPos": {
+        "x": 0,
+        "y": 1,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "expr": "sum(fyp_fusion_published_total) + sum(fyp_fusion_suppressed_total)",
+          "legendFormat": "Total"
+        },
+        {
+          "expr": "sum(fyp_fusion_published_total)",
+          "legendFormat": "Anomalies"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "description": "Total synthetic events ingested by Layer 1 and how many were flagged anomalous."
+    },
+    {
+      "title": "Fusion Published",
+      "type": "stat",
+      "gridPos": {
+        "x": 6,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "expr": "sum(fyp_fusion_published_total)",
+          "legendFormat": "Published"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "description": "Count of correlated incidents the Fusion Engine published downstream to Layer 2."
+    },
+    {
+      "title": "Fusion Suppressed",
+      "type": "stat",
+      "gridPos": {
+        "x": 10,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "expr": "sum(fyp_fusion_suppressed_total)",
+          "legendFormat": "Suppressed"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "description": "Count of duplicate/correlated detector alerts the Fusion Engine suppressed before publishing."
+    },
+    {
+      "title": "System Health",
+      "type": "stat",
+      "gridPos": {
+        "x": 14,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "expr": "up{job=~'fyp-agent-pipeline|fyp-layer3-autoexec|fyp-cluster'}",
+          "legendFormat": "{{instance}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {}
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "description": "Quick rollup of currently reachable pipeline components (Prometheus 'up' targets)."
+    },
+    {
+      "title": "Pipeline Health (components up)",
+      "type": "stat",
+      "gridPos": {
+        "x": 18,
+        "y": 1,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "expr": "count(up == 1)",
+          "legendFormat": "Components Up"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "description": "Per-component up/down status across the three-node cluster."
+    },
+    {
+      "type": "row",
+      "title": "02 \u2014 COMMODITY HARDWARE",
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false
+    },
+    {
+      "title": "Stream Engine",
+      "type": "stat",
+      "gridPos": {
+        "x": 0,
+        "y": 6,
+        "w": 8,
+        "h": 4
+      },
+      "targets": [
+        {
+          "expr": "up{job=\"fyp-cluster\",instance=\"stream-node:9100\"}",
+          "legendFormat": "UP",
+          "refId": "A"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        }
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center"
+      },
+      "description": "Liveness of the stream-node (Layer 1: event generator, validator, detectors, fusion engine)."
+    },
+    {
+      "title": "AI Brain",
+      "type": "stat",
+      "gridPos": {
+        "x": 8,
+        "y": 6,
+        "w": 8,
+        "h": 4
+      },
+      "targets": [
+        {
+          "expr": "up{job=\"fyp-cluster\",instance=\"ai-brain-node:9100\"}",
+          "legendFormat": "UP",
+          "refId": "A"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        }
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center"
+      },
+      "description": "Liveness of the ai-brain-node (Layer 2: Triage, Strategy, Policy, Learning agents)."
+    },
+    {
+      "title": "Gateway Node (HITL, Actions & Monitoring)",
+      "type": "stat",
+      "gridPos": {
+        "x": 16,
+        "y": 6,
+        "w": 8,
+        "h": 4
+      },
+      "targets": [
+        {
+          "expr": "up{job=\"fyp-cluster\",instance=\"gateway-node:9100\"}",
+          "legendFormat": "UP",
+          "refId": "A"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        }
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center"
+      },
+      "description": "Liveness of the gateway-node (Layer 3: HITL dashboard, Action Executor; also hosts Prometheus/Grafana)."
+    },
+    {
+      "title": "CPU Utilization (%)",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 0,
+        "y": 10,
+        "w": 8,
+        "h": 6
+      },
+      "targets": [
+        {
+          "expr": "100 * (1 - avg by (instance) (rate(node_cpu_seconds_total{job=\"fyp-cluster\",mode=\"idle\"}[5m])))",
+          "legendFormat": "{{instance}}",
+          "refId": "A"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent"
+        }
+      },
+      "description": "Per-node CPU usage \u2014 the primary commodity-hardware constraint this FYP evaluates against."
+    },
+    {
+      "title": "Memory Utilization (%)",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 8,
+        "y": 10,
+        "w": 8,
+        "h": 6
+      },
+      "targets": [
+        {
+          "expr": "100 * (1 - (node_memory_MemAvailable_bytes{job=\"fyp-cluster\"} / node_memory_MemTotal_bytes{job=\"fyp-cluster\"}))",
+          "legendFormat": "{{instance}}",
+          "refId": "A"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent"
+        }
+      },
+      "description": "Per-node RAM usage, notably on ai-brain-node while Qwen3 models are loaded for inference."
+    },
+    {
+      "title": "Root Filesystem Usage (%)",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 16,
+        "y": 10,
+        "w": 8,
+        "h": 6
+      },
+      "targets": [
+        {
+          "expr": "100 * (1 - (node_filesystem_avail_bytes{job=\"fyp-cluster\",mountpoint=\"/\"} / node_filesystem_size_bytes{job=\"fyp-cluster\",mountpoint=\"/\"}))",
+          "legendFormat": "{{instance}}",
+          "refId": "A"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent"
+        }
+      },
+      "description": "Per-node disk usage for the cluster's root filesystem."
+    },
+    {
+      "title": "Network Throughput (bit/s)",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 12,
+        "h": 5
+      },
+      "targets": [
+        {
+          "expr": "sum by (instance) (rate(node_network_receive_bytes_total{job=\"fyp-cluster\",device!~\"lo|docker.*|veth.*|br-.*\"}[5m])) * 8",
+          "legendFormat": "{{instance}} RX",
+          "refId": "A"
+        },
+        {
+          "expr": "sum by (instance) (rate(node_network_transmit_bytes_total{job=\"fyp-cluster\",device!~\"lo|docker.*|veth.*|br-.*\"}[5m])) * 8",
+          "legendFormat": "{{instance}} TX",
+          "refId": "B"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bits"
+        }
+      },
+      "description": "Inbound/outbound network traffic per node over the Ethernet-connected cluster."
+    },
+    {
+      "title": "Maximum Hardware Sensor Temperature",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 12,
+        "y": 16,
+        "w": 6,
+        "h": 5
+      },
+      "targets": [
+        {
+          "expr": "max by (instance) (node_hwmon_temp_celsius{job=\"fyp-cluster\"})",
+          "legendFormat": "{{instance}}",
+          "refId": "A"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "celsius"
+        }
+      },
+      "description": "Highest reported hardware sensor temperature per node, for thermal-throttling checks during sustained load."
+    },
+    {
+      "title": "NTP / Clock Offset",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 18,
+        "y": 16,
+        "w": 6,
+        "h": 5
+      },
+      "targets": [
+        {
+          "expr": "node_timex_offset_seconds{job=\"fyp-cluster\"} * 1000",
+          "legendFormat": "{{instance}}",
+          "refId": "A"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
+        }
+      },
+      "description": "Clock drift per node vs. NTP reference \u2014 relevant to cross-node timestamp accuracy in MTTA/MTTR calculations."
+    },
+    {
+      "type": "row",
+      "title": "03 \u2014 STREAMING DATA PLANE / Validator",
+      "gridPos": {
+        "x": 0,
+        "y": 23,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false
+    },
+    {
+      "title": "Validator Events",
+      "type": "stat",
+      "gridPos": {
+        "x": 0,
+        "y": 24,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "expr": "sum(fyp_validator_events_total)",
+          "legendFormat": "Received"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "description": "Total events received by the Pydantic schema validator."
+    },
+    {
+      "title": "Valid Events",
+      "type": "stat",
+      "gridPos": {
+        "x": 4,
+        "y": 24,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "expr": "sum(fyp_validator_valid_total)",
+          "legendFormat": "Valid"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "description": "Events that passed schema validation and proceeded to the detector layer."
+    },
+    {
+      "title": "Schema Violations",
+      "type": "stat",
+      "gridPos": {
+        "x": 8,
+        "y": 24,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "expr": "sum(fyp_validator_schema_violations_total)",
+          "legendFormat": "Violations"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "description": "Events rejected by the Pydantic validator for failing schema checks."
+    },
+    {
+      "title": "Validator Success Rate",
+      "type": "gauge",
+      "gridPos": {
+        "x": 12,
+        "y": 24,
+        "w": 4,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.9
+              },
+              {
+                "color": "green",
+                "value": 0.98
+              }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(fyp_validator_valid_total) / sum(fyp_validator_events_total)",
+          "legendFormat": "Success"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "description": "Share of ingested events that passed schema validation."
+    },
+    {
+      "title": "Validator Latency (ms)",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 16,
+        "y": 24,
+        "w": 8,
+        "h": 4
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, rate(fyp_validator_latency_seconds_bucket[5m])) * 1000",
+          "legendFormat": "p95"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
+        }
+      },
+      "description": "p50/p95 time for the Pydantic validator to process a single event."
+    },
+    {
+      "type": "row",
+      "title": "03 \u2014 STREAMING DATA PLANE / Detectors",
+      "gridPos": {
+        "x": 0,
+        "y": 28,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false
+    },
+    {
+      "title": "Detector Evaluations",
+      "type": "barchart",
+      "gridPos": {
+        "x": 0,
+        "y": 29,
+        "w": 8,
+        "h": 6
+      },
+      "targets": [
+        {
+          "expr": "sum by (detector) (fyp_detector_evaluations_total)",
+          "legendFormat": "{{detector}}"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "description": "Number of evaluations run per anomaly detector (Isolation Forest, Z-Score, Moving Average, Random Forest, PSI)."
+    },
+    {
+      "title": "Anomalies by Detector",
+      "type": "barchart",
+      "gridPos": {
+        "x": 8,
+        "y": 29,
+        "w": 8,
+        "h": 6
+      },
+      "targets": [
+        {
+          "expr": "sum by (detector) (fyp_detector_anomalies_total)",
+          "legendFormat": "{{detector}}"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "description": "Anomalies flagged, broken down by which of the five detectors raised them."
+    },
+    {
+      "title": "Detector Latency (ms)",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 16,
+        "y": 29,
+        "w": 8,
+        "h": 6
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, rate(fyp_detector_latency_seconds_bucket[5m])) * 1000",
+          "legendFormat": "{{detector}}"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
+        }
+      },
+      "description": "p50/p95 evaluation time across the five parallel anomaly detectors."
+    },
+    {
+      "type": "row",
+      "title": "03 \u2014 STREAMING DATA PLANE / Fusion Engine",
+      "gridPos": {
+        "x": 0,
+        "y": 39,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false
+    },
+    {
+      "title": "Fusion Suppression Rate",
+      "type": "gauge",
+      "gridPos": {
+        "x": 0,
+        "y": 40,
+        "w": 6,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.3
+              },
+              {
+                "color": "green",
+                "value": 0.6
+              }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(fyp_fusion_suppressed_total) / (sum(fyp_fusion_published_total) + sum(fyp_fusion_suppressed_total))",
+          "legendFormat": "Suppression"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "description": "Share of correlated detector alerts suppressed as duplicates within the 3-second correlation window."
+    },
+    {
+      "title": "Compound Events",
+      "type": "stat",
+      "gridPos": {
+        "x": 6,
+        "y": 40,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "expr": "sum(fyp_fusion_compound_total)",
+          "legendFormat": "Compound"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "description": "Incidents formed by the Fusion Engine correlating multiple detector signals into one event."
+    },
+    {
+      "title": "Fast Path Events",
+      "type": "stat",
+      "gridPos": {
+        "x": 10,
+        "y": 40,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "expr": "sum(fyp_fusion_fast_path_total)",
+          "legendFormat": "Fast Path"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "description": "CRITICAL-severity events that bypassed normal fusion correlation via the fast-path."
+    },
+    {
+      "title": "Fusion Activity",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 14,
+        "y": 40,
+        "w": 10,
+        "h": 4
+      },
+      "targets": [
+        {
+          "expr": "rate(fyp_fusion_published_total[1m])",
+          "legendFormat": "Published"
+        },
+        {
+          "expr": "rate(fyp_fusion_suppressed_total[1m])",
+          "legendFormat": "Suppressed"
+        },
+        {
+          "expr": "rate(fyp_fusion_compound_total[1m])",
+          "legendFormat": "Compound"
+        },
+        {
+          "expr": "rate(fyp_fusion_fast_path_total[1m])",
+          "legendFormat": "Fast Path"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "description": "Published/suppressed/compound/fast-path event rates from the Fusion Engine over time."
+    },
+    {
+      "type": "row",
+      "title": "04 \u2014 AI CONTROL PLANE / Agent Latency",
+      "gridPos": {
+        "x": 0,
+        "y": 46,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false
+    },
+    {
+      "title": "Triage Latency (ms)",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 0,
+        "y": 47,
+        "w": 8,
+        "h": 6
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.5, rate(fyp_triage_latency_s_bucket[5m])) * 1000",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, rate(fyp_triage_latency_s_bucket[5m])) * 1000",
+          "legendFormat": "p95"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
+        }
+      },
+      "description": "p50/p95 time for the Triage Agent to classify an incoming incident."
+    },
+    {
+      "title": "Strategy Latency (s)",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 8,
+        "y": 47,
+        "w": 8,
+        "h": 6
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.5, rate(fyp_strategy_latency_s_bucket[5m]))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, rate(fyp_strategy_latency_s_bucket[5m]))",
+          "legendFormat": "p95"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        }
+      },
+      "description": "p50/p95 time for the Strategy Agent (Qwen3:1.7B) to generate a remediation recommendation."
+    },
+    {
+      "title": "Policy Latency (ms)",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 16,
+        "y": 47,
+        "w": 8,
+        "h": 6
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.5, rate(fyp_policy_latency_s_bucket[5m])) * 1000",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, rate(fyp_policy_latency_s_bucket[5m])) * 1000",
+          "legendFormat": "p95"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
+        }
+      },
+      "description": "p50/p95 time for the Policy Agent to route a proposed action to auto-execution or HITL."
+    },
+    {
+      "type": "row",
+      "title": "04 \u2014 AI CONTROL PLANE / Strategy Outcomes",
+      "gridPos": {
+        "x": 0,
+        "y": 53,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false
+    },
+    {
+      "title": "Strategy Outcome Counts",
+      "type": "bargauge",
+      "gridPos": {
+        "x": 0,
+        "y": 54,
+        "w": 8,
+        "h": 5
+      },
+      "targets": [
+        {
+          "expr": "fyp_strategy_schema_valid_total",
+          "legendFormat": "Valid"
+        },
+        {
+          "expr": "fyp_strategy_schema_invalid_total",
+          "legendFormat": "Invalid"
+        },
+        {
+          "expr": "fyp_strategy_timeout_total",
+          "legendFormat": "Timeout"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "description": "Breakdown of Strategy Agent responses by outcome (valid schema, invalid, timeout)."
+    },
+    {
+      "title": "Schema Valid Rate (excl. timeouts)",
+      "type": "gauge",
+      "gridPos": {
+        "x": 8,
+        "y": 54,
+        "w": 4,
+        "h": 5
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.8
+              },
+              {
+                "color": "green",
+                "value": 0.95
+              }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(fyp_strategy_schema_valid_total) / (sum(fyp_strategy_schema_valid_total) + sum(fyp_strategy_schema_invalid_total))",
+          "legendFormat": "Valid Rate"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "description": "Share of non-timed-out Strategy Agent responses that matched the expected output schema."
+    },
+    {
+      "title": "Timeout Rate",
+      "type": "gauge",
+      "gridPos": {
+        "x": 12,
+        "y": 54,
+        "w": 4,
+        "h": 5
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.05
+              },
+              {
+                "color": "red",
+                "value": 0.15
+              }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(fyp_strategy_timeout_total) / (sum(fyp_strategy_schema_valid_total) + sum(fyp_strategy_schema_invalid_total) + sum(fyp_strategy_timeout_total))",
+          "legendFormat": "Timeout Rate"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "description": "Share of Strategy Agent calls that exceeded the 30s timeout-to-HITL threshold."
+    },
+    {
+      "title": "Tokens / Second",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 16,
+        "y": 54,
+        "w": 8,
+        "h": 5
+      },
+      "targets": [
+        {
+          "expr": "fyp_strategy_tokens_per_s",
+          "legendFormat": "tokens/s"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "description": "Qwen3:1.7B generation throughput on the ai-brain-node during Strategy Agent inference."
+    },
+    {
+      "type": "row",
+      "title": "05 \u2014 SELF-HEALING & HITL / Policy & Remediation",
+      "gridPos": {
+        "x": 0,
+        "y": 59,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false
+    },
+    {
+      "title": "Policy Routing",
+      "type": "piechart",
+      "gridPos": {
+        "x": 0,
+        "y": 60,
+        "w": 6,
+        "h": 5
+      },
+      "targets": [
+        {
+          "expr": "sum by (decision) (fyp_routing_decision_total)",
+          "legendFormat": "{{decision}}"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "description": "Split of Policy Agent decisions between auto-execution and human-in-the-loop escalation, by risk tier."
+    },
+    {
+      "title": "Remediation Outcomes",
+      "type": "bargauge",
+      "gridPos": {
+        "x": 6,
+        "y": 60,
+        "w": 6,
+        "h": 5
+      },
+      "targets": [
+        {
+          "expr": "fyp_auto_executor_outcomes_total",
+          "legendFormat": "{{outcome}}"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "description": "Final outcomes of dispatched remediation actions (success, failure, rejected)."
+    },
+    {
+      "title": "HITL vs AUTO",
+      "type": "stat",
+      "gridPos": {
+        "x": 12,
+        "y": 60,
+        "w": 4,
+        "h": 5
+      },
+      "targets": [
+        {
+          "expr": "sum(fyp_routing_decision_total{decision=\"AUTO\"})",
+          "legendFormat": "AUTO"
+        },
+        {
+          "expr": "sum(fyp_routing_decision_total{decision=\"HITL\"})",
+          "legendFormat": "HITL"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "description": "Count of incidents resolved via human-in-the-loop approval vs. fully automated execution."
+    },
+    {
+      "title": "Auto Executor Success Rate",
+      "type": "gauge",
+      "gridPos": {
+        "x": 16,
+        "y": 60,
+        "w": 4,
+        "h": 5
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.8
+              },
+              {
+                "color": "green",
+                "value": 0.95
+              }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(fyp_auto_executor_outcomes_total{outcome=\"SUCCESS\"}) / (sum(fyp_auto_executor_outcomes_total))",
+          "legendFormat": "Success"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "description": "Share of auto-executed remediation actions that completed successfully."
+    },
+    {
+      "type": "row",
+      "title": "06 \u2014 END-TO-END PERFORMANCE",
+      "gridPos": {
+        "x": 0,
+        "y": 65,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false
+    },
+    {
+      "title": "MTTA (p50 / p95)",
+      "type": "stat",
+      "gridPos": {
+        "x": 0,
+        "y": 66,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.5, rate(fyp_mtta_seconds_bucket[5m]))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, rate(fyp_mtta_seconds_bucket[5m]))",
+          "legendFormat": "p95"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        }
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "description": "Mean Time To Acknowledge \u2014 p50/p95 seconds from event detection to Triage classification. Target: \u226433s."
+    },
+    {
+      "title": "MTTR (p50 / p95)",
+      "type": "stat",
+      "gridPos": {
+        "x": 6,
+        "y": 66,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.5, rate(fyp_mttr_seconds_bucket[5m]))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, rate(fyp_mttr_seconds_bucket[5m]))",
+          "legendFormat": "p95"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        }
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "description": "Mean Time To Resolve \u2014 p50/p95 seconds from detection to completed remediation (auto or HITL)."
+    },
+    {
+      "title": "Control-Plane Latency (Avg)",
+      "type": "stat",
+      "gridPos": {
+        "x": 12,
+        "y": 66,
+        "w": 12,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "targets": [
+        {
+          "expr": "(sum(fyp_triage_latency_s_sum) / sum(fyp_triage_latency_s_count)) + (sum(fyp_strategy_latency_s_sum) / sum(fyp_strategy_latency_s_count)) + (sum(fyp_policy_latency_s_sum) / sum(fyp_policy_latency_s_count))",
+          "legendFormat": "Avg CP latency",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      },
+      "description": "Average combined Triage + Strategy + Policy processing time \u2014 the Layer 2 reasoning overhead."
+    },
+    {
+      "type": "row",
+      "title": "07 \u2014 RABBITMQ & LEARNING",
+      "gridPos": {
+        "x": 0,
+        "y": 70,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false
+    },
+    {
+      "title": "RabbitMQ Queue Depth",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 0,
+        "y": 71,
+        "w": 12,
+        "h": 5
+      },
+      "targets": [
+        {
+          "expr": "sum by (queue) (rabbitmq_queue_messages_ready)",
+          "legendFormat": "{{queue}}"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "description": "Messages ready (unconsumed) per RabbitMQ queue across the two-exchange architecture."
+    },
+    {
+      "title": "Dead Letter Queue Depth",
+      "type": "stat",
+      "gridPos": {
+        "x": 12,
+        "y": 71,
+        "w": 4,
+        "h": 5
+      },
+      "targets": [
+        {
+          "expr": "sum(rabbitmq_queue_messages_ready{queue=\"dead.letters\"})",
+          "legendFormat": "DLX"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "description": "Messages that failed processing and landed in the dead-letter queue \u2014 should stay near zero."
+    },
+    {
+      "title": "ChromaDB Upserts",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 16,
+        "y": 71,
+        "w": 8,
+        "h": 5
+      },
+      "targets": [
+        {
+          "expr": "rate(fyp_learning_chromadb_upserts_total[5m])",
+          "legendFormat": "upserts/s"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "description": "Rate of Learning Agent writes to ChromaDB, tagging incidents with success/failure outcomes."
+    },
+    {
+      "title": "EMA Confidence Threshold",
+      "type": "gauge",
+      "gridPos": {
+        "x": 0,
+        "y": 76,
+        "w": 6,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "min": 0.6,
+          "max": 0.9
+        }
+      },
+      "targets": [
+        {
+          "expr": "fyp_learning_confidence_threshold",
+          "legendFormat": "threshold"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "description": "Current exponential-moving-average confidence threshold the Learning Agent maintains for Triage."
+    },
+    {
+      "title": "Learning Outcomes",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 6,
+        "y": 76,
+        "w": 10,
+        "h": 4
+      },
+      "targets": [
+        {
+          "expr": "sum by (outcome_type) (rate(fyp_learning_outcomes_total[5m]))",
+          "legendFormat": "{{outcome_type}}"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "description": "Rate of Learning Agent outcome types recorded per incident (positive/negative feedback)."
+    },
+    {
+      "title": "System Health (all targets)",
+      "type": "stat",
+      "gridPos": {
+        "x": 16,
+        "y": 76,
+        "w": 8,
+        "h": 4
+      },
+      "targets": [
+        {
+          "expr": "up",
+          "legendFormat": "{{instance}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {}
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "description": "Full Prometheus target list and up/down status for every scraped component in the cluster."
+    }
+  ],
+  "refresh": "10s",
+  "time": {
+    "from": "now-30m",
+    "to": "now"
+  }
+}
