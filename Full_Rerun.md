@@ -55,6 +55,7 @@ rm -f ~/fyp-pipeline/layer1/adm/throughput_results.jsonl
 rm -f ~/fyp-pipeline/layer1/adm/auth_results.jsonl
 rm -f ~/fyp-pipeline/layer1/adm/cpu_results.jsonl
 rm -f ~/fyp-pipeline/layer1/adm/schema_results.jsonl
+rm -f ~/fyp-pipeline/layer1/fusion_engine/fusion_results.jsonl
 ```
 
 #### 3. Update base timestamp and regenerate corpus
