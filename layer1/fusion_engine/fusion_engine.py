@@ -1,6 +1,13 @@
 # layer1/fusion_engine/fusion_engine.py
 """
-Fusion Engine — Multi‑Detector Signal Correlation (v1.1)
+Fusion Engine — Multi‑Detector Signal Correlation (v1.2)
+
+v1.2 CHANGELOG:
+  - FIX duplicate processing: added `processed_event_ids` set to ensure
+    each event is fused exactly once. Late-arriving detector results after
+    an event has already been fused are now acknowledged and ignored.
+    This fixes inflated `fyp_fusion_suppressed_total` and ensures
+    published + suppressed = total unique events.
 
 v1.1 CHANGELOG:
   - Preserves original event timestamp in fused event (timestamp field).
@@ -101,6 +108,10 @@ class FusionEngine:
         # Pending events: event_id → dict of results, methods, first_seen
         self.pending: Dict[str, dict] = {}
 
+        # Keep track of events that have already been fused, so we ignore
+        # late-arriving results and prevent duplicate processing.
+        self.processed_event_ids = set()
+
         # RabbitMQ connection
         params = pika.ConnectionParameters(
             host=self.host,
@@ -163,6 +174,12 @@ class FusionEngine:
             return
 
         event_id = result["event_id"]
+
+        # If this event has already been fused, ignore any late results.
+        if event_id in self.processed_event_ids:
+            self.ch.basic_ack(method.delivery_tag)
+            return
+
         if event_id not in self.pending:
             self.pending[event_id] = {
                 "results": [],
@@ -191,6 +208,9 @@ class FusionEngine:
 
     def _fuse_and_cleanup(self, event_id: str, fast_path: bool = False):
         """Correlate all received results for event_id, publish decision, ack messages."""
+        # Mark as processed immediately to prevent duplicates.
+        self.processed_event_ids.add(event_id)
+
         entry = self.pending.pop(event_id, None)
         if entry is None:
             return
@@ -255,17 +275,16 @@ class FusionEngine:
             return None
 
         # Preserve original event timestamp from the first detector result.
-        # All detector results for the same event should carry the same timestamp.
         original_ts = results[0].get("timestamp") if results else None
 
         fused_event = {
             "event_id": event_id,
-            "timestamp": original_ts,  # ← original anomaly time
+            "timestamp": original_ts,
             "fused_severity": fused_severity,
             "fused_confidence": fused_confidence,
             "fusion_type": fusion_type,
             "contributing_models": contributing,
-            "fused_at": datetime.now(timezone.utc).isoformat(),  # fusion processing time
+            "fused_at": datetime.now(timezone.utc).isoformat(),
             "note": "fast_path" if fast_path else "standard_window"
         }
         return fused_event

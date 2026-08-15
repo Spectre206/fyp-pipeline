@@ -222,11 +222,11 @@ Open another terminal on Node 1 (or use multiple terminals). The detectors must 
 ```bash
 cd ~/fyp-pipeline/layer1/adm
 
-python3 detectors/error_detector.py &
+python3 detectors/error_rate.py &
 python3 detectors/throughput_drop.py &
 python3 detectors/auth_flood.py &
 python3 detectors/cpu_spike.py &
-python3 detectors/schema_detector.py &
+python3 detectors/schema_drift.py &
 
 # Wait for all detector processes to finish
 wait
