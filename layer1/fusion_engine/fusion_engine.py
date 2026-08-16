@@ -276,10 +276,12 @@ class FusionEngine:
 
         # Preserve original event timestamp from the first detector result.
         original_ts = results[0].get("timestamp") if results else None
-
+        original_ingestion_time = results[0].get("ingestion_time") if results else None
+        
         fused_event = {
             "event_id": event_id,
             "timestamp": original_ts,
+            "ingestion_time": original_ingestion_time,
             "fused_severity": fused_severity,
             "fused_confidence": fused_confidence,
             "fusion_type": fusion_type,
