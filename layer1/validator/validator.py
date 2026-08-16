@@ -242,6 +242,7 @@ class ValidatorConsumer:
         enriched = event.model_dump(mode="json")
         enriched["dedup_flag"] = dedup_flag
         enriched["validated_at"] = datetime.now(timezone.utc).isoformat()
+        enriched["ingestion_time"] = raw.get("ingestion_time")
 
         self.ch.basic_publish(
             exchange=self.exchange,

@@ -110,6 +110,7 @@ class ErrorRateDetector:
             return {
                 "event_id": event_id,
                 "timestamp": event.get("timestamp"),
+                "ingestion_time": event.get("ingestion_time"),
                 "detected": detected,
                 "anomaly_type": "error_rate_surge" if detected else "NORMAL",
                 "severity": severity,

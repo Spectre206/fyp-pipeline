@@ -102,6 +102,7 @@ class SchemaDetector:
                 return {
                     "event_id": event_id,
                     "timestamp": event.get("timestamp"),
+                    "ingestion_time": event.get("ingestion_time"),
                     "detected": False,
                     "anomaly_type": "NORMAL",
                     "severity": "N/A",

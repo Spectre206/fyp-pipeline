@@ -143,6 +143,7 @@ class AuthDetector:
             return {
                 "event_id": event_id,
                 "timestamp": event.get("timestamp"),
+                "ingestion_time": event.get("ingestion_time"),
                 "detected": detected,
                 "anomaly_type": "auth_failure_flood" if detected else "NORMAL",
                 "severity": severity,
