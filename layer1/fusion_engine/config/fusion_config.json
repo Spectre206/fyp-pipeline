@@ -10,7 +10,8 @@
     "output_exchange": "fyp.events",
     "output_routing_key": "anomaly.fused"
   },
-  "correlation_window_s": 3.0,
+  "correlation_window_s": 5.0,
+  "correlation_recovery_window_s": 0.75,
   "min_confidence_to_publish": 0.3,
   "fast_path_critical": true,
   "fast_path_model_weight_threshold": 0.80,
