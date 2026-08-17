@@ -1,6 +1,3 @@
-I've placed the full content into a downloadable markdown file for you.  
-
-```markdown
 # Layer 1 — Component-by-Component Build Log
 
 **Project:** Distributed Multi-Agent Coordination for Self-Healing Data Pipelines
@@ -16,17 +13,6 @@ I've placed the full content into a downloadable markdown file for you.
 **Status:** ✅ **v1.3 — config-driven, reproducible, hostname-based.**
 
 ### 1.1 Flow
-
-```mermaid
-flowchart TD
-    A[seg_config.json] --> B[Load config]
-    B --> C[EventTemplateFactory builds events]
-    C --> D[NoiseInjector adds noise]
-    D --> E{Mode}
-    E -->|generate| F[Save corpus to disk]
-    E -->|replay| G[Publish to RabbitMQ]
-```
-
 
 ```mermaid
 flowchart TD
@@ -117,7 +103,7 @@ flowchart TD
 - **Schema-drift bypass** — structural violations go directly to `anomaly.detected`, skipping Feature Store and Fusion Engine.
 - **Two of three schema_drift subtypes caught here** — `missing_field` and `type_mutation` fail validation; `value_shift` passes (structurally valid) and goes to the PSI detector.
 - **Config-driven** — `validator_config.json` is the single source of truth for RabbitMQ settings.
-- **Prometheus removed** — only Fusion Engine exposes Layer 1 metrics.
+- **Prometheus removed** — only Fusion Engine exposes Layer 1 metrics.
 
 ### 3.3 Test results
 
@@ -361,49 +347,71 @@ flowchart LR
 
 ---
 
-## 7. Fusion Engine
+## 7. Fusion Engine (`layer1/fusion_engine/`)
 
-**Files:** `fusion_engine.py`, `config/fusion_config.json`
-**Status:** ✅ **v1.0 — config-driven, correlation window, Prometheus on port 8003.**
+**Files:** `fusion_engine.py`, `config/fusion_config.json`, `fusion_results.jsonl`
+**Status:** ✅ **v1.7 — correlation-window fixed, fast-path correctly handled, compound detection restored, timestamp + ingestion_time propagated, Prometheus extended.**
 
-### 7.1 Flow
+### 7.0 What the file does
+
+| File | Role |
+|---|---|
+| `fusion_engine.py` | Standalone RabbitMQ consumer. Consumes detector results from `fusion.results`, groups by `event_id` within a primary **5-second** correlation window plus a **0.75-second** recovery window for late arrivals, fuses into a single decision, and publishes to `anomaly.detected`. Suppresses all‑normal events. |
+| `config/fusion_config.json` | Correlation window, recovery window, min confidence, fast‑path settings, model weights, RabbitMQ settings. |
+| `fusion_results.jsonl` | Local evaluation log — one JSON line per fused event. |
+
+### 7.1 Fusion flow
 
 ```mermaid
 flowchart TD
-    A[fusion.results queue] --> B[Receive detector result]
-    B --> C{CRITICAL + weight ≥ 0.80?}
-    C -- Yes --> D[Fast-path: fuse immediately]
-    C -- No --> E[Add to pending window]
-    E --> F{Window expired or 5 results?}
-    F -- Yes --> G[Fuse: group by event_id]
-    G --> H{Any detected?}
-    H -- No --> I[Suppress: ACK, no publish]
-    H -- Yes --> J{≥2 detectors?}
-    J -- Yes --> K[Compound: highest severity, max weighted confidence]
-    J -- No --> L{Confidence ≥ 0.30?}
-    L -- Yes --> M[Confirmed single]
-    L -- No --> N[Low confidence: suppress]
-    K --> O[Publish to anomaly.detected / anomaly.fused]
-    M --> O
+    A[fusion.results] --> B[Receive detector result]
+    B --> C{Already fused?}
+    C -- Yes --> D[Ack and ignore]
+    C -- No --> E[Store result by event_id<br/>track unique model names]
+    E --> F{Fast path triggered?}
+    F -- Yes --> G[Mark fast_path_triggered<br/>do not finalize yet]
+    F -- No --> H[All 5 detectors seen?]
+    G --> H
+    H -- Yes --> I[Fuse immediately]
+    H -- No --> J{Primary 5s window expired?}
+    J -- No --> K[Wait]
+    J -- Yes --> L{All 5 detectors?}
+    L -- Yes --> I
+    L -- No --> M[Start recovery window<br/>0.75s]
+    M --> N{Recovery expired?}
+    N -- No --> K
+    N -- Yes --> O[Fuse with whatever received]
+    I --> P[Suppressed?]
+    O --> P
+    P -- All normal --> Q[Suppress: no publish]
+    P -- >=1 anomaly --> R[Publish fused event]
+    R --> S[anomaly.detected]
 ```
 
-### 7.2 Per-model confidence weights
+### 7.2 Key design decisions
 
-| Detector | Weight |
-|---|---|
-| Auth flood (rate_gate_auth_rf) | 0.85 |
-| Error rate (z_score_error_rate) | 0.80 |
-| CPU spike (z_score_cpu_memory) | 0.80 |
-| Throughput (moving_average_throughput) | 0.75 |
-| Schema drift (psi_detector) | 0.70 |
+- **Primary correlation window:** 5 seconds (`correlation_window_s` in config).
+- **Recovery window:** 0.75 seconds for incomplete events only. Effective maximum 5.75 seconds.
+- **Fast path:** triggers on CRITICAL + high‑weight model but does not finalize early. The event remains eligible for full correlation.
+- **Duplicate protection:** `processed_event_ids` ensures each event is fused only once. Event is added to the set only at final fusion.
+- **Unique detectors:** tracked by `model_name` — duplicates from same detector are ignored. All five unique detectors must report before immediate fusion.
+- **Timestamp propagation:** original `timestamp` and `ingestion_time` are preserved from detector results into the fused event. `fused_at` is separate.
+- **Prometheus additions:** `fyp_fusion_correlation_wait_seconds`, `fyp_fusion_late_recovery_total`, `fyp_fusion_detectors_received`, `fyp_fusion_fast_path_triggered_total`, `fyp_fusion_latency_seconds`, `fyp_fusion_errors_total`.
 
-### 7.3 Test results
+### 7.3 Test results (final cold‑start run)
 
-- **603 fused events published** to anomaly.detected
-- **~924 events suppressed** (all detectors returned normal)
-- **anomaly.detected total:** 703 (100 bypass + 603 fused)
-- **fusion.results → 0** (all consumed)
-- **Prometheus metrics** on port 8003, scraped by gateway-node
+- **Total processed:** 1,527
+- **Published:** 532
+- **Suppressed:** 995
+- **Compound:** 43
+- **Fast path published:** 78
+- **Fusion errors:** 0
+- **Missing ingestion_time:** 0
+- **Cross‑detector ingestion consistency:** 0 mismatches
+
+### 7.4 Open items
+
+- None critical. Optional: expose recovery window via config as already done.
 
 ---
 
@@ -437,11 +445,10 @@ flowchart LR
     FE -->|suppress<br/>~924| X[ ]
 ```
 
-## Open Items (Layer 1)
+## Open Items (Layer 1)
 
 - [ ] Detector config files (thresholds currently hardcoded).
 - [ ] Feature Store `silence_duration_s` bug (compares against `datetime.now()` instead of event timestamp).
 - [ ] PSI as primary detector — needs corpus with tighter component distributions.
 - [ ] Isolation Forest hybrid mode for CPU detector.
 - [ ] `fusion_results.jsonl` path should be config-driven.
-```
