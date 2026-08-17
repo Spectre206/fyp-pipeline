@@ -68,7 +68,7 @@ Node 2 — ai-brain-node                       Layer 2: AI Control Plane
   ChromaDB (RAG — Historical Incidents)
 
 Node 3 — gateway-node                        Layer 3: HITL & Observability
-  Django HITL Dashboard → Auto-Execution Engine → SQLite Decision Log
+  Django HITL Dashboard (Approve/Reject/Modify) → Auto-Execution Engine → SQLite Decision Log
   Prometheus + Grafana (scraping all 3 nodes)
 ```
 
@@ -88,7 +88,7 @@ Node 3 — gateway-node                        Layer 3: HITL & Observability
 
 ## Repository Structure
 
-```
+```text
 fyp-pipeline/
 │
 ├── layer1/                        — Node 1: stream-node
@@ -106,14 +106,23 @@ fyp-pipeline/
 ├── layer2/                        — Node 2: ai-brain-node
 │   ├── agents/                    — Triage, Strategy, Policy, Learning agents
 │   ├── chromadb_utils/            — RAG client, query (3-step protocol), upsert
+│   ├── ollama/                    — Local Ollama HTTP client
+│   ├── rabbitmq/                  — Remote RabbitMQ connection helper
 │   ├── prompts/                   — System prompts for qwen3:1.7b and qwen3:0.6b
-│   └── config/                    — EMA confidence threshold (threshold_config.json)
+│   ├── config/                    — EMA confidence threshold (threshold_config.json)
+│   ├── chromadb_data/             — Persistent vector store (git-ignored)
+│   ├── User_Guide.md              — Layer-2 startup and troubleshooting
+│   └── README.md
 │
 ├── layer3/                        — Node 3: gateway-node
 │   ├── dashboard/                 — Django HITL project (queue, incident detail, SSE)
-│   │   └── hitl/templates/        — queue.html, incident_detail.html, auto_monitor.html
+│   │   └── hitl/templates/        — queue.html, incident_detail.html, modify.html, auto_monitor.html
 │   ├── auto_executor/             — Consumes auto.execute, publishes outcome.feedback
-│   └── sqlite_logger/             — Centralised decision log writer
+│   ├── sqlite_logger/             — Centralised decision log writer
+│   ├── grafana/                   — Agent Pipeline & Fusion Engine dashboard JSON model
+│   ├── rabbitmq/                  — Remote RabbitMQ connection helper
+│   ├── User_Guide.md              — Layer-3 startup and troubleshooting
+│   └── README.md
 │
 ├── evaluation/                    — Dataset generation, baseline, metrics, kappa
 ├── Phase_0_Infrastructure/        — Phase 0 cluster setup and LLM benchmark (COMPLETE)
@@ -123,6 +132,7 @@ fyp-pipeline/
 │   └── static/                    — system_architecture.png
 ├── datasets/                      — Download instructions: NAB, Loghub HDFS, KDD99
 ├── docs/                          — Architecture diagrams, system design documents
+├── USER_GUIDE.md                  — Full pipeline operation guide (project root)
 └── README.md
 ```
 
@@ -220,6 +230,7 @@ fyp-pipeline/
 
 | Step | Component | Guide |
 |:----:|:----------|:------|
+| 0 | Full pipeline operation | `USER_GUIDE.md` (project root) |
 | 1 | Cluster infrastructure | `Phase_0_Infrastructure/User_Guide.md` |
 | 2 | Layer 1 (Node 1) | `layer1/README.md` → `layer1/User_Guide.md` |
 | 3 | Layer 2 (Node 2) | `layer2/README.md` → `layer2/User_Guide.md` |

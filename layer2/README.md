@@ -1,59 +1,37 @@
 # Layer 2 — AI Control Plane
 
-> **Node:** ai-brain-node — `192.168.18.102`
-> **Hardware:** AMD Ryzen 5, 8GB RAM, Ubuntu 24.04 Server (headless)
+> **Node:** ai‑brain‑node — `192.168.18.102`  
+> **Hardware:** AMD Ryzen 5, 8 GB RAM, Ubuntu 24.04 Server (headless)
 
 ---
 
 ## What This Layer Does
 
-Layer 2 is the reasoning and decision-making core of the pipeline. It runs four
-agents in sequence for every anomaly event received from Layer 1. The Triage Agent
-performs rapid rule-based classification and retrieves historical context from
-ChromaDB. The Strategy Agent calls qwen3:1.7b via Ollama to produce a structured
-7-field JSON response. The Policy Agent applies a deterministic routing table to
-decide between automatic execution and human escalation. The Learning Agent
-processes outcomes after dispatch and continuously updates ChromaDB with resolved
-incident knowledge — making future Strategy Agent responses more accurate over time.
+Layer 2 is the asynchronous reasoning core of the self‑healing pipeline. It runs
+four independent agents that consume anomaly events from the Fusion Engine,
+enrich them with historical context (ChromaDB RAG), generate remediation
+strategies via a local LLM (qwen3:1.7b), and decide whether an incident should
+be auto‑executed or escalated to a human operator.
 
-All four agents run on Node 2. The only external call is the Strategy Agent's HTTP
-request to the Ollama API (also on Node 2, localhost:11434). No cloud API calls
-are made anywhere in Layer 2.
+A fifth process – the **Learning Agent** – consumes post‑resolution feedback from
+Layer 3, updates the ChromaDB knowledge base, and dynamically adjusts the
+confidence threshold used for auto‑execution decisions.
 
----
-
-## Four Agents
-
-| Agent | Model | SLA Target | Input Queue | Output Queue |
-|:------|:------|:-----------|:------------|:-------------|
-| Triage Agent | None — rule-based + ChromaDB RAG | ≤ 3 seconds | `anomaly.detected` | `triage.result` |
-| Strategy Agent | `qwen3:1.7b` via Ollama | ≤ 25 seconds | `triage.result` | `strategy.result` |
-| Policy Agent | None — pure Python | ≤ 500 ms | `strategy.result` | `auto.execute` OR `hitl.queue` |
-| Learning Agent | `qwen3:0.6b` via Ollama | ≤ 5 seconds (post-dispatch) | `outcome.feedback` | ChromaDB only |
+All inter‑agent communication happens through RabbitMQ queues on Node 1.  
+LLM inference and vector storage run locally on this node.
 
 ---
 
-## Policy Routing Table
+## Components
 
-| Priority | risk_tier | confidence | timed_out / parse_error | Decision | Reason Code |
-|:--------:|:----------|:-----------|:------------------------|:---------|:------------|
-| 1 | Any | Any | True | HITL | TIMEOUT or PARSE_ERROR |
-| 2 | HIGH | Any | False | HITL | HIGH_RISK |
-| 3 | LOW | < 0.65 | False | HITL | LOW_CONFIDENCE |
-| 4 | LOW | ≥ 0.65 | False | AUTO | LOW_RISK_HIGH_CONFIDENCE |
-
-The confidence threshold (0.65) is stored in `config/threshold_config.json` and
-is recalibrated by the Learning Agent via Exponential Moving Average after each
-resolved incident.
-
----
-
-## ChromaDB RAG
-
-The Triage Agent retrieves up to 3 similar past incidents from ChromaDB before
-calling the Strategy Agent. Context is injected into the system prompt to improve
-risk tier calibration. The Learning Agent is the sole writer to ChromaDB — no
-other agent modifies the collection.
+| Component | Directory / File | Role |
+|:----------|:-----------------|:-----|
+| Triage Agent | `agents/triage_agent.py` | Rule‑based classification + ChromaDB RAG retrieval. Produces `triage.result`. |
+| Strategy Agent | `agents/strategy_agent.py` | Calls **qwen3:1.7b** via Ollama. Generates a 7‑field JSON remediation plan. Produces `strategy.result`. |
+| Policy Agent | `agents/policy_agent.py` | Deterministic 5‑rule routing table. Routes to `auto.execute` or `hitl.queue` based on risk tier and confidence. |
+| Learning Agent | `agents/learning_agent.py` | Calls **qwen3:0.6b** for incident summarisation. Upserts ChromaDB. Updates EMA confidence threshold. |
+| ChromaDB | `chromadb_utils/` + `chromadb_data/` | Persistent vector store for historical incident retrieval (RAG). |
+| Ollama | `ollama/` (client) | Local LLM inference server (`localhost:11434`). |
 
 ---
 
@@ -61,17 +39,29 @@ other agent modifies the collection.
 
 | Queue | Direction | Purpose |
 |:------|:----------|:--------|
-| `anomaly.detected` | Layer 1 → Triage Agent | Incoming anomaly events |
-| `triage.result` | Triage → Strategy | Enriched incident + RAG context |
-| `strategy.result` | Strategy → Policy | LLM JSON response + metadata |
-| `auto.execute` | Policy → Layer 3 | Auto-execution instructions |
-| `hitl.queue` | Policy → Layer 3 | Human review queue |
-| `outcome.feedback` | Layer 3 → Learning | Post-dispatch outcome signals |
+| `anomaly.detected` | Fusion Engine → Triage Agent | Fused anomaly events |
+| `triage.result` | Triage Agent → Strategy Agent | Enriched event + RAG context |
+| `strategy.result` | Strategy Agent → Policy Agent | LLM response + schema validation |
+| `auto.execute` | Policy Agent → Layer 3 | Safe for automatic remediation |
+| `hitl.queue` | Policy Agent → Layer 3 | Requires human review |
+| `outcome.feedback` | Layer 3 → Learning Agent | Post‑resolution outcomes |
 
 ---
 
-## Setup
+## Key Design Features
 
-See `User_Guide.md` in this directory for full Node 2 installation and startup
-instructions. Ollama must be running with both qwen3:1.7b and qwen3:0.6b pulled
-before starting any agents.
+- **Decoupled async processing** – Layer 2 never blocks Layer 1; all communication is via RabbitMQ.
+- **RAG‑enhanced reasoning** – The Triage Agent retrieves up to 3 similar past incidents from ChromaDB before the LLM call, improving risk‑tier accuracy.
+- **Policy‑bounded autonomy** – The Policy Agent enforces a strict tiered routing table; execution authority lives only in Layer 3.
+- **Adaptive threshold** – The Learning Agent uses an EMA (α=0.9) to adjust the confidence threshold for auto‑execution based on real outcomes.
+- **Full observability** – All agents expose Prometheus metrics on ports 8010‑8013.
+
+---
+
+## Setup & Usage
+
+For detailed setup, startup order, verification steps, and troubleshooting, see
+the **[Layer 2 User Guide](User_Guide.md)**.
+
+For the complete build history and architecture decisions, see the
+**[Layer 2 Component Build Log](../docs/layer2_component_log.md)**.

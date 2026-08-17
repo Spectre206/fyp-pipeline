@@ -216,6 +216,9 @@ class SyntheticEventGenerator:
         for i, line in enumerate(lines, 1):
             ev = json.loads(line.strip())
 
+            #NEW: timestamp of when this event actually enters the live pipeline
+            ev["ingestion_time"] = datetime.now(timezone.utc).isoformat()
+            
             headers = {
                 "x-event-type": ev.get("anomaly_type", "NORMAL"),
                 "x-severity": ev.get("severity", "N/A"),

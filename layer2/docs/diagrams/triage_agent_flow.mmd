@@ -1,0 +1,14 @@
+flowchart TD
+    A[anomaly.detected queue] --> B[Receive event]
+    B --> C{Has anomaly_type?}
+    C -- No (Fusion Engine) --> D[_normalize_event: derive type<br>from contributing_models,<br>severity from fused_severity]
+    C -- Yes (Validator bypass) --> E[Use fields as-is]
+    D --> F[Classify: PROTOCOL_TABLE lookup]
+    E --> F
+    F --> G[Query ChromaDB: retrieve_rag_context]
+    G --> H{Cold start?}
+    H -- Yes (<3 docs) --> I[RAG context empty]
+    H -- No --> J[Format top-3 incidents]
+    I --> K[Build triage.result payload]
+    J --> K
+    K --> L[Publish to triage.result queue]

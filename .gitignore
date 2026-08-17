@@ -84,3 +84,18 @@ layer3/grafana_data/
 layer1/adm/baselines/
 layer1/adm/*_results.jsonl
 layer1/fusion_engine/fusion_results.jsonl
+
+# SQLite runtime/database files
+*.db
+*.db-shm
+*.db-wal
+*.db-journal
+# ChromaDB persistent vector store (runtime state)
+**/chromadb_data/
+layer1/seg/config/seg_config.json
+
+# Runtime-modified config files (local state)
+layer2/config/threshold_config.json
+
+# Runtime Feature Store baselines (generated during calibration)
+layer1/adm/baselines/

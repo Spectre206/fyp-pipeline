@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Incident {{ incident.event_id }}</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        h1 { color: #333; }
+        table { border-collapse: collapse; width: 100%; margin: 10px 0; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        .actions { margin: 10px 0; }
+        .actions a { padding: 8px 16px; text-decoration: none; color: white; border-radius: 4px; margin-right: 10px; }
+        .approve { background-color: #4CAF50; }
+        .reject { background-color: #f44336; }
+        .back { background-color: #555; color: white; padding: 8px 16px; text-decoration: none; border-radius: 4px; }
+        .modify { background-color: #FF9800; }
+        pre { white-space: pre-wrap; word-break: break-word; }
+    </style>
+</head>
+<body>
+    <h1>Incident: {{ incident.event_id }}</h1>
+    <table>
+        <tr><th>Field</th><th>Value</th></tr>
+        <tr><td>Anomaly Type</td><td>{{ payload.full_reasoning_chain.triage_result.anomaly_type }}</td></tr>
+        <tr><td>Severity</td><td>{{ payload.full_reasoning_chain.triage_result.severity }}</td></tr>
+        <tr><td>Affected Component</td><td>{{ payload.full_reasoning_chain.triage_result.original_event.affected_component }}</td></tr>
+        <tr><td>Node</td><td>{{ payload.full_reasoning_chain.triage_result.original_event.node }}</td></tr>
+        <tr><td>Response Protocol</td><td>{{ payload.full_reasoning_chain.triage_result.response_protocol }}</td></tr>
+        <tr><td>LLM Risk Tier</td><td>{{ payload.full_reasoning_chain.strategy_result.llm_response.risk_tier }}</td></tr>
+        <tr><td>LLM Confidence</td><td>{{ payload.full_reasoning_chain.strategy_result.llm_response.confidence }}</td></tr>
+        <tr><td>Reasoning</td><td>{{ payload.full_reasoning_chain.strategy_result.llm_response.reasoning }}</td></tr>
+        <tr><td>Recommended Actions</td><td><ul>{% for action in payload.full_reasoning_chain.strategy_result.llm_response.recommended_actions %}<li>{{ action }}</li>{% endfor %}</ul></td></tr>
+        <tr><td>Routing Reason</td><td>{{ payload.routing_reason }}</td></tr>
+        <tr><td>Policy Latency</td><td>{{ payload.policy_agent_latency_ms }} ms</td></tr>
+    </table>
+    <div class="actions">
+        <a href="{% url 'approve' incident.id %}" class="approve">APPROVE</a>
+        <a href="{% url 'reject' incident.id %}" class="reject">REJECT</a>
+        <a href="{% url 'modify_form' incident.id %}" class="modify" style="background-color: #FF9800;">MODIFY</a>
+    </div>
+    <br>
+    <a href="{% url 'queue' %}" class="back">← Back to Queue</a>
+    <hr>
+    <details>
+        <summary>Raw Policy Message</summary>
+        <pre>{{ payload|pprint }}</pre>
+    </details>
+</body>
+</html>

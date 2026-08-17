@@ -22,10 +22,18 @@ Detection logic:
 Always publishes a result to fusion.results (detected=True or False).
 """
 
+"""
+Schema Drift Detector — PSI + Shift Marker (Model 5) with Prometheus Metrics
+"""
+
 import json
 import logging
+import time
+from pathlib import Path
+
 import pika
 import structlog
+from prometheus_client import Counter, Histogram, start_http_server
 
 logging.basicConfig(
     level=logging.INFO,
@@ -33,10 +41,31 @@ logging.basicConfig(
 )
 log = structlog.get_logger()
 
-# ── Constants ─────────────────────────────────────────────────────────
-# PSI thresholds are defined but not used as primary detection gates
-# (see module docstring for rationale). They remain available for
-# confidence adjustment and future calibration.
+DETECTOR_NAME = "schema_drift"
+PROM_PORT = 8008
+start_http_server(PROM_PORT)
+
+EVAL_COUNT = Counter(
+    "fyp_detector_evaluations_total",
+    "Detector evaluations",
+    ["detector", "anomaly_type"]
+)
+ANOMALY_COUNT = Counter(
+    "fyp_detector_anomalies_total",
+    "Detector anomalies",
+    ["detector", "anomaly_type"]
+)
+ERROR_COUNT = Counter(
+    "fyp_detector_errors_total",
+    "Detector errors",
+    ["detector"]
+)
+LATENCY = Histogram(
+    "fyp_detector_latency_seconds",
+    "Detector latency",
+    ["detector"]
+)
+
 PSI_HIGH_THRESHOLD   = 0.5
 PSI_MEDIUM_THRESHOLD = 0.2
 
@@ -47,8 +76,6 @@ MODEL_NAME      = "psi_detector"
 
 
 class SchemaDetector:
-    """Schema drift detector — shift‑marker primary, PSI confidence booster."""
-
     def __init__(self, host: str = "stream-node", port: int = 5672):
         params = pika.ConnectionParameters(
             host=host, port=port, virtual_host="fyp",
@@ -57,86 +84,96 @@ class SchemaDetector:
         )
         self.conn = pika.BlockingConnection(params)
         self.ch = self.conn.channel()
-
         log.info("schema_detector_initialised",
                  psi_medium_threshold=PSI_MEDIUM_THRESHOLD,
-                 psi_high_threshold=PSI_HIGH_THRESHOLD,
-                 primary_signal="distribution_shift_marker",
-                 psi_role="confidence_booster")
+                 psi_high_threshold=PSI_HIGH_THRESHOLD)
 
     def detect(self, event: dict) -> dict:
+        start = time.time()
         event_id = event.get("event_id", "UNKNOWN")
-        fv = event.get("feature_vector", {})
-        raw_mv = event.get("metric_values", {})
+        anomaly_type = event.get("anomaly_type", "UNKNOWN")
+        EVAL_COUNT.labels(detector=DETECTOR_NAME, anomaly_type=anomaly_type).inc()
 
-        if not isinstance(raw_mv, dict):
+        try:
+            fv = event.get("feature_vector", {})
+            raw_mv = event.get("metric_values", {})
+
+            if not isinstance(raw_mv, dict):
+                return {
+                    "event_id": event_id,
+                    "timestamp": event.get("timestamp"),
+                    "ingestion_time": event.get("ingestion_time"),
+                    "detected": False,
+                    "anomaly_type": "NORMAL",
+                    "severity": "N/A",
+                    "confidence": 0.0,
+                    "model_name": MODEL_NAME,
+                    "metadata": {"reason": "no valid metrics"}
+                }
+
+            psi_scores = {}
+            for key, value in fv.items():
+                if key.startswith("psi_score_"):
+                    metric = key.replace("psi_score_", "")
+                    psi_scores[metric] = float(value)
+
+            max_psi = max(psi_scores.values()) if psi_scores else 0.0
+            shift_marker = raw_mv.get("distribution_shift_marker", 0.0)
+
+            detected = False
+            severity = "N/A"
+            reason = ""
+
+            if shift_marker == 1.0:
+                detected = True
+                severity = "MEDIUM"
+                reason = "distribution_shift_marker=1.0 (value_shift event)"
+                confidence = 0.70
+                if max_psi >= PSI_HIGH_THRESHOLD:
+                    confidence = min(0.95, confidence + 0.20)
+                elif max_psi >= PSI_MEDIUM_THRESHOLD:
+                    confidence = min(0.90, confidence + 0.10)
+            else:
+                detected = False
+                confidence = 0.0
+
+            if detected:
+                ANOMALY_COUNT.labels(
+                    detector=DETECTOR_NAME, anomaly_type=anomaly_type
+                ).inc()
+
             return {
                 "event_id": event_id,
+                "timestamp": event.get("timestamp"),
+                "ingestion_time": event.get("ingestion_time"),
+                "detected": detected,
+                "anomaly_type": "schema_drift" if detected else "NORMAL",
+                "severity": severity,
+                "confidence": round(confidence, 4),
+                "model_name": MODEL_NAME,
+                "metadata": {
+                    "psi_scores": {k: round(v, 6) for k, v in psi_scores.items()},
+                    "max_psi": round(max_psi, 6),
+                    "distribution_shift_marker": shift_marker,
+                    "reason": reason,
+                }
+            }
+        except Exception as exc:
+            ERROR_COUNT.labels(detector=DETECTOR_NAME).inc()
+            log.error("detector_error", error=str(exc))
+            return {
+                "event_id": event_id,
+                "timestamp": event.get("timestamp"),
+                "ingestion_time": event.get("ingestion_time"),
                 "detected": False,
                 "anomaly_type": "NORMAL",
                 "severity": "N/A",
                 "confidence": 0.0,
                 "model_name": MODEL_NAME,
-                "metadata": {"reason": "no valid metrics"}
+                "metadata": {"reason": "error"}
             }
-
-        # Collect all PSI scores
-        psi_scores = {}
-        for key, value in fv.items():
-            if key.startswith("psi_score_"):
-                metric = key.replace("psi_score_", "")
-                psi_scores[metric] = float(value)
-
-        max_psi = max(psi_scores.values()) if psi_scores else 0.0
-        shift_marker = raw_mv.get("distribution_shift_marker", 0.0)
-
-        # ── Detection logic ──────────────────────────────────────────
-        detected = False
-        severity = "N/A"
-        reason = ""
-
-        # Primary: distribution_shift_marker catches genuine value_shift events.
-        # These are the 30 forwarded schema_drift events where the metric
-        # distribution is statistically shifted but structurally valid.
-        if shift_marker == 1.0:
-            detected = True
-            severity = "MEDIUM"
-            reason = "distribution_shift_marker=1.0 (value_shift event)"
-
-        # PSI is not used as a primary detector for this corpus.
-        # The synthetic data's high within‑component variance causes elevated
-        # PSI across most events, making it a poor discriminator when used
-        # alone. It remains available as a confidence signal.
-
-        # ── Confidence ───────────────────────────────────────────────
-        if detected:
-            # Base confidence from shift marker
-            confidence = 0.70
-            # PSI boosts confidence when also elevated
-            if max_psi >= PSI_HIGH_THRESHOLD:
-                confidence = min(0.95, confidence + 0.20)
-            elif max_psi >= PSI_MEDIUM_THRESHOLD:
-                confidence = min(0.90, confidence + 0.10)
-        else:
-            confidence = 0.0
-
-        return {
-            "event_id": event_id,
-            "detected": detected,
-            "anomaly_type": "schema_drift" if detected else "NORMAL",
-            "severity": severity,
-            "confidence": round(confidence, 4),
-            "model_name": MODEL_NAME,
-            "metadata": {
-                "psi_scores": {k: round(v, 6) for k, v in psi_scores.items()},
-                "max_psi": round(max_psi, 6),
-                "distribution_shift_marker": shift_marker,
-                "reason": reason,
-                "threshold_medium": PSI_MEDIUM_THRESHOLD,
-                "threshold_high": PSI_HIGH_THRESHOLD,
-                "psi_used_as": "confidence_booster",
-            }
-        }
+        finally:
+            LATENCY.labels(detector=DETECTOR_NAME).observe(time.time() - start)
 
     def on_message(self, ch, method, props, body):
         try:
@@ -159,9 +196,7 @@ class SchemaDetector:
 
             if result["detected"]:
                 log.info("anomaly_detected", event_id=result["event_id"],
-                         severity=result["severity"],
-                         max_psi=result["metadata"]["max_psi"],
-                         confidence=result["confidence"])
+                         severity=result["severity"], max_psi=result["metadata"]["max_psi"])
             else:
                 log.debug("event_clean", event_id=result["event_id"])
         except Exception as exc:

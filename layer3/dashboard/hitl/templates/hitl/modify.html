@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Modify Incident {{ incident.event_id }}</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        h1 { color: #333; }
+        label { display: block; margin-top: 10px; font-weight: bold; }
+        input[type=text] { width: 80%; padding: 6px; margin-bottom: 10px; }
+        textarea { width: 80%; padding: 6px; }
+        .btn { padding: 8px 16px; text-decoration: none; color: white; border-radius: 4px; margin-right: 10px; border: none; cursor: pointer; }
+        .save { background-color: #2196F3; }
+        .cancel { background-color: #555; }
+    </style>
+</head>
+<body>
+    <h1>Modify Actions — {{ incident.event_id }}</h1>
+    <form method="POST" action="{% url 'modify_submit' incident.id %}">
+        {% csrf_token %}
+        <label>Action 1:</label>
+        <input type="text" name="action1" value="{{ actions.0|default:'' }}">
+        <label>Action 2:</label>
+        <input type="text" name="action2" value="{{ actions.1|default:'' }}">
+        <label>Action 3:</label>
+        <input type="text" name="action3" value="{{ actions.2|default:'' }}">
+        <label>Operator Notes (optional):</label>
+        <textarea name="operator_notes" rows="2">Modified by operator</textarea>
+        <br><br>
+        <button type="submit" class="btn save">Save Changes</button>
+        <a href="{% url 'detail' incident.id %}" class="btn cancel">Cancel</a>
+    </form>
+</body>
+</html>

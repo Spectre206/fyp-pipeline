@@ -103,6 +103,7 @@ class SchemaDriftRouter:
         anomaly = {
             "event_id": raw.get("event_id") or str(uuid.uuid4()),
             "timestamp": raw.get("timestamp") or datetime.now(timezone.utc).isoformat(),
+            "ingestion_time": raw.get("ingestion_time"),
             "anomaly_type": "schema_drift",
             "severity": severity,
 

@@ -49,8 +49,8 @@ Key packages and their roles:
 |---|---|
 | `pika` | All RabbitMQ consumers (Validator, ADM Runner, detectors, Fusion Engine) |
 | `pydantic` | Validator (PipelineEvent schema) |
-| `numpy`, `scikit-learn`, `joblib` | ADM detectors (Isolation Forest, Random Forest) |
-| `prometheus_client` | Fusion Engine metrics |
+| `numpy`, `scikit-learn`, `joblib` | ADM detectors (Random Forest, Isolation Forest training) |
+| `prometheus_client` | Metrics endpoints for Validator, detectors, and Fusion Engine |
 | `structlog` | Structured logging across all components |
 
 ---
@@ -91,15 +91,15 @@ to `anomaly.detected`.  Normal events are suppressed by the Fusion Engine.
 
 ---
 
-## 5. Cold-Start vs. Warm-Start
+## 5. Cold‑Start vs. Warm‑Start
 
 The Feature Store maintains per‑component baselines that are persisted to disk
 (`adm/baselines/`).  Two evaluation modes exist:
 
 | Mode | How to activate | Expected behaviour |
 |---|---|---|
-| **Cold-start** | Delete `adm/baselines/*.json` before the run | Every component undergoes the 20‑event calibration phase. ~1 527 events forwarded to detectors, ~323 withheld. |
-| **Warm-start** | Keep baselines from a previous run | Most components reload their frozen baseline and skip calibration. ~1 820 events forwarded. |
+| **Cold‑start** | Delete `adm/baselines/*.json` before the run | Every component undergoes the 20‑event calibration phase. ~1 527 events forwarded to detectors, ~323 withheld. |
+| **Warm‑start** | Keep baselines from a previous run | Most components reload their frozen baseline and skip calibration. ~1 820 events forwarded. |
 
 **For reproducible evaluation results, always use cold‑start mode.**  
 The commands in this guide assume a cold start unless stated otherwise.
@@ -127,6 +127,7 @@ python3 seg.py --mode replay --speed 50 --input ../../evaluation/events_1950.jso
 - `--speed 50` replays at 50× real‑time (finishes in ~30 s).
 - Use `--speed 1` for a realistic 30‑minute HDFS‑style stream test.
 - Events are published to `fyp.events` with routing key `event.raw`.
+- **Timestamp note:** During replay, SEG adds an `ingestion_time` field to each event (real UTC time the event enters the pipeline). This is separate from the original synthetic `timestamp`.
 
 Verify events are flowing:
 
@@ -155,6 +156,8 @@ The Validator consumes from `raw.events`, validates every event against the
 
 Out of the 1 950‑event corpus, exactly **100 events** bypass to `anomaly.detected`
 and **1 850** proceed to `validated.event`.
+
+**Metrics:** The Validator exposes Prometheus metrics on port **8002** (events total, valid, schema violations, latency).
 
 ---
 
@@ -192,26 +195,19 @@ expect **17 baseline files**.
 
 ## 9. Running the Anomaly Detectors
 
-Each detector is a standalone RabbitMQ consumer.  Run them in any order after the
-ADM Runner has filled the `detect.*` queues.
+Each detector is a standalone RabbitMQ consumer. For correct Fusion Engine correlation,
+start all five detectors concurrently after the Fusion Engine is already running.
 
 ```bash
 cd ~/fyp-pipeline/layer1/adm
 
-# 1. Error Rate Surge (Z‑Score)
-python3 detectors/error_rate.py
+python3 detectors/error_rate.py &
+python3 detectors/throughput_drop.py &
+python3 detectors/auth_flood.py &
+python3 detectors/cpu_spike.py &
+python3 detectors/schema_drift.py &
 
-# 2. Throughput Drop (Moving Average)
-python3 detectors/throughput_drop.py
-
-# 3. Auth Failure Flood (Rate‑Gate + Random Forest)
-python3 detectors/auth_flood.py
-
-# 4. CPU/Memory Spike (Z‑Score)
-python3 detectors/cpu_spike.py
-
-# 5. Schema Drift (PSI + Shift Marker)
-python3 detectors/schema_spike.py
+wait
 ```
 
 Each detector publishes **every** result to `fusion.results` (routing key `fusion.result`),
@@ -235,9 +231,25 @@ python3 detectors/train_cpu_model.py
 The CPU detector currently uses Z‑scores from the Feature Store; the Isolation Forest
 model is saved for future hybrid confidence‑adjustment.
 
+### 9.2 Detector Metrics
+
+Each detector exposes Prometheus metrics on its own port:
+
+| Detector | Port |
+|---|---|
+| `error_rate` | 8004 |
+| `throughput_drop` | 8005 |
+| `auth_flood` | 8006 |
+| `cpu_spike` | 8007 |
+| `schema_drift` | 8008 |
+
+Metrics include evaluation counts, anomaly counts, detector errors, and latency histograms.
+
 ---
 
 ## 10. Running the Fusion Engine
+
+Start the Fusion Engine **before** the detectors:
 
 ```bash
 cd ~/fyp-pipeline/layer1/fusion_engine
@@ -246,15 +258,16 @@ python3 fusion_engine.py
 
 The Fusion Engine:
 - Consumes all detector results from `fusion.results`
-- Groups them by `event_id` within a 3‑second correlation window
+- Groups them by `event_id` within a primary **5‑second** correlation window plus a **0.75‑second** late‑arrival recovery window
 - Publishes a single fused decision to `anomaly.detected` (routing key `anomaly.fused`)
 - Suppresses events where all five detectors return normal
+- Preserves original `timestamp` and `ingestion_time` in fused events
 
 Prometheus metrics are exposed on port **8003**.
 
 ---
 
-## 11. Verifying End-to-End Layer 1 Output
+## 11. Verifying End‑to‑End Layer 1 Output
 
 After running all components, check the final queue depths:
 
@@ -274,7 +287,7 @@ sudo rabbitmqctl list_queues -p fyp name messages | grep -E "raw.events|validate
 | `detect.auth` | 0 |
 | `detect.schema` | 0 |
 | `fusion.results` | 0 |
-| `anomaly.detected` | ~703 (100 bypass + ~603 fused) |
+| `anomaly.detected` | 632 (100 bypass + 532 fused) |
 
 ### 11.1 Inspect fused results
 
@@ -283,10 +296,20 @@ wc -l ~/fyp-pipeline/layer1/fusion_engine/fusion_results.jsonl
 head -1 ~/fyp-pipeline/layer1/fusion_engine/fusion_results.jsonl | python3 -m json.tool
 ```
 
+A fused event should contain:
+- `timestamp` – original synthetic event time
+- `ingestion_time` – real time the event entered the pipeline
+- `fused_at` – fusion processing time
+- `fused_severity`, `fused_confidence`, `fusion_type`, `contributing_models`
+
 ### 11.2 Prometheus / Grafana
 
-Prometheus on `gateway-node` scrapes the Fusion Engine at `stream-node:8003`.
-Grafana dashboard "Agent Pipeline & Fusion Engine" displays live metrics.
+Prometheus on `gateway-node` scrapes all Layer 1 metrics endpoints:
+- Fusion Engine: `stream-node:8003`
+- Validator: `stream-node:8002`
+- Detectors: `stream-node:8004`‑`8008`
+
+Grafana dashboard "Agent Pipeline & Fusion Engine" visualises these metrics.
 
 ---
 
@@ -317,16 +340,17 @@ cd ~/fyp-pipeline/layer1/adm && python3 adm_runner.py
 # 4. Terminal C — Replay
 cd ~/fyp-pipeline/layer1/seg && python3 seg.py --mode replay --speed 50 --input ../../evaluation/events_1950.jsonl
 
-# 5. After replay finishes — run all five detectors (Terminal D, sequentially)
-cd ~/fyp-pipeline/layer1/adm
-python3 detectors/error_rate.py
-python3 detectors/throughput_drop.py
-python3 detectors/auth_flood.py
-python3 detectors/cpu_spike.py
-python3 detectors/schema_drift.py
-
-# 6. Run Fusion Engine
+# 5. Terminal D — Fusion Engine (start BEFORE detectors)
 cd ~/fyp-pipeline/layer1/fusion_engine && python3 fusion_engine.py
+
+# 6. Terminal E — All five detectors CONCURRENTLY
+cd ~/fyp-pipeline/layer1/adm
+python3 detectors/error_rate.py &
+python3 detectors/throughput_drop.py &
+python3 detectors/auth_flood.py &
+python3 detectors/cpu_spike.py &
+python3 detectors/schema_drift.py &
+wait
 
 # 7. Verify
 sudo rabbitmqctl list_queues -p fyp name messages | grep -E "raw.events|validated.event|detect\.|fusion.results|anomaly.detected"
@@ -354,7 +378,9 @@ frozen baselines and forward nearly all events immediately.
 |---|---|---|
 | `connection refused` to RabbitMQ | RabbitMQ not running or firewall blocking port 5672 | `sudo systemctl start rabbitmq-server` |
 | Detector queues show 1 850 events instead of 1 527 | Baselines not cleared (warm‑start) | `rm -f adm/baselines/*.json` and re‑run |
-| `fusion_results.jsonl` is empty | Fusion Engine started before detectors finished | Run detectors first, then Fusion Engine |
+| `fusion_results.jsonl` is empty or fused count too low | Detectors ran sequentially or Fusion Engine started too late | Run detectors concurrently with `&` and start Fusion Engine first |
 | PSI scores are inflated (10–40 range) | Old Feature Store code without PSI fix | Update `feature_computers.py` to v1.2 |
 | Prometheus target `stream-node:8003` shows "down" | Fusion Engine not running | Start Fusion Engine first |
 | `ai-brain-node:9100` down in Prometheus | Node 2 is offline | Expected during Layer 1‑only development |
+| Compound events = 0 despite overlapping detections | Detectors not run concurrently; correlation window too short | Run detectors in parallel; ensure `correlation_window_s=5.0` |
+| `ingestion_time` is null in fused events | Old detector code or SEG replay missing the field | Ensure `ingestion_time` is added in `seg.py` replay and all detector return paths |

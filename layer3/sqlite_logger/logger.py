@@ -1,19 +1,73 @@
-"""
-SQLite Decision Logger — Centralised Write Module
+"""SQLite Decision Logger — shared write interface for Auto-Executor and Django."""
+import sqlite3
+import json
+import os
+from datetime import datetime, timezone
 
-This module provides the write interface to the decisions SQLite database.
-It is used by both the HITL Dashboard (via the Django ORM model) and the
-Auto-Execution Engine (via direct sqlite3 connection, since the executor
-runs outside the Django app context).
+DB_PATH = os.path.join(os.path.dirname(__file__), "decisions.db")
 
-The logger handles all database writes atomically to prevent partial records
-in the event of a crash mid-execution. It exposes a single write_decision()
-function that accepts a dictionary matching the decisions table schema and
-handles column mapping, JSON serialisation of list fields (original_actions,
-final_actions), and timestamp formatting.
+def _get_conn():
+    """Return a thread-local SQLite connection with WAL mode."""
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute("PRAGMA journal_mode=WAL")
+    return conn
 
-The database file path is loaded from an environment variable or defaults to
-the path configured in Django settings.py. Both the Django ORM and this direct
-writer use the same file — they do not conflict because SQLite handles
-concurrent writers via WAL (Write-Ahead Logging) mode.
-"""
+def init_db():
+    """Create the decisions table if it doesn't exist."""
+    conn = _get_conn()
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS decisions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_id TEXT NOT NULL,
+            anomaly_type TEXT,
+            severity TEXT,
+            affected_component TEXT,
+            node TEXT,
+            routing_reason TEXT,
+            risk_tier_from_llm TEXT,
+            confidence_from_llm REAL,
+            decision_type TEXT NOT NULL,
+            decision_timestamp TEXT NOT NULL,
+            time_in_queue_seconds REAL,
+            original_actions TEXT,
+            final_actions TEXT,
+            operator_notes TEXT,
+            auto_execute_outcome TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+def write_decision(data: dict):
+    """Write one decision row. Accepts a dict with keys matching the schema."""
+    conn = _get_conn()
+    ts = datetime.now(timezone.utc).isoformat()
+    conn.execute("""
+        INSERT INTO decisions (
+            event_id, anomaly_type, severity, affected_component, node,
+            routing_reason, risk_tier_from_llm, confidence_from_llm,
+            decision_type, decision_timestamp, time_in_queue_seconds,
+            original_actions, final_actions, operator_notes,
+            auto_execute_outcome, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        data.get("event_id"),
+        data.get("anomaly_type"),
+        data.get("severity"),
+        data.get("affected_component"),
+        data.get("node"),
+        data.get("routing_reason"),
+        data.get("risk_tier_from_llm"),
+        data.get("confidence_from_llm"),
+        data.get("decision_type"),
+        ts,
+        data.get("time_in_queue_seconds"),
+        json.dumps(data.get("original_actions", [])),
+        json.dumps(data.get("final_actions", [])),
+        data.get("operator_notes", ""),
+        data.get("auto_execute_outcome"),
+        ts
+    ))
+    conn.commit()
+    conn.close()

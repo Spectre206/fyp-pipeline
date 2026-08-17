@@ -1,19 +1,157 @@
-"""
-Policy Agent — Tiered Routing (Pure Python, No LLM)
+"""Policy Agent — Deterministic 5-rule routing table."""
+import json
+import time
+import sys
+import os
 
-This module applies the deterministic four-rule routing table to every Strategy
-Agent output. It consumes from strategy.result, reads the current confidence
-threshold from config/threshold_config.json (reloaded on each decision so
-Learning Agent updates take effect immediately), and evaluates rules in priority
-order:
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-  P1: timed_out or parse_error → HITL (TIMEOUT / PARSE_ERROR)
-  P2: risk_tier == HIGH        → HITL (HIGH_RISK)
-  P3: confidence < threshold   → HITL (LOW_CONFIDENCE)
-  P4: otherwise                → AUTO (LOW_RISK_HIGH_CONFIDENCE)
+import structlog
+from datetime import datetime, timezone
+from pathlib import Path
+from prometheus_client import Counter, Histogram, start_http_server
 
-The full reasoning chain (triage result + strategy result) is attached to the
-routed message so the downstream HITL dashboard or auto-executor has complete
-context. The routing decision and reason code are also published as Prometheus
-counters. Target latency: ≤ 500ms. Hard timeout: 2 seconds.
-"""
+from rabbitmq.connection import get_connection, publish
+
+log = structlog.get_logger()
+
+POLICY_LATENCY = Histogram("fyp_policy_latency_s", "Policy Agent latency")
+ROUTING_DECISION = Counter(
+    "fyp_routing_decision_total", "Routing decisions", ["decision", "reason"]
+)
+MTTA_HISTOGRAM = Histogram(
+    "fyp_mtta_seconds",
+    "Mean Time To Acknowledge (triage_timestamp → policy decision)",
+    buckets=[10, 20, 30, 40, 50, 60, 90, 120, 180, 300]
+)
+TIMESTAMP_MISSING = Counter(
+    "fyp_timestamp_missing_total", "Events missing original timestamp", ["agent"]
+)
+
+start_http_server(8012)
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+THRESHOLD_PATH = BASE_DIR / "config" / "threshold_config.json"
+
+
+def load_threshold() -> float:
+    """Load confidence threshold from disk — called on every message."""
+    try:
+        data = json.loads(THRESHOLD_PATH.read_text())
+        t = float(data.get("confidence_threshold", 0.65))
+        return max(0.60, min(0.90, t))
+    except Exception:
+        return 0.65
+
+
+class PolicyAgent:
+    def __init__(self):
+        self.conn = get_connection()
+        self.ch = self.conn.channel()
+        log.info("policy_agent_started")
+
+    def route(self, strategy: dict, threshold: float) -> tuple:
+        """Apply 5-rule routing table. Returns (decision, reason, target_queue)."""
+        triage = strategy.get("triage_result", {})
+        llm = strategy.get("llm_response", {})
+        timed = strategy.get("timed_out", False)
+        valid = strategy.get("valid_json", False)
+        f_type = triage.get("original_event", {}).get("fusion_type", "")
+        tier = llm.get("risk_tier", "HIGH")
+        conf = float(llm.get("confidence", 0.0))
+
+        # Rule 1 — Timeout or parse error
+        if timed or not valid:
+            reason = "TIMEOUT" if timed else "PARSE_ERROR"
+            return "HITL", reason, "hitl.queue"
+
+        # Rule 2 — Fusion Engine low confidence (v1.2)
+        if f_type == "low_confidence":
+            return "HITL", "FUSION_LOW_CONFIDENCE", "hitl.queue"
+
+        # Rule 3 — High risk tier
+        if tier == "HIGH":
+            return "HITL", "HIGH_RISK", "hitl.queue"
+
+        # Rule 4 — Low risk but uncertain
+        if conf < threshold:
+            return "HITL", "LOW_CONFIDENCE", "hitl.queue"
+
+        # Rule 5 — Safe for automatic execution
+        return "AUTO", "LOW_RISK_HIGH_CONFIDENCE", "auto.execute"
+
+    def on_message(self, ch, method, props, body):
+        t0 = time.monotonic()
+        try:
+            strategy = json.loads(body)
+            event_id = strategy.get("event_id", "unknown")
+            threshold = load_threshold()
+
+            decision, reason, target_queue = self.route(strategy, threshold)
+
+            # ---------- MTTA calculation ----------
+            # Control-plane MTTA: triage_timestamp → policy decision time
+            try:
+                triage_result = strategy.get("triage_result", {})
+                ts = triage_result.get("triage_timestamp")
+
+                if ts:
+                    try:
+                        start_time = datetime.fromisoformat(ts)
+                        if start_time.tzinfo is None:
+                            start_time = start_time.replace(tzinfo=timezone.utc)
+                        else:
+                            start_time = start_time.astimezone(timezone.utc)
+
+                        mtta = (datetime.now(timezone.utc) - start_time).total_seconds()
+                        MTTA_HISTOGRAM.observe(mtta)
+                    except Exception:
+                        log.warning("mtta_timestamp_parse_failed", event_id=event_id, ts=ts)
+                        TIMESTAMP_MISSING.labels(agent="policy").inc()
+                else:
+                    log.warning("mtta_no_timestamp", event_id=event_id)
+                    TIMESTAMP_MISSING.labels(agent="policy").inc()
+            except Exception:
+                pass
+            # ---------------------------------------
+
+            result = {
+                "event_id": event_id,
+                "policy_timestamp": datetime.now(timezone.utc).isoformat(),
+                "routing_decision": decision,
+                "routing_reason": reason,
+                "threshold_used": threshold,
+                "policy_agent_latency_ms": round((time.monotonic() - t0) * 1000),
+                "full_reasoning_chain": {
+                    "triage_result": strategy.get("triage_result"),
+                    "strategy_result": strategy,
+                },
+            }
+
+            publish(self.ch, target_queue, json.dumps(result))
+            ch.basic_ack(method.delivery_tag)
+
+            POLICY_LATENCY.observe(time.monotonic() - t0)
+            ROUTING_DECISION.labels(decision=decision, reason=reason).inc()
+
+            log.info(
+                "policy_routed",
+                event_id=event_id,
+                decision=decision,
+                reason=reason,
+                latency_ms=result["policy_agent_latency_ms"],
+            )
+
+        except Exception as e:
+            log.error("policy_error", error=str(e))
+            ch.basic_nack(method.delivery_tag, requeue=False)
+
+    def run(self):
+        self.ch.basic_qos(prefetch_count=1)
+        self.ch.basic_consume("strategy.result", self.on_message)
+        log.info("policy_consuming", queue="strategy.result")
+        self.ch.start_consuming()
+
+
+if __name__ == "__main__":
+    PolicyAgent().run()
