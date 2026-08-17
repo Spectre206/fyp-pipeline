@@ -92,3 +92,4 @@ layer1/fusion_engine/fusion_results.jsonl
 *.db-journal
 # ChromaDB persistent vector store (runtime state)
 **/chromadb_data/
+layer1/seg/config/seg_config.json
