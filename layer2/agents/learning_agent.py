@@ -32,7 +32,7 @@ THRESHOLD_GAUGE = Gauge(
 )
 MTTR_HISTOGRAM = Histogram(
     "fyp_mttr_seconds",
-    "Mean Time To Recovery (anomaly timestamp -> outcome feedback received)",
+    "Mean Time To Recovery (triage_timestamp → outcome feedback received)",
     buckets=[30, 60, 120, 180, 300, 600, 900]
 )
 TIMESTAMP_MISSING = Counter(
@@ -136,28 +136,34 @@ class LearningAgent:
 
             OUTCOMES_PROCESSED.labels(outcome_type=outcome_type).inc()
 
-            # MTTR calculation
+            # ---------- MTTR calculation ----------
+            # Control-plane MTTR: triage_timestamp → outcome feedback received
             try:
-                ev = outcome.get("full_policy_result", {}).get(
+                chain = outcome.get("full_policy_result", {}).get(
                     "full_reasoning_chain", {}
-                ).get("triage_result", {}).get("original_event", {})
-                ts = ev.get("timestamp")
+                )
+                triage_result = chain.get("triage_result", {})
+                ts = triage_result.get("triage_timestamp")
+
                 if ts:
                     try:
-                        anomaly_time = datetime.fromisoformat(ts)
-                        if anomaly_time.tzinfo is None:
-                            anomaly_time = anomaly_time.replace(tzinfo=timezone.utc)
+                        start_time = datetime.fromisoformat(ts)
+                        if start_time.tzinfo is None:
+                            start_time = start_time.replace(tzinfo=timezone.utc)
                         else:
-                            anomaly_time = anomaly_time.astimezone(timezone.utc)
-                        mttr = (datetime.now(timezone.utc) - anomaly_time).total_seconds()
+                            start_time = start_time.astimezone(timezone.utc)
+
+                        mttr = (datetime.now(timezone.utc) - start_time).total_seconds()
                         MTTR_HISTOGRAM.observe(mttr)
                     except Exception:
                         log.warning("mttr_timestamp_parse_failed", event_id=event_id, ts=ts)
                         TIMESTAMP_MISSING.labels(agent="learning").inc()
                 else:
+                    log.warning("mttr_no_timestamp", event_id=event_id)
                     TIMESTAMP_MISSING.labels(agent="learning").inc()
             except Exception:
                 pass
+            # ---------------------------------------
 
             # Summarise with qwen3:0.6b
             summary = f"Incident {event_id} - {outcome_type}"

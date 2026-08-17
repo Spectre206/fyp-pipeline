@@ -1,7 +1,0 @@
-{
-  "_comment": "EMA confidence threshold used by the Policy Agent for AUTO vs HITL routing. Hard bounds: [0.60, 0.90]. Reset for fresh evaluation.",
-  "confidence_threshold": 0.6165,
-  "last_updated": "2026-08-13T13:37:28.195004+00:00",
-  "update_count": 10,
-  "ema_alpha": 0.9
-}
