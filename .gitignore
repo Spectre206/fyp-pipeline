@@ -96,3 +96,6 @@ layer1/seg/config/seg_config.json
 
 # Runtime-modified config files (local state)
 layer2/config/threshold_config.json
+
+# Runtime Feature Store baselines (generated during calibration)
+layer1/adm/baselines/
