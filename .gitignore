@@ -94,7 +94,6 @@ layer1/fusion_engine/fusion_results.jsonl
 **/chromadb_data/
 
 # Runtime-modified config files (local state)
-layer2/config/threshold_config.json
 
 # Runtime Feature Store baselines (generated during calibration)
 layer1/adm/baselines/
