@@ -1,0 +1,67 @@
+{
+  "seed": 42,
+  "output_dir": "evaluation/",
+  "corpus_filename": "events_1950.jsonl",
+  "labels_filename": "labels.csv",
+  "replay_speed": 1.0,
+  "rabbitmq": {
+    "host": "stream-node",
+    "port": 5672,
+    "virtual_host": "fyp",
+    "username": "fyp_user",
+    "password": "fyp_pass_2026",
+    "exchange": "fyp.events",
+    "routing_key": "event.raw"
+  },
+  "nodes": [
+    "stream-node",
+    "ai-brain-node",
+    "gateway-node"
+  ],
+  "event_counts": {
+    "NORMAL": 1000,
+    "cpu_memory_spike": 200,
+    "error_rate_surge": 200,
+    "throughput_drop": 200,
+    "auth_failure_flood": 200,
+    "schema_drift": 150
+  },
+  "severity_distribution": {
+    "cpu_memory_spike": {
+      "HIGH": 100,
+      "MEDIUM": 60,
+      "CRITICAL": 40
+    },
+    "error_rate_surge": {
+      "HIGH": 100,
+      "MEDIUM": 60,
+      "CRITICAL": 40
+    },
+    "throughput_drop": {
+      "HIGH": 100,
+      "MEDIUM": 60,
+      "CRITICAL": 40
+    },
+    "auth_failure_flood": {
+      "HIGH": 100,
+      "MEDIUM": 60,
+      "CRITICAL": 40
+    },
+    "schema_drift": {
+      "missing_field": {
+        "count": 50,
+        "severity": "MEDIUM"
+      },
+      "type_mutation": {
+        "count": 50,
+        "severity": "HIGH"
+      },
+      "value_shift": {
+        "count": 50,
+        "severity": "MEDIUM"
+      }
+    }
+  },
+  "poisson_lambda_seconds": 1.0,
+  "base_timestamp": "2026-08-17T07:17:40.365954+00:00"
+}
