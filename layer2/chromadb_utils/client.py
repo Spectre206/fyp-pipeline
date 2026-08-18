@@ -1,5 +1,6 @@
 """ChromaDB Client — Connection and Collection Initialisation."""
 import os
+from pathlib import Path
 
 # Force offline mode to prevent HuggingFace connection attempts
 # (model is already cached locally; no internet on ai-brain-node)
@@ -11,7 +12,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-CHROMA_PATH = "./chromadb_data"
+BASE_DIR = Path(__file__).resolve().parent.parent
+CHROMA_PATH = str(BASE_DIR / "chromadb_data")
 COLLECTION_NAME = "incident_history"
 EMBEDDING_MODEL = "all-MiniLM-L6-v2"  # 384-dimensional, cosine distance
 
