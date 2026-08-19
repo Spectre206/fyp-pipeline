@@ -5,30 +5,34 @@
 **Purpose:** Single running record of every Layer 2 component as it's implemented.
 **Pattern:** Follows Layer 1 Component Build Log format.
 
+> **Final evaluation note:** This file has been updated after the final run.
+> The pipeline was executed in multiple sessions with gaps.
+> Therefore, **Prometheus counters reset on restart** and are not reliable as cumulative totals.
+> Final numbers below are **reconstructed from persistent data** (SQLite, ChromaDB, detector files) unless explicitly stated as live-metric values.
+
 ---
 
 ## 1. Triage Agent
 
-**Files:** `agents/triage_agent.py`, `chromadb_utils/query.py`, `chromadb_utils/client.py` (modified), `rabbitmq/connection.py` (built from stub)
-**Status:** ✅ **v1.0 — rule-based classification + ChromaDB RAG, tested against 703-event corpus.**
+**Files:** `agents/triage_agent.py`, `chromadb_utils/query.py`, `chromadb_utils/client.py`, `rabbitmq/connection.py`
+**Status:** ✅ **v1.0 — rule-based classification + ChromaDB RAG.**
 
 ### 1.0 Environment Prerequisites (verified)
 
-- `ai-brain-node` SSH accessible, venv auto-activates
-- Ollama running: `qwen3:1.7b` (1.4 GB) and `qwen3:0.6b` (522 MB)
-- ChromaDB: collection `incident_history` exists, count = 0 (cold start)
-- RabbitMQ: connected to `stream-node:5672`, `anomaly.detected` had 703 messages
-- All Python packages present (pika, chromadb, sentence-transformers, prometheus_client, etc.)
-- **Fix applied:** `chromadb_utils/client.py` — added `os.environ["HF_HUB_OFFLINE"] = "1"` to prevent HuggingFace connection hang on startup
+- `ai-brain-node` SSH accessible, venv auto-activates.
+- Ollama running: `qwen3:1.7b` (1.4 GB) and `qwen3:0.6b` (522 MB).
+- ChromaDB collection `incident_history` exists.
+- RabbitMQ connected to `stream-node:5672`.
+- **Fix applied:** `chromadb_utils/client.py` added offline mode and absolute `chromadb_data` path.
 
 ### 1.1 Files built/modified
 
 | File | Action | Purpose |
 |---|---|---|
-| `rabbitmq/connection.py` | Replaced stub with real code | `get_connection()` + `publish()` helpers |
-| `chromadb_utils/client.py` | Added offline mode | Prevents HF hub hang; model loaded from local cache |
-| `chromadb_utils/query.py` | Built from stub | 3-step RAG retrieval protocol (`retrieve_rag_context` + `format_rag_context`) |
-| `agents/triage_agent.py` | Built from stub | Classification table + RAG + `triage.result` publisher |
+| `rabbitmq/connection.py` | Replaced stub | `get_connection()` + `publish()` helpers |
+| `chromadb_utils/client.py` | Added offline mode + absolute path | Prevents HuggingFace hang and stray data dir |
+| `chromadb_utils/query.py` | Built from stub | 3-step RAG retrieval |
+| `agents/triage_agent.py` | Built from stub | Classification + RAG + `triage.result` |
 
 ### 1.2 Classification logic
 
@@ -49,50 +53,49 @@ flowchart TD
     K --> L[Publish to triage.result queue]
 ```
 
-- **Rule-based lookup table:** `(anomaly_type, severity)` → `response_protocol` (18 entries covering all 5 anomaly types + compound)
-- **Fallback chain:** exact match → match on `(anomaly_type, "HIGH")` → `GENERIC_INVESTIGATE`
-- **Fused event normalization:** Fusion Engine publishes only `fused_severity`/`contributing_models` (no `anomaly_type`). `_normalize_event()` derives `anomaly_type` from contributing model names via `MODEL_TO_TYPE` mapping, and uses `fused_severity` as `severity`. Single-model → specific type; multi-model → `"compound"`.
+- **Lookup table:** `(anomaly_type, severity) → response_protocol` (18 entries).
+- **Fallback:** exact → `(anomaly_type, HIGH)` → `GENERIC_INVESTIGATE`.
+- **Fused event normalization:** derives `anomaly_type` from `contributing_models` and uses `fused_severity`.
 
 ### 1.3 RAG retrieval
 
-- Query ChromaDB `incident_history` with event text
-- Top-5 similarity search → filter to positive outcomes → risk tier balance check → return ≤3 examples
-- Cold start (0 docs): returns `[]` immediately, no error
+- Query ChromaDB `incident_history`.
+- Top-5 similarity → positive outcome filter → risk-tier balance check → return ≤3 examples.
+- Cold start (0 docs) returns `[]`.
 
-### 1.4 Test results (full 703-event corpus)
+### 1.4 Final-run results
 
-- **All 703 messages processed** in under 2 seconds total (steady-state latency ≤ 1ms)
-- **Validator bypass events (100):** `schema_drift` → `HALT_INGESTION_REVIEW_SCHEMA` or `FLAG_FOR_SCHEMA_REVIEW`
-- **Fused events (603):** Correctly classified by derived type, e.g. `auth_failure_flood` + `CRITICAL` → `ISOLATE_NODE`
-- **RAG context:** Empty for all (cold start — expected)
-- **triage.result queue:** 703 messages, format confirmed valid
+- **Total events processed: 632**
+  Reconstructed from downstream Policy decisions (all Triage outputs eventually reached Policy).
+  This matches `532 fused + 100 validator-bypass = 632`.
+
+- **Validator bypass events:** 100 schema-drift events classified as `HALT_INGESTION_REVIEW_SCHEMA` or `FLAG_FOR_SCHEMA_REVIEW`.
+
+- **Fused events:** 532 classified using derived anomaly types.
+
+- **RAG context:**
+  ChromaDB was initially empty. It accumulated 632 documents by the end of the run.
+  Therefore, early events had no RAG context, while later events could retrieve prior incidents.
 
 ### 1.5 Open items
 
-- [ ] Fused/compound event count is low (single-model dominates). Corpus update planned after all layers complete.
-- [ ] RAG context will remain empty until Learning Agent populates ChromaDB (Layer 3 dependency).
-
-### 1.6 Diagram
-
-- **Source:** `docs/diagrams/triage_agent_flow.mmd`
-- **PNG export:** `docs/diagrams/triage_agent_flow.png`
-
-The flowchart above is also available as a standalone Mermaid file for easy editing and inclusion in the dissertation. Export to PNG for LaTeX embedding.
+- [ ] RAG impact on risk-tier accuracy (H1) not formally measured in this gapped run.
+- [ ] Fused/compound event count is low; corpus update may be needed for more compound incidents.
 
 ---
 
 ## 2. Strategy Agent
 
-**Files:** `ollama/client.py` (new), `agents/schema_validator.py` (new), `agents/strategy_agent.py`
-**Status:** ✅ **v1.0 — qwen3:1.7b via Ollama, 7-field schema validation, timeout handling, tested on 703 events.**
+**Files:** `ollama/client.py`, `agents/schema_validator.py`, `agents/strategy_agent.py`
+**Status:** ✅ **v1.1 — qwen3:1.7b via Ollama, 7-field schema validation, 35s timeout.**
 
 ### 2.1 Files built
 
 | File | Action | Purpose |
 |---|---|---|
-| `ollama/client.py` | Replaced stub | HTTP wrapper for local Ollama API (`generate()` function) |
-| `agents/schema_validator.py` | Replaced stub | Validates 7-field JSON output (Phase 0 failure analysis fixes applied) |
-| `agents/strategy_agent.py` | Replaced stub | Consumes `triage.result`, calls qwen3:1.7b, publishes `strategy.result` |
+| `ollama/client.py` | Replaced stub | Ollama HTTP wrapper |
+| `agents/schema_validator.py` | Replaced stub | 7-field JSON validation |
+| `agents/strategy_agent.py` | Replaced stub | Consumes `triage.result`, calls LLM, publishes `strategy.result` |
 
 ### 2.2 Flow
 
@@ -117,28 +120,46 @@ flowchart TD
 
 ### 2.3 Key design decisions
 
-- **System prompt** loaded from `prompts/strategy_system_prompt.txt`. Contains the extra-field constraint and `num_predict=512` from Phase 0.
-- **Timeout** hard-coded at 30s. On timeout the event is still published to `strategy.result` with `timed_out=True`.
-- **Prometheus** metrics on port 8011 (latency histogram, valid/invalid counters, timeout counter, tokens-per-second gauge).
+- System prompt loaded from `prompts/strategy_system_prompt.txt`.
+- Timeout: `35 seconds` (was 30s in v1.0).
+- `num_predict=512` from Phase 0 fix.
+- Prometheus metrics on port 8011.
 
-### 2.4 Test results (full 703-event corpus)
+### 2.4 Final-run results
 
-- **Timeouts:** 180 (25.6%)
-- **Schema valid rate:** 70.3% (703 − 180 = 523 responses; actual valid rate likely higher if timeouts had succeeded)
-- **Latency** for successful calls: 22–29s (consistent with Phase 0 average of 20.19s)
-- **Tokens/sec:** 16.3–16.4 (matches Phase 0 baseline)
+- **Total strategy requests processed: 632** (same as Triage outputs).
+- **Timeouts routed to HITL:** 4
+- **Parse errors routed to HITL:** 83
+- Therefore, `valid_json == False` accounted for 4 + 83 = 87 events.
+- Remaining `545` events had valid JSON and were evaluated by the schema validator.
+
+- **Exact schema_valid/invalid totals not recoverable** from persistent data.
+  Prometheus counters were reset across sessions.
+  We can only infer that the maximum schema-valid events ≤ 545.
+
+- **Risk tier distribution (from decisions table):**
+  - HIGH: 409
+  - LOW: 133
+  - MEDIUM: 1
+  - MISSING: 89
+
+- **Confidence scores:**
+  - min: 0.00
+  - max: 0.98
+  - average: 0.70
 
 ### 2.5 Known issues
 
-- **High timeout rate (25.6%)** — caused by 30s limit being too tight for complex prompts. Mitigations: increase `num_predict` cap, or accept some prompts will still need >30s. See improvement plan below.
-- **RAG context empty** — ChromaDB still cold, Learning Agent not yet built.
+- **Gapped execution invalidated live Prometheus metrics**, especially schema_valid/invalid and latency histograms.
+- **RAG context** was available only for later events.
+- For a definitive schema-valid rate, a **single continuous run** is required.
 
 ---
 
 ## 3. Policy Agent
 
 **Files:** `agents/policy_agent.py`
-**Status:** ✅ **v1.0 — 5-rule routing table, threshold-aware, 100% correct routing on 703 events.**
+**Status:** ✅ **v1.1 — 5-rule routing table, threshold-aware, MTTA uses triage_timestamp.**
 
 ### 3.1 Flow
 
@@ -165,44 +186,49 @@ flowchart TD
 
 ### 3.2 Key design decisions
 
-- **Deterministic** — no LLM, no ChromaDB. Sub-ms latency.
-- **Threshold loaded from disk on every message** — allows Learning Agent updates to take effect without restarting the Policy Agent.
-- **Hard bounds** [0.60, 0.90] enforced in `load_threshold()`.
-- **Prometheus** metrics on port 8012 (latency histogram, routing decision counters by decision + reason).
+- Deterministic, sub-ms routing.
+- Threshold loaded from disk on every message.
+- Hard bounds `[0.60, 0.90]`.
+- MTTA histogram measures `triage_timestamp → policy_timestamp`.
+- Prometheus metrics on port 8012.
 
-### 3.3 Test results (full 703-event corpus)
+### 3.3 Final-run results
 
-- **Total routed:** 703
-- **auto.execute:** 114 (16.2%)
-- **hitl.queue:** 589 (83.8%)
-- **Routing reasons:**
-  - HIGH_RISK: 383 (54.5%)
-  - TIMEOUT: 180 (25.6%)
-  - LOW_RISK_HIGH_CONFIDENCE: 114 (16.2%)
-  - LOW_CONFIDENCE: 26 (3.7%)
-- **Policy latency:** ≤2ms (all messages)
-- **Risk tier distribution:** HIGH 382, MISSING (timeouts) 181, LOW 135, MEDIUM 5
-- **Confidence range:** 0.39–0.98, avg 0.84
+- **Total routed: 632**
+- **AUTO routed:** 99 (15.7%)
+- **HITL routed:** 533 (84.3%)
+
+| Routing Reason | Count |
+|----------------|-------|
+| HIGH_RISK | 411 |
+| LOW_RISK_HIGH_CONFIDENCE | 99 |
+| PARSE_ERROR | 83 |
+| LOW_CONFIDENCE | 35 |
+| TIMEOUT | 4 |
+
+- **Policy latency:** ≤2 ms (sub-ms for almost all events).
+- **Threshold used during run:** started at 0.65, ended at 0.7108 after Learning Agent updates.
 
 ### 3.4 Interpretation
 
-- The 25.6% timeout rate is the primary factor limiting AUTO throughput — all timeouts go to HITL.
-- Of the successful LLM responses, LOW risk tier was assigned to 135 events, but only 114 had confidence ≥0.65 and thus passed the threshold. The remaining 21 LOW-tier events had low confidence and were routed to HITL as LOW_CONFIDENCE.
-- The 5 MEDIUM risk tier events are invalid (the LLM should never output MEDIUM as risk_tier) — these also went to HITL.
+- The high HITL rate is driven mostly by **HIGH_RISK** routing (411/632).
+- `PARSE_ERROR` (83) is the second-largest HITL reason; `TIMEOUT` is almost negligible (4) after increasing timeout to 35s.
+- `LOW_CONFIDENCE` (35) indicates some LOW-risk events were below the threshold.
+- `AUTO` execution succeeded for all 99 routed events.
 
 ---
 
 ## 4. Learning Agent
 
 **Files:** `chromadb_utils/upsert.py`, `agents/learning_agent.py`
-**Status:** ✅ **v1.0 — qwen3:0.6b summarisation, ChromaDB upsert, EMA threshold update, tested with simulated `outcome.feedback`.**
+**Status:** ✅ **v1.1 — qwen3:0.6b summarisation, ChromaDB upsert, EMA threshold update, MTTR uses triage_timestamp.**
 
 ### 4.1 Files built
 
 | File | Action | Purpose |
 |---|---|---|
-| `chromadb_utils/upsert.py` | Replaced stub | Upserts incident summaries into ChromaDB with metadata |
-| `agents/learning_agent.py` | Replaced stub | Consumes `outcome.feedback`, calls qwen3:0.6b, upserts ChromaDB, updates EMA threshold |
+| `chromadb_utils/upsert.py` | Replaced stub | Upserts incident summaries into ChromaDB |
+| `agents/learning_agent.py` | Replaced stub | Consumes `outcome.feedback`, calls qwen3:0.6b, updates ChromaDB and EMA |
 
 ### 4.2 Flow
 
@@ -223,21 +249,71 @@ flowchart TD
 
 ### 4.3 Key design decisions
 
-- **Zero latency impact on main pipeline** — fires post-dispatch, consuming `outcome.feedback` asynchronously.
-- **qwen3:0.6b** chosen for RAM budget compliance (~400 MB).
-- **Fallback summary** — if the Ollama call fails, uses a static text `"Incident {id} — {outcome_type}"` to ensure ChromaDB always gets a record.
-- **EMA formula:** `new = α × old + (1 − α) × signal`, with `α = 0.9`. Outcome signals: `AUTO_EXECUTE_SUCCESS` → 0.80, `HITL_APPROVED` → 0.75, etc. Negative outcomes lower the threshold.
-- **Prometheus** metrics on port 8013 (outcomes processed, threshold updates, ChromaDB upserts).
+- Zero impact on main pipeline.
+- `qwen3:0.6b` for lightweight summarisation.
+- Fallback summary if LLM fails.
+- EMA formula: `new = α × old + (1 − α) × signal`.
+- Prometheus metrics on port 8013.
 
-### 4.4 Test results (simulated `outcome.feedback`)
+### 4.4 Final-run results
 
-- Single `AUTO_EXECUTE_SUCCESS` outcome published manually.
-- ChromaDB document count: 0 → 1 ✅
-- EMA threshold updated: 0.65 → 0.665 ✅ (verified against formula)
-- Learning Agent logs confirmed upsert and EMA update.
+- **Outcomes processed:** 632
+  - `AUTO_EXECUTE_SUCCESS`: 99
+  - `HITL_APPROVED`: 448
+  - `HITL_REJECTED`: 85
+
+- **ChromaDB documents after run:** 632
+  Exactly one document per outcome; no missing upserts.
+
+- **EMA threshold:**
+  - Initial: 0.65
+  - Final: 0.7108
+  - Updates: 632
+
+  Threshold increased because most outcomes were successful/approved, providing positive signals.
 
 ### 4.5 Open items
 
-- [ ] Full testing requires Layer 3 to produce real `outcome.feedback` messages.
-- [ ] ChromaDB growth rate (OQ4) and EMA convergence (OQ6) will be measured during full end-to-end evaluation.
-- [ ] Learning Agent's summarisation quality (OQ5) has not been formally evaluated — planned for Phase 2, week 8.
+- [ ] EMA convergence (OQ6) not yet plotted across a continuous run.
+- [ ] Summarisation quality (OQ5) not formally scored.
+- [ ] Negative examples are stored but not yet used to refine RAG retrieval beyond the positive-outcome filter.
+
+---
+
+## 5. Control-Plane Latency (CPL)
+
+**Status:** ⚠️ **Not measurable from this gapped run.**
+
+- A filtered query for contiguous HITL events (`triage→strategy ≤ 60s`) returned **0 samples**.
+- The pipeline was stopped and restarted across sessions, so triage and strategy timestamps were often hours apart.
+- Therefore, the average CPL computed from raw persisted payloads (`~82,845 s`) is **invalid** and should **not** be used.
+
+**Required action:**
+Run the pipeline **continuously** from `anomaly.detected` through `outcome.feedback` to capture valid CPL, MTTA, and MTTR.
+
+---
+
+## 6. Final Data Summary (Persistent Reconstructed)
+
+| Metric | Value |
+|--------|-------|
+| Detector result rows per detector | 1,527 each |
+| Detector anomalies (sum) | 643 |
+| Fusion published | 532 |
+| Validator bypass | 100 |
+| Total `anomaly.detected` events | 632 |
+| Total Policy decisions | 632 |
+| AUTO routed | 99 |
+| HITL routed | 533 |
+| HITL APPROVED | 448 |
+| HITL REJECTED | 85 |
+| Auto-Executor successes | 99 |
+| ChromaDB docs | 632 |
+| EMA threshold (final) | 0.7108 |
+| EMA updates | 632 |
+| Control-Plane Latency | ❌ Unavailable |
+
+---
+
+> **Prepared after final gapped run.**
+> For citable latency metrics, a **single uninterrupted evaluation run** is required.
