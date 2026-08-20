@@ -12,6 +12,7 @@ from pathlib import Path
 from prometheus_client import Counter, Histogram, start_http_server
 
 from rabbitmq.connection import get_connection, publish
+from utils.file_logger import append_log
 
 log = structlog.get_logger()
 
@@ -127,6 +128,15 @@ class PolicyAgent:
                     "strategy_result": strategy,
                 },
             }
+
+            # ---- File-based persistent log ----
+            append_log("policy_agent.jsonl", {
+                "event_id": event_id,
+                "routing_decision": decision,
+                "routing_reason": reason,
+                "threshold_used": threshold,
+                "latency_ms": result["policy_agent_latency_ms"],
+            })
 
             publish(self.ch, target_queue, json.dumps(result))
             ch.basic_ack(method.delivery_tag)
