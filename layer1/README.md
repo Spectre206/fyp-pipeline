@@ -54,7 +54,23 @@ SEG ──► Validator
 
 Final `anomaly.detected` queue count: **100 bypass + 532 fused = 632 messages**.
 
-![Layer 1 Data Flow](docs/layer1_data_flow.png)
+## End-to-End Data Flow
+
+```mermaid
+flowchart LR
+    SEG[SEG<br/>1,950 events] -->|event.raw| VAL[Validator]
+    VAL -->|event.valid<br/>1,850| FS[Feature Store<br/>+ ADM Runner]
+    VAL -->|anomaly.schema_drift<br/>100| AD[anomaly.detected]
+    FS -->|detection.fanout<br/>1,527 each| D1[detect.cpu]
+    FS -->|detection.fanout<br/>1,527 each| D2[detect.error]
+    FS -->|detection.fanout<br/>1,527 each| D3[detect.throughput]
+    FS -->|detection.fanout<br/>1,527 each| D4[detect.auth]
+    FS -->|detection.fanout<br/>1,527 each| D5[detect.schema]
+    D1 & D2 & D3 & D4 & D5 -->|fusion.result| FR[fusion.results]
+    FR --> FE[Fusion Engine<br/>5s window]
+    FE -->|anomaly.fused<br/>532| AD
+    FE -->|suppress<br/>995| X[ ]
+```
 
 ---
 
