@@ -98,6 +98,9 @@ class CPUDetector:
                 return {
                     "event_id": event_id,
                     "timestamp": event.get("timestamp"),
+                    "ingestion_time": event.get("ingestion_time"),
+                    "node": event.get("node"),
+                    "affected_component": event.get("affected_component"),
                     "detected": False,
                     "anomaly_type": "NORMAL",
                     "severity": "N/A",
@@ -140,6 +143,8 @@ class CPUDetector:
                 "event_id": event_id,
                 "timestamp": event.get("timestamp"),
                 "ingestion_time": event.get("ingestion_time"),
+                "node": event.get("node"),
+                "affected_component": event.get("affected_component"),
                 "detected": detected,
                 "anomaly_type": "cpu_memory_spike" if detected else "NORMAL",
                 "severity": severity,
@@ -160,6 +165,9 @@ class CPUDetector:
             return {
                 "event_id": event_id,
                 "timestamp": event.get("timestamp"),
+                "ingestion_time": event.get("ingestion_time"),
+                "node": event.get("node"),
+                "affected_component": event.get("affected_component"),
                 "detected": False,
                 "anomaly_type": "NORMAL",
                 "severity": "N/A",

@@ -32,24 +32,24 @@ published to `anomaly.detected`. Layer 1 has no runtime dependency on Nodes 2 or
 
 ```
 SEG ──► Validator
-           │
-           ├─ [structural violation] ──────────────────────────► anomaly.detected (100)
-           │
-           └─ [valid event] ──► Feature Store + ADM Runner
-                                      │
-                                      └──► detection.fanout
-                                              │
-                                              ├──► detect.cpu       ──┐
-                                              ├──► detect.error     ──┤
-                                              ├──► detect.throughput──┼──► fusion.results
-                                              ├──► detect.auth      ──┤
-                                              └──► detect.schema    ──┘
-                                                      │
-                                                      ▼
-                                              Fusion Engine
-                                                      │
-                                                      ├─ [all normal] → suppress (995)
-                                                      └─ [≥1 anomaly] → anomaly.detected (532 fused)
+  │
+  ├─ [structural violation] ──────────────────────────► anomaly.detected (100)
+  │
+  └─ [valid event] ──► Feature Store + ADM Runner
+              │
+              └──► detection.fanout
+                      │
+                      ├──► detect.cpu        ──┐
+                      ├──► detect.error      ──┤
+                      ├──► detect.throughput ──┼──► fusion.results
+                      ├──► detect.auth       ──┤
+                      └──► detect.schema     ──┘
+                                                 │
+                                                 ▼
+                                          Fusion Engine
+                                                 │
+                                    ├─ [all normal] → suppress (995)
+                                    └─ [≥1 anomaly] → anomaly.detected (532 fused)
 ```
 
 Final `anomaly.detected` queue count: **100 bypass + 532 fused = 632 messages**.
@@ -125,29 +125,27 @@ Layer 1 now propagates two timestamps end‑to‑end:
 | `ingestion_time` | Real UTC time when the event entered `raw.events` during replay |
 | `fused_at` | Time when Fusion Engine produced the final fused decision |
 
-`ingestion_time` is added in SEG replay, preserved by Validator and Feature Store, included in every detector result, and carried into the fused event. It is used by Layer 2 for accurate MTTA/MTTR calculation.
+Additionally, `node` and `affected_component` are propagated from the original event through all detectors and into the fused event, so HITL/dashboard displays the correct component context.
 
 ---
 
 ## Prometheus Metrics
 
-Only the **Fusion Engine** exports Prometheus metrics (port **8003**):
+Layer 1 components expose metrics on the following ports:
 
-| Metric | Description |
-|:-------|:------------|
-| `fyp_fusion_published_total` | Total fused anomalies published to `anomaly.detected` |
-| `fyp_fusion_suppressed_total` | Events where all detectors returned normal (suppressed) |
-| `fyp_fusion_compound_total` | Compound incidents (≥2 detectors flagged the same event) |
-| `fyp_fusion_fast_path_total` | Events fast‑pathed (CRITICAL with high‑weight model) |
-| `fyp_fusion_fast_path_triggered_total` | Events where a qualifying CRITICAL result triggered fast path |
-| `fyp_fusion_latency_seconds` | Fusion decision computation latency histogram |
-| `fyp_fusion_correlation_wait_seconds` | Time an event waited in correlation before finalization |
-| `fyp_fusion_detectors_received` | Number of unique detectors received at finalization |
-| `fyp_fusion_late_recovery_total` | Events finalized during the late‑arrival recovery window |
-| `fyp_fusion_errors_total` | Fusion processing errors |
+| Component | Port |
+|-----------|------|
+| Validator | 8002 |
+| Fusion Engine | 8003 |
+| Error Rate Detector | 8004 |
+| Throughput Drop Detector | 8005 |
+| Auth Flood Detector | 8006 |
+| CPU Spike Detector | 8007 |
+| Schema Drift Detector | 8008 |
 
-Prometheus on `gateway-node` (port 9090) scrapes `stream-node:8003`.  
-Grafana dashboard "Agent Pipeline & Fusion Engine" visualises these metrics.
+Prometheus on `gateway-node` (port 9090) scrapes these endpoints.
+
+Grafana dashboard "Agent Pipeline & Fusion Engine" visualises the metrics.
 
 ---
 
@@ -156,8 +154,3 @@ Grafana dashboard "Agent Pipeline & Fusion Engine" visualises these metrics.
 See **[User Guide](User_Guide.md)** for full installation, configuration, and
 step‑by‑step run instructions. All Python dependencies are in
 `requirements_node1.txt`.
-
-For a complete cold‑start run from scratch, follow the command sequence in
-**Section 12** of the User Guide.
-
-This version now reflects the final Fusion Engine v1.7, timestamp propagation, and actual cold‑start results.

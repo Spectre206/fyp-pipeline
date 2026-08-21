@@ -111,6 +111,8 @@ class ErrorRateDetector:
                 "event_id": event_id,
                 "timestamp": event.get("timestamp"),
                 "ingestion_time": event.get("ingestion_time"),
+                "node": event.get("node"),
+                "affected_component": event.get("affected_component"),
                 "detected": detected,
                 "anomaly_type": "error_rate_surge" if detected else "NORMAL",
                 "severity": severity,
@@ -128,6 +130,8 @@ class ErrorRateDetector:
             return {
                 "event_id": event_id,
                 "timestamp": event.get("timestamp"),
+                "node": event.get("node"),
+                "affected_component": event.get("affected_component"),
                 "detected": False,
                 "anomaly_type": "NORMAL",
                 "severity": "N/A",
