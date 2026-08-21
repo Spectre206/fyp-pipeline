@@ -1,5 +1,6 @@
 """Strategy Agent — qwen3:1.7b via Ollama, 7-field JSON output."""
 import json
+import re
 import time
 import sys
 import os
@@ -14,6 +15,7 @@ from prometheus_client import Counter, Histogram, Gauge, start_http_server
 from rabbitmq.connection import get_connection, publish
 from agents.schema_validator import validate
 from ollama.client import generate
+from utils.file_logger import append_log
 
 log = structlog.get_logger()
 
@@ -29,6 +31,37 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SYSTEM_PROMPT = (BASE_DIR / "prompts" / "strategy_system_prompt.txt").read_text()
 LLM_TIMEOUT_S = 35
 MODEL = "qwen3:1.7b"
+
+
+def extract_json(text: str):
+    """Best-effort JSON extraction from LLM output.
+
+    Returns (parsed_dict, None) on success,
+            (None, error_message) on failure.
+    """
+    if not text:
+        return None, "empty_response"
+
+    # 1. Remove markdown code fences (```json ... ``` or ``` ... ```)
+    cleaned = re.sub(r"```(?:json)?", "", text).strip()
+
+    # 2. Try direct parse on cleaned text
+    try:
+        return json.loads(cleaned), None
+    except json.JSONDecodeError:
+        pass
+
+    # 3. Try to extract from first { to last }
+    start = cleaned.find("{")
+    end = cleaned.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        candidate = cleaned[start:end + 1]
+        try:
+            return json.loads(candidate), None
+        except json.JSONDecodeError as e:
+            return None, f"json_parse_failed:{e.msg}:line={e.lineno}:col={e.colno}"
+
+    return None, "json_parse_failed:no_braces"
 
 
 class StrategyAgent:
@@ -92,18 +125,33 @@ class StrategyAgent:
                 )
                 STRATEGY_TPS.set(tokens_per_s)
 
-                try:
-                    parsed = json.loads(raw_response.strip())
+                # ---- Robust JSON extraction + schema validation ----
+                parsed, extraction_error = extract_json(raw_response)
+
+                if parsed is not None:
                     valid_json = True
                     schema_valid, issues = validate(parsed)
                     if schema_valid:
                         STRATEGY_VALID.inc()
                     else:
                         STRATEGY_INVALID.inc()
-                except json.JSONDecodeError:
+                else:
                     valid_json = False
-                    issues = "json_parse_failed"
+                    issues = extraction_error
                     STRATEGY_INVALID.inc()
+
+                    # Persist raw response for later parse-error analysis
+                    append_log("parse_error.jsonl", {
+                        "event_id": event_id,
+                        "issues": extraction_error,
+                        "raw_response": raw_response[:2000],  # trim for storage
+                    })
+
+                    log.warning(
+                        "strategy_parse_failed",
+                        event_id=event_id,
+                        issues=extraction_error,
+                    )
 
             except Exception as e:
                 # requests.Timeout is a subclass of Exception
@@ -128,6 +176,17 @@ class StrategyAgent:
                 "timed_out": timed_out,
                 "triage_result": triage,
             }
+
+            # ---- File-based persistent log ----
+            append_log("strategy_agent.jsonl", {
+                "event_id": event_id,
+                "valid_json": valid_json,
+                "schema_valid": schema_valid,
+                "issues": issues,
+                "latency_ms": latency_ms,
+                "tokens_per_second": tokens_per_s,
+                "timed_out": timed_out,
+            })
 
             publish(self.ch, "strategy.result", json.dumps(result))
             ch.basic_ack(method.delivery_tag)

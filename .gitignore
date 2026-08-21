@@ -97,3 +97,4 @@ layer1/fusion_engine/fusion_results.jsonl
 
 # Runtime Feature Store baselines (generated during calibration)
 layer1/adm/baselines/
+layer2/logs/

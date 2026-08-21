@@ -1,8 +1,8 @@
+<div align="center">
+
 # Distributed Multi-Agent Coordination for Self-Healing Data Pipelines
 
 ### A Human-in-the-Loop Approach on Commodity Hardware
-
-<div align="center">
 
 **Department of CS&IT, UET Peshawar — Nowshera Campus**
 
@@ -33,21 +33,21 @@
 
 ## What This Project Does
 
-This system detects anomalies in a distributed streaming data pipeline and autonomously decides whether to fix them or escalate them to a human operator.
+This system detects anomalies within a distributed streaming data pipeline and autonomously determines whether each anomaly should be remediated automatically or escalated to a human operator.
 
-It runs on **three physical commodity machines** with **no cloud or GPU dependency**. When an anomaly is detected — a CPU spike, error rate surge, authentication flood, throughput drop, or schema drift — the pipeline responds as follows:
+The system operates on **three physical commodity machines**, with **no dependency on cloud infrastructure or GPU acceleration**. When an anomaly is detected — such as a CPU spike, an error-rate surge, an authentication flood, a throughput drop, or schema drift — the pipeline responds through the following sequence:
 
-1. **Five detectors** analyze the anomaly independently.
-2. A **Fusion Engine** correlates the signals into a single enriched incident.
-3. A chain of **four AI agents**:
-   - Classifies the incident
-   - Reasons about the best response using a local LLM
-   - Routes it to either automatic execution or a human review dashboard
-   - Learns from the outcome to improve future decisions
+1. **Five specialised detectors** analyse the anomaly independently.
+2. A **Fusion Engine** correlates the detector signals into a single enriched incident, suppressing duplicate alerts and identifying compound anomalies.
+3. A coordinated chain of **four AI agents**:
+   - Classifies the incident and retrieves relevant historical context.
+   - Reasons about the optimal remediation strategy using a local, quantised LLM.
+   - Routes the proposed action to either automatic execution or a human-review dashboard.
+   - Learns from the eventual outcome to refine future decision-making.
 
-### Research Goal
+### Research Objective
 
-To prove that this class of self-healing agentic system — previously only described theoretically in the AIOps literature — can be built and benchmarked on real commodity hardware, with measurable improvements in **Mean Time To Acknowledge (MTTA)** and **Mean Time To Remediate (MTTR)** over a static threshold-only baseline.
+This project empirically evaluates whether a **policy-bounded, multi-agent self-healing framework** — a concept previously proposed largely at the architectural level — can be implemented, deployed, and benchmarked on commodity hardware, yielding measurable improvements in detection quality, reasoning reliability, and operational safety relative to a static, threshold-only baseline.
 
 ---
 
@@ -68,7 +68,9 @@ Node 2 — ai-brain-node                       Layer 2: AI Control Plane
   ChromaDB (RAG — Historical Incidents)
 
 Node 3 — gateway-node                        Layer 3: HITL & Observability
-  Django HITL Dashboard (Approve/Reject/Modify) → Auto-Execution Engine → SQLite Decision Log
+  Django HITL Dashboard (Approve/Reject/Modify)
+    → Auto-Execution Engine
+    → SQLite Decision Log
   Prometheus + Grafana (scraping all 3 nodes)
 ```
 
@@ -76,13 +78,118 @@ Node 3 — gateway-node                        Layer 3: HITL & Observability
 
 ## System Architecture Diagram
 
-![System Architecture](docs/system_architecture.png)
+```mermaid
+flowchart LR
+    subgraph Node1["Node 1 — stream-node (Layer 1: Real-Time Data Plane)"]
+        direction TB
+        SEG["Synthetic Event<br/>Generator (SEG)"] --> Val["Pydantic<br/>Validator"]
+        Val -->|"valid events"| FS["Feature Store<br/>+ ADM Runner"]
+        FS --> DF["detection.fanout<br/>(Fanout Exchange)"]
+        DF --> D1["CPU Spike<br/>Detector"]
+        DF --> D2["Error Rate<br/>Detector"]
+        DF --> D3["Throughput<br/>Detector"]
+        DF --> D4["Auth Flood<br/>Detector"]
+        DF --> D5["Schema Drift<br/>Detector"]
+        D1 --> FR["fusion.results"]
+        D2 --> FR
+        D3 --> FR
+        D4 --> FR
+        D5 --> FR
+        FR --> FE["Fusion Engine<br/>(3s correlation window)"]
+        Val -->|"schema violations"| AD["anomaly.detected"]
+        FE -->|"fused incidents"| AD
+    end
+
+    subgraph Node2["Node 2 — ai-brain-node (Layer 2: AI Control Plane)"]
+        direction TB
+        TG["Triage Agent<br/>(rule-based + RAG)"] -->|"triage.result"| SA["Strategy Agent<br/>(qwen3:1.7b)"]
+        SA -->|"strategy.result"| PA["Policy Agent<br/>(tiered routing)"]
+        TG -.->|"RAG query"| Chroma[("ChromaDB<br/>incident_history")]
+        SA -.->|"LLM call"| Ollama["Ollama API<br/>(localhost:11434)"]
+    end
+
+    subgraph Node3["Node 3 — gateway-node (Layer 3: HITL & Observability)"]
+        direction TB
+        AE["Auto-Execution<br/>Engine"] --> SL["SQLite<br/>Decision Log"]
+        HITL["Django HITL<br/>Dashboard"] --> SL
+        LA["Learning Agent<br/>(qwen3:0.6b)"] --> Config["EMA Threshold<br/>Config"]
+        Prom["Prometheus"] --> Graf["Grafana"]
+    end
+
+    AD --> TG
+    PA -->|"auto.execute"| AE
+    PA -->|"hitl.queue"| HITL
+    AE -->|"outcome.feedback"| LA
+    HITL -->|"outcome.feedback"| LA
+    LA --> Chroma
+    LA -.->|"LLM call"| Ollama
+    Prom -.->|"scrapes"| Node1
+    Prom -.->|"scrapes"| Node2
+    Prom -.->|"scrapes"| Node3
+
+    style Node1 fill:#e1f5fe,stroke:#01579b
+    style Node2 fill:#fff3e0,stroke:#e65100
+    style Node3 fill:#e8f5e9,stroke:#1b5e20
+```
+
+> **Diagram note:** Each node (SEG, detectors, agents, dashboard, etc.) is declared exactly once, inside the subgraph representing its home layer. All edges that cross node boundaries — for example, `Policy Agent → Auto-Execution Engine` or `Learning Agent → Ollama` — are declared after the three subgraphs are closed. This avoids a common Mermaid rendering fault in which a node referenced inside two different subgraph blocks gets pulled into the wrong cluster, and keeps the three-layer grouping visually accurate.
 
 ---
 
 ## RabbitMQ Topology Diagram
 
-<img src="docs/rabbitmq_topology.png" width="800" alt="RabbitMQ Topology" style="max-height:1200px;">
+```mermaid
+flowchart LR
+    subgraph Exchanges
+        E1["fyp.events<br/>(Topic Exchange)"]
+        E2["detection.fanout<br/>(Fanout Exchange)"]
+        E3["fyp.dlx<br/>(Direct Exchange)"]
+    end
+
+    subgraph Queues_L1["Layer 1 Queues"]
+        Q1["raw.events"]
+        Q2["validated.event"]
+        Q3["detect.cpu"]
+        Q4["detect.error"]
+        Q5["detect.throughput"]
+        Q6["detect.auth"]
+        Q7["detect.schema"]
+        Q8["fusion.results"]
+    end
+
+    subgraph Queues_L2["Layer 2/3 Queues"]
+        Q9["anomaly.detected"]
+        Q10["triage.result"]
+        Q11["strategy.result"]
+        Q12["auto.execute"]
+        Q13["hitl.queue"]
+        Q14["outcome.feedback"]
+    end
+
+    subgraph Diagnostics["Diagnostics"]
+        Q15["dead.letters"]
+    end
+
+    E1 -->|"event.raw"| Q1
+    E1 -->|"event.valid"| Q2
+    E1 -->|"fusion.result"| Q8
+    E1 -->|"anomaly.#"| Q9
+    E1 -->|"triage.result"| Q10
+    E1 -->|"strategy.result"| Q11
+    E1 -->|"auto.execute"| Q12
+    E1 -->|"hitl.queue"| Q13
+    E1 -->|"outcome.feedback"| Q14
+
+    E2 --> Q3
+    E2 --> Q4
+    E2 --> Q5
+    E2 --> Q6
+    E2 --> Q7
+
+    E3 -->|"dead"| Q15
+```
+
+> **Diagram note:** The five fanout bindings from `detection.fanout` (`E2`) carry no routing key by design — a fanout exchange delivers to every bound queue unconditionally — so the previous empty-string edge labels (`-->|""|`) have been removed in favour of plain, unlabeled arrows for cleaner rendering.
 
 ---
 
@@ -108,6 +215,8 @@ fyp-pipeline/
 │   ├── chromadb_utils/            — RAG client, query (3-step protocol), upsert
 │   ├── ollama/                    — Local Ollama HTTP client
 │   ├── rabbitmq/                  — Remote RabbitMQ connection helper
+│   ├── utils/                     — Shared file logger and utility helpers
+│   ├── logs/                      — Append-only JSONL runtime logs (git-ignored)
 │   ├── prompts/                   — System prompts for qwen3:1.7b and qwen3:0.6b
 │   ├── config/                    — EMA confidence threshold (threshold_config.json)
 │   ├── chromadb_data/             — Persistent vector store (git-ignored)
@@ -115,7 +224,7 @@ fyp-pipeline/
 │   └── README.md
 │
 ├── layer3/                        — Node 3: gateway-node
-│   ├── dashboard/                 — Django HITL project (queue, incident detail, SSE)
+│   ├── dashboard/                 — Django HITL project (queue, incident detail, action views)
 │   │   └── hitl/templates/        — queue.html, incident_detail.html, modify.html, auto_monitor.html
 │   ├── auto_executor/             — Consumes auto.execute, publishes outcome.feedback
 │   ├── sqlite_logger/             — Centralised decision log writer
@@ -124,7 +233,7 @@ fyp-pipeline/
 │   ├── User_Guide.md              — Layer-3 startup and troubleshooting
 │   └── README.md
 │
-├── evaluation/                    — Dataset generation, baseline, metrics, kappa
+├── evaluation/                    — Dataset generation, baseline, offline metrics, kappa
 ├── Phase_0_Infrastructure/        — Phase 0 cluster setup and LLM benchmark (COMPLETE)
 │   ├── scripts/                   — Benchmark runner scripts (3 models x 3 variants)
 │   ├── prompts/                   — simple, medium, strict, stricter prompt sets
@@ -142,12 +251,12 @@ fyp-pipeline/
 
 | Agent | Model | Selection Basis |
 |:------|:------|:----------------|
-| **Strategy Agent** | `qwen3:1.7b` via Ollama | 90% schema validity on 30 strict adversarial prompts. Only model meeting the production viability hard constraint. All 3 failures traced to fixable engineering issues. |
-| **Learning Agent** | `qwen3:0.6b` via Ollama | Sub-1B RAM budget for Node 2. Formal quality evaluation in Phase 2. |
-| **Triage Agent** | None — rule-based + RAG | No LLM needed. ChromaDB retrieval only. Keeps latency within 3s SLA. |
-| **Policy Agent** | None — pure Python | Deterministic routing table. Zero inference latency. |
+| **Strategy Agent** | `qwen3:1.7b` via Ollama | Achieved **90% schema validity** across 30 strict adversarial prompts — the only model to satisfy the production-viability hard constraint. All three observed failures were traced to fixable engineering issues. |
+| **Learning Agent** | `qwen3:0.6b` via Ollama | Selected to remain within a sub-1B-parameter budget for Node 2 RAM compliance. Formal quality evaluation is planned. |
+| **Triage Agent** | None — rule-based + RAG | Requires no LLM; relies solely on ChromaDB retrieval, maintaining sub-3-second latency. |
+| **Policy Agent** | None — pure Python | Deterministic routing table with zero inference latency. |
 
-> Full evaluation details → [`Phase_0_Infrastructure/README.md`](Phase_0_Infrastructure/README.md)
+> Full model evaluation details are available in [`Phase_0_Infrastructure/README.md`](Phase_0_Infrastructure/README.md).
 
 ---
 
@@ -163,7 +272,7 @@ fyp-pipeline/
 | Schema Change — 3 sub-types (missing fields, type mutations, value shifts) | 150 |
 | **TOTAL** | **1,950** |
 
-> Ground truth labels are stored separately in `evaluation/labels.csv` and are **never** visible to the pipeline during evaluation runs.
+> Ground-truth labels are stored separately in `evaluation/labels.csv` and are **never** exposed to the pipeline during evaluation runs.
 
 ---
 
@@ -175,7 +284,7 @@ fyp-pipeline/
 | Node 2 | `ai-brain-node` | Ubuntu 24.04 Server | AMD Ryzen 5 | 8 GB | Ollama, ChromaDB, 4 Agents |
 | Node 3 | `gateway-node` | Ubuntu 24.04 Desktop | Intel Core i5 | 8 GB | Prometheus, Grafana, HITL |
 
-> All three nodes communicate exclusively via **hostnames** — no hardcoded IPs in any config or application code. When moving to a new LAN, only `/etc/hosts` on each node needs updating.
+> All nodes communicate exclusively via **hostnames**; no hardcoded IP addresses are used in configuration or application code. When migrating to a new LAN, only the `/etc/hosts` file on each node requires updating.
 
 ### Service Access URLs
 
@@ -191,16 +300,22 @@ fyp-pipeline/
 
 ## Primary Research Metrics
 
-| Metric | Symbol | Target |
-|:-------|:-------|:-------|
-| Mean Time To Acknowledge | MTTA | Median < 33 seconds (includes 3s Fusion Engine window) |
-| Mean Time To Remediate | MTTR | Measurably lower than 60s static baseline |
-| False Escalation Rate | FER | < 30% |
-| False Automation Rate | FAR | < 5% (safety-critical upper bound) |
-| Risk Tier Accuracy | RTA | ≥ 75% |
-| Schema Validity Rate | SVR | ≥ 95% in production |
-| Fusion Suppression Rate | FSR | Higher is better — measures false positive reduction |
-| Compound Detection Rate | CDR | Measures multi-signal incident merging accuracy |
+The evaluation is centred on **control-plane reasoning quality**, **fusion accuracy**, and **decision safety**, alongside standard hardware-level benchmarks.
+
+| Metric | Symbol | Definition | Target |
+|:-------|:-------|:-----------|:-------|
+| Control-Plane Latency | CPL | Average time spent in Triage + Strategy + Policy per incident | < 30 s |
+| Schema Validity Rate | SVR | Valid seven-field JSON responses / total responses (excluding timeouts) | ≥ 95% production |
+| Fusion Suppression Rate | FSR | Suppressed duplicate/normal events / (published + suppressed) | Higher is better |
+| Compound Detection Rate | CDR | Compound fusion events / total published fusion events | Measured |
+| Auto-Execution Success Rate | — | Successful automatic remediations / attempted automatic remediations | ≥ 95% |
+| False Escalation Rate | FER | Low-risk ground-truth incidents routed to HITL / total low-risk incidents | < 30% (offline) |
+| False Automation Rate | FAR | High-risk ground-truth incidents routed to AUTO / total high-risk incidents | < 5% (offline) |
+| Risk Tier Accuracy | RTA | Correct risk-tier assignments / total incidents | ≥ 75% |
+| MTTA / MTTR (control-plane definition) | MTTA / MTTR | `policy_timestamp − triage_timestamp` / `outcome_feedback_time − triage_timestamp` | Measured |
+
+> **Note on MTTA/MTTR:**
+> The conventional end-to-end MTTA/MTTR metrics are sensitive to queue backlog when the pipeline operates in batch mode. For this project, MTTA and MTTR are therefore defined as **control-plane latencies**, isolating AI reasoning and routing time from asynchronous queue delays. FER and FAR are computed offline after each run by joining decision records with ground-truth labels.
 
 ---
 
@@ -226,6 +341,12 @@ fyp-pipeline/
 
 ---
 
+## Persistent Logging and Observability
+
+All Layer 2 agents write append-only JSONL logs to `layer2/logs/`, ensuring that cumulative agent-level counts remain recoverable across restarts, even when the pipeline is executed across multiple sessions. Grafana dashboards consume Prometheus metrics for live monitoring, while file logs, SQLite, and ChromaDB together provide the authoritative historical record.
+
+---
+
 ## Getting Started
 
 | Step | Component | Guide |
@@ -243,6 +364,6 @@ fyp-pipeline/
 
 | Branch | Purpose |
 |:-------|:--------|
-| `main` | Production-quality code only. Tagged at each phase milestone. Never commit broken code. |
-| `develop` | Integration branch. Feature branches merge here first after end-to-end demo passes. |
-| `feature/*` | One branch per component. Examples: `feature/seg`, `feature/fusion-engine`, `feature/triage-agent`. |
+| `main` | Production-quality code only. Tagged at each phase milestone. Broken code is never committed. |
+| `develop` | Integration branch. Feature branches merge here first, after the end-to-end demo passes. |
+| `feature/*` | One branch per component — for example, `feature/seg`, `feature/fusion-engine`, `feature/triage-agent`. |
