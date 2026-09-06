@@ -1,6 +1,6 @@
 # Layer 2 User Guide — `ai-brain-node` (192.168.18.102)
 
-This guide covers running the complete **AI Control Plane** on Node 2.
+This guide describes the procedure for operating the complete **AI Control Plane** on Node 2.
 
 > **Prerequisite:** Layer 1 must be fully operational — all exchanges and queues declared on `stream-node`, with the Fusion Engine publishing to `anomaly.detected`.
 
@@ -35,13 +35,13 @@ ollama list | grep qwen3
 # Expected: qwen3:1.7b and qwen3:0.6b
 ```
 
-**ChromaDB collection exists** (cold start is OK)
+**ChromaDB collection exists** (cold start is acceptable)
 
 ```bash
 python3 -c "from chromadb_utils.client import get_collection; print(get_collection().count())"
 ```
 
-**`/etc/hosts` cluster mapping** (same as Node 1)
+**`/etc/hosts` cluster mapping** (identical to Node 1)
 
 ```bash
 grep "192.168.18" /etc/hosts
@@ -56,7 +56,7 @@ cd ~/fyp-pipeline/layer2
 source .venv/bin/activate   # if not auto-activated
 ```
 
-The virtual environment includes `pika`, `chromadb`, `sentence-transformers`, `ollama`, `prometheus-client`, etc. If any are missing, re-run:
+The virtual environment includes `pika`, `chromadb`, `sentence-transformers`, `ollama`, `prometheus-client`, and related dependencies. If any package is missing, re-run:
 
 ```bash
 pip install -r requirements_node2.txt
@@ -98,7 +98,7 @@ All agents connect to RabbitMQ on `stream-node`; Ollama and ChromaDB run locally
 
 ## 4. Startup Order
 
-Always start agents in this exact sequence:
+Agents must always be started in the following sequence:
 
 | Order | Agent | Command (from `layer2/`) | Port |
 |:-----:|-------|---------------------------|:----:|
@@ -107,8 +107,8 @@ Always start agents in this exact sequence:
 | 3 | Policy Agent | `python3 agents/policy_agent.py` | 8012 |
 | 4 | Learning Agent | `python3 agents/learning_agent.py` | 8013 |
 
-- Triage must be first because it produces `triage.result` for the Strategy Agent.
-- Learning can start anytime — it simply waits for `outcome.feedback`.
+- The Triage Agent must start first, as it produces `triage.result` for the Strategy Agent.
+- The Learning Agent may be started at any point — it simply awaits `outcome.feedback`.
 
 ---
 
@@ -130,9 +130,10 @@ triage_complete event_id=... protocol=... rag_docs=... latency_ms=...
 
 | Note | Detail |
 |---|---|
-| Idle behavior | If `anomaly.detected` is empty, it waits silently |
-| Latency | Steady-state latency < 5 ms per event |
-| Cold start | ChromaDB cold start (0 docs) → RAG context is empty; this is normal |
+| Idle behavior | If `anomaly.detected` is empty, the agent waits silently |
+| Latency | Steady-state latency below 5 ms per event |
+| Cold start | On ChromaDB cold start (0 documents), RAG context is empty; this is expected behavior |
+| Persistent log | Writes one JSON line per event to `logs/triage_agent.jsonl` |
 
 ### 5.2 Strategy Agent
 
@@ -149,9 +150,12 @@ strategy_complete event_id=... schema_valid=True latency_ms=...
 
 | Note | Detail |
 |---|---|
-| First inference | May take 25–30 s; subsequent calls ~20–25 s |
-| Timeout | 35 s. If exceeded, `timed_out=True` is set and the event still goes to `strategy.result` |
-| Metrics | Prometheus metrics available on port 8011 |
+| First inference | May require 25–30 s; subsequent calls typically take 20–25 s |
+| Timeout | Set to 35 s. If exceeded, `timed_out=True` is recorded and the event still proceeds to `strategy.result` |
+| Metrics | Prometheus metrics exposed on port 8011 |
+| JSON parsing | Strips markdown code fences and extracts the first complete JSON object, reducing parsing errors |
+| Persistent log | Writes one JSON line per event to `logs/strategy_agent.jsonl` |
+| Parse error log | On JSON parsing failure, the raw response is saved to `logs/parse_error.jsonl` |
 
 ### 5.3 Policy Agent
 
@@ -168,9 +172,11 @@ policy_routed event_id=... decision=AUTO reason=LOW_RISK_HIGH_CONFIDENCE
 
 | Note | Detail |
 |---|---|
-| Latency | Sub-ms per message |
-| Config | Loads confidence threshold from `config/threshold_config.json` on every message |
-| Routing | `auto.execute` if `risk_tier=LOW` **and** confidence ≥ threshold; otherwise `hitl.queue` |
+| Latency | Sub-millisecond per message |
+| Configuration | Loads the confidence threshold from `config/threshold_config.json` on every message |
+| Routing | Routes to `auto.execute` if `risk_tier=LOW` **and** confidence ≥ threshold; otherwise routes to `hitl.queue` |
+| MTTA | Records `policy_timestamp − triage_timestamp` as the control-plane MTTA |
+| Persistent log | Writes one JSON line per event to `logs/policy_agent.jsonl` |
 
 ### 5.4 Learning Agent
 
@@ -187,10 +193,12 @@ learning_complete event_id=... outcome=AUTO_EXECUTE_SUCCESS
 
 | Note | Detail |
 |---|---|
-| Impact | Fires post-dispatch, zero impact on main pipeline |
-| Summarization | Calls qwen3:0.6b (timeout 10 s); falls back to a default summary if the LLM fails |
-| ChromaDB | Upserts incident into the `incident_history` collection |
-| Threshold update | Updates EMA confidence threshold in `config/threshold_config.json` (hard bounds `[0.60, 0.90]`) |
+| Impact | Executes post-dispatch, with zero impact on the main pipeline |
+| Summarization | Invokes qwen3:0.6b (10 s timeout); falls back to a default summary if the LLM call fails |
+| ChromaDB | Upserts the incident into the `incident_history` collection |
+| Threshold update | Updates the EMA confidence threshold in `config/threshold_config.json` (bounded to `[0.60, 0.90]`) |
+| MTTR | Records `outcome_feedback_time − triage_timestamp` as the control-plane MTTR |
+| Persistent log | Writes one JSON line per event to `logs/learning_agent.jsonl` |
 
 ---
 
@@ -232,7 +240,24 @@ curl -s http://localhost:8012/metrics | head   # Policy
 curl -s http://localhost:8013/metrics | head   # Learning
 ```
 
-Gateway-node's Prometheus scrapes these ports automatically.
+Gateway-node's Prometheus instance scrapes these ports automatically.
+
+### 6.5 Persistent Agent Logs
+
+All agents write one JSON line per processed event to `layer2/logs/`. These logs persist across restarts and serve as the authoritative source for cumulative counts when the pipeline is run across multiple sessions.
+
+```bash
+cd ~/fyp-pipeline/layer2
+
+# Count processed events per agent
+wc -l logs/*.jsonl
+
+# Inspect parse errors
+cat logs/parse_error.jsonl
+
+# View last strategy outcome
+tail -1 logs/strategy_agent.jsonl
+```
 
 ---
 
@@ -240,22 +265,23 @@ Gateway-node's Prometheus scrapes these ports automatically.
 
 Press `Ctrl + C` in each agent's terminal.
 
-- The current message is acknowledged **only after** the result is published — no message loss.
-- Unprocessed messages remain in their queues for the next startup.
+- The current message is acknowledged **only after** the result has been published, ensuring no message loss.
+- Unprocessed messages remain in their respective queues for the next startup.
 
 ---
 
 ## 8. Full Pipeline Test
 
-1. **Node 1:** Ensure Fusion Engine is running (and all Layer 1 components if re-running the corpus).
-2. **Node 2:** Start Triage → Strategy → Policy → Learning (order matters).
-3. **Node 3:** Start Auto-Executor and HITL consumer.
-4. **Node 1:** Replay corpus:
+1. **Node 1:** Confirm the Fusion Engine is running (along with all Layer 1 components, if re-running the full corpus).
+2. **Node 2:** Start the Triage, Strategy, Policy, and Learning agents, in that order (sequence is important).
+3. **Node 3:** Start the Auto-Executor and the HITL consumer.
+4. **Node 1:** Replay the corpus:
    ```bash
    cd ~/fyp-pipeline/layer1/seg
-   python3 seg.py --mode replay --speed 50 --input ../../evaluation/events_1950.jsonl
+   python3 seg.py --mode replay --speed 1 --input ../../evaluation/events_1950.jsonl
    ```
-5. Monitor queues and the Grafana dashboard.
+   Use `--speed 1` for final evaluation. Use `--speed 50` only for smoke tests.
+5. Monitor the queues, persistent logs, and the Grafana dashboard.
 
 ---
 
@@ -263,14 +289,14 @@ Press `Ctrl + C` in each agent's terminal.
 
 | Symptom | Likely Cause | Fix |
 |---|---|---|
-| `ModuleNotFoundError: No module named 'rabbitmq'` | Running from wrong directory | Run from `layer2/`, not inside `agents/` |
-| ChromaDB hangs on startup | Internet required to verify sentence-transformers model | Set `HF_HUB_OFFLINE=1` (already in `chromadb_utils/client.py`) or ensure local cache exists |
-| `Failed to send telemetry event ClientStartEvent` | Harmless ChromaDB telemetry warning | Ignore; or set `ANONYMIZED_TELEMETRY=False` in `.env` |
-| Strategy Agent timeouts > 20% | Complex prompts or RAM pressure | Timeout is 35 s; if still too many, stop Learning Agent to free ~400 MB, or restart Ollama |
-| `auto.execute` empty | All events are HIGH-risk or confidence below threshold | Check EMA threshold; lower temporarily to 0.55 for testing, or wait for Learning Agent to adjust |
-| RabbitMQ connection refused | `stream-node` unreachable or RabbitMQ down | `ping stream-node`; `ssh stream-node "sudo systemctl restart rabbitmq-server"` |
-| ChromaDB documents show `unknown` fields | Old data from before Learning Agent fix | Purely cosmetic; similarity search still works. Purge collection before final evaluation if needed |
-| `ai-brain-node:8010` down in Prometheus | Agent not running | Start the corresponding agent |
+| `ModuleNotFoundError: No module named 'rabbitmq'` | Running from the wrong directory | Run from `layer2/`, not from within `agents/` |
+| ChromaDB hangs on startup | Internet access required to verify the sentence-transformers model | Set `HF_HUB_OFFLINE=1` (already configured in `chromadb_utils/client.py`) or ensure a local cache exists |
+| `Failed to send telemetry event ClientStartEvent` | Harmless ChromaDB telemetry warning | Ignore, or set `ANONYMIZED_TELEMETRY=False` in `.env` |
+| Strategy Agent timeouts exceed 20% | Complex prompts or memory (RAM) pressure | Timeout is fixed at 35 s; if the issue persists, stop the Learning Agent to free approximately 400 MB, or restart Ollama |
+| `auto.execute` remains empty | All events classified as HIGH-risk or confidence below threshold | Check the EMA threshold; temporarily lower it to 0.55 for testing, or allow the Learning Agent time to adjust it |
+| RabbitMQ connection refused | `stream-node` unreachable or RabbitMQ service down | `ping stream-node`; `ssh stream-node "sudo systemctl restart rabbitmq-server"` |
+| ChromaDB documents show `unknown` fields | Legacy data predating the Learning Agent fix | Purely cosmetic; similarity search remains unaffected. Purge the collection before final evaluation if required |
+| `ai-brain-node:8010` shown as down in Prometheus | Corresponding agent not running | Start the relevant agent |
 
 ---
 
@@ -282,6 +308,8 @@ layer2/
 ├── chromadb_utils/        # client, query, upsert
 ├── ollama/                # HTTP client for Ollama
 ├── rabbitmq/              # connection helper
+├── utils/                 # shared file logger
+├── logs/                  # runtime JSONL logs (ignored by Git)
 ├── prompts/               # system prompts for qwen3 models
 ├── config/                # threshold_config.json
 ├── chromadb_data/         # persistent ChromaDB store (do not delete)
@@ -289,4 +317,4 @@ layer2/
 └── requirements_node2.txt
 ```
 
-For detailed component-by-component build history, see `docs/layer2_component_log.md`.
+For detailed component-by-component build history, refer to `docs/layer2_component_log.md`.

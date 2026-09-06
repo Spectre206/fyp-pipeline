@@ -126,6 +126,8 @@ class ThroughputDetector:
                 "event_id": event_id,
                 "timestamp": event.get("timestamp"),
                 "ingestion_time": event.get("ingestion_time"),
+                "node": event.get("node"),
+                "affected_component": event.get("affected_component"),
                 "detected": detected,
                 "anomaly_type": "throughput_drop" if detected else "NORMAL",
                 "severity": severity,
@@ -145,6 +147,9 @@ class ThroughputDetector:
             return {
                 "event_id": event_id,
                 "timestamp": event.get("timestamp"),
+                "ingestion_time": event.get("ingestion_time"),
+                "node": event.get("node"),
+                "affected_component": event.get("affected_component"),
                 "detected": False,
                 "anomaly_type": "NORMAL",
                 "severity": "N/A",

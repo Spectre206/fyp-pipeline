@@ -1090,10 +1090,34 @@ class FusionEngine:
             None
         )
 
+        # ─────────────────────────────────────────────────────────────
+        # Preserve original event node and affected_component.
+        # ─────────────────────────────────────────────────────────────
+
+        original_node = next(
+            (
+                r.get("node")
+                for r in results
+                if r.get("node")
+            ),
+            None
+        )
+
+        original_affected_component = next(
+            (
+                r.get("affected_component")
+                for r in results
+                if r.get("affected_component")
+            ),
+            None
+        )
+
         fused_event = {
             "event_id": event_id,
             "timestamp": original_ts,
             "ingestion_time": original_ingestion_time,
+            "node": original_node,
+            "affected_component": original_affected_component,
             "fused_severity": fused_severity,
             "fused_confidence": fused_confidence,
             "fusion_type": fusion_type,

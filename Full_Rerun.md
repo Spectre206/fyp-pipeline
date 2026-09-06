@@ -1,3 +1,6 @@
+Here is the updated **full_rerun.md** with the Layer 2 logs cleanup added. Save this as your final evaluation runbook.
+
+```markdown
 # Final Evaluation Run — Full System Procedure
 
 **Project:** Distributed Multi-Agent Coordination for Self-Healing Data Pipelines
@@ -74,13 +77,16 @@ python3 seg.py --mode generate --output ../../evaluation/
 
 ### Node 2 — ai-brain-node
 
-**4. Clear ChromaDB and reset EMA threshold**
+**4. Clear ChromaDB, reset EMA threshold, and clear agent logs**
 
 ```bash
 cd ~/fyp-pipeline/layer2
 
 rm -rf chromadb_data/*
 rm -rf agents/chromadb_data/*   # safety: remove stray copy if present
+
+# Clear runtime agent logs (JSONL files)
+rm -f logs/*.jsonl
 
 cat > config/threshold_config.json << 'EOF'
 {
@@ -92,7 +98,7 @@ cat > config/threshold_config.json << 'EOF'
 }
 EOF
 
-echo "ChromaDB cleared and threshold reset."
+echo "ChromaDB cleared, logs cleared, threshold reset."
 ```
 
 ### Node 3 — gateway-node
@@ -333,3 +339,4 @@ histogram_quantile(0.95, rate(fyp_mttr_seconds_bucket[5m]))
 - Press `Ctrl+C` in each agent terminal.
 - Prometheus/Grafana can stay running for monitoring.
 - Commit results and dashboard JSON to Git.
+```

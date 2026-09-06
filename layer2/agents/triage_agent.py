@@ -12,6 +12,7 @@ from prometheus_client import Counter, Histogram, start_http_server
 
 from rabbitmq.connection import get_connection, publish
 from chromadb_utils.query import retrieve_rag_context, format_rag_context
+from utils.file_logger import append_log
 
 log = structlog.get_logger()
 
@@ -139,6 +140,16 @@ class TriageAgent:
                 "triage_agent_latency_ms": round((time.monotonic() - t0) * 1000),
                 "original_event":          original_event,
             }
+
+            # ---- File-based persistent log ----
+            append_log("triage_agent.jsonl", {
+                "event_id": event_id,
+                "anomaly_type": event.get("anomaly_type"),
+                "severity": event.get("severity"),
+                "response_protocol": protocol,
+                "rag_docs": len(rag_context),
+                "latency_ms": result["triage_agent_latency_ms"],
+            })
 
             publish(self.ch, "triage.result", json.dumps(result))
             ch.basic_ack(method.delivery_tag)

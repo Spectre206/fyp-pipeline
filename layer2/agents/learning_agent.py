@@ -14,6 +14,7 @@ from prometheus_client import Counter, Gauge, Histogram, start_http_server
 from rabbitmq.connection import get_connection
 from chromadb_utils.upsert import upsert_incident
 from ollama.client import generate
+from utils.file_logger import append_log
 
 log = structlog.get_logger()
 
@@ -210,6 +211,14 @@ class LearningAgent:
             CHROMADB_UPSERTS.inc()
 
             update_ema(outcome_type)
+
+            # ---- File-based persistent log ----
+            append_log("learning_agent.jsonl", {
+                "event_id": event_id,
+                "outcome_type": outcome_type,
+                "summary": summary,
+                "latency_ms": round((time.monotonic() - t0) * 1000),
+            })
 
             ch.basic_ack(method.delivery_tag)
             log.info(

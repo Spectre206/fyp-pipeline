@@ -81,7 +81,7 @@ flowchart LR
 ## 3. Pydantic Validator
 
 **Files:** `validator.py`, `schema_drift_router.py`, `config/validator_config.json`
-**Status:** ✅ **v1.4 — config-driven, hostname-based, Prometheus removed.**
+**Status:** ✅ **v1.5 — config-driven, hostname-based, metrics exposed on port 8002, preserves ingestion_time + node/affected_component.**
 
 ### 3.1 Flow
 
@@ -104,6 +104,8 @@ flowchart TD
 - **Two of three schema_drift subtypes caught here** — `missing_field` and `type_mutation` fail validation; `value_shift` passes (structurally valid) and goes to the PSI detector.
 - **Config-driven** — `validator_config.json` is the single source of truth for RabbitMQ settings.
 - **Prometheus removed** — only Fusion Engine exposes Layer 1 metrics.
+- **Metrics:** Prometheus metrics on port 8002.
+- **Context preservation:** preserves `ingestion_time`, `node`, and `affected_component` for downstream.
 
 ### 3.3 Test results
 
@@ -141,6 +143,7 @@ flowchart TD
 - **`calibration_n=20`** — settled after testing; balances statistical stability with coverage.
 - **PSI fix (v1.2)** — bin edges based on expected (baseline) range only, minimum bin proportions, per-bin caps.
 - **`auth_failures_per_min`** — average over 60s window, not sum-of-rates.
+- **Context preservation:** preserves original `node` and `affected_component` in enriched events.
 
 ### 4.3 Features computed
 
@@ -202,7 +205,7 @@ flowchart TD
 
 ### 6.1 Error Rate Surge Detector
 
-**Files:** `detectors/error_detector.py`
+**Files:** `detectors/error_rate.py`
 **Status:** ✅ **v1.0 — Z-score + step-change catch.**
 
 ```mermaid
@@ -222,6 +225,8 @@ flowchart LR
 | Precision | 98.7% |
 
 **Key decision:** Z-score threshold lowered from 3.0 → 2.0 after empirical testing (mixed rolling window dilutes scores).
+
+**Context propagation:** detector result includes `node`, `affected_component`, `timestamp`, and `ingestion_time`.
 
 ---
 
@@ -254,6 +259,8 @@ flowchart LR
 
 **Key decisions:** Silence guard (`raw_mps < 2.0`) prevents false positives from the 9999 sentinel bug. Raw threshold (40.0) catches drops the rolling window lags on. Minimum baseline (5.0) avoids noise from low-throughput components.
 
+**Context propagation:** detector result includes `node`, `affected_component`, `timestamp`, and `ingestion_time`.
+
 ---
 
 ### 6.3 Auth Failure Flood Detector
@@ -285,6 +292,8 @@ flowchart LR
 
 **Key decisions:** RF acts as confidence adjuster, never overrides rate-gate. Trained on KDD99 (98K samples, 92% recall).
 
+**Context propagation:** detector result includes `node`, `affected_component`, `timestamp`, and `ingestion_time`.
+
 ---
 
 ### 6.4 CPU/Memory Spike Detector
@@ -313,11 +322,13 @@ flowchart LR
 
 **Key decision:** Z-scores used instead of Isolation Forest — IF trained on NAB data flagged 98% of synthetic events (data mismatch). IF model saved for future hybrid mode.
 
+**Context propagation:** detector result includes `node`, `affected_component`, `timestamp`, and `ingestion_time`.
+
 ---
 
 ### 6.5 Schema Drift Detector
 
-**Files:** `detectors/schema_detector.py`
+**Files:** `detectors/schema_drift.py`
 **Status:** ✅ **v1.0 — shift-marker primary, PSI confidence booster.**
 
 ```mermaid
@@ -344,6 +355,8 @@ flowchart LR
 | Precision | 100% |
 
 **Key decisions:** PSI computed correctly but not used as primary detector — synthetic corpus variance causes elevated PSI across most events. Shift-marker provides clean signal; PSI boosts confidence. Structural half (100 events) caught by Validator bypass.
+
+**Context propagation:** detector result includes `node`, `affected_component`, `timestamp`, and `ingestion_time`.
 
 ---
 
@@ -396,6 +409,7 @@ flowchart TD
 - **Duplicate protection:** `processed_event_ids` ensures each event is fused only once. Event is added to the set only at final fusion.
 - **Unique detectors:** tracked by `model_name` — duplicates from same detector are ignored. All five unique detectors must report before immediate fusion.
 - **Timestamp propagation:** original `timestamp` and `ingestion_time` are preserved from detector results into the fused event. `fused_at` is separate.
+- **Context propagation:** fused event includes `node` and `affected_component` from the first detector result.
 - **Prometheus additions:** `fyp_fusion_correlation_wait_seconds`, `fyp_fusion_late_recovery_total`, `fyp_fusion_detectors_received`, `fyp_fusion_fast_path_triggered_total`, `fyp_fusion_latency_seconds`, `fyp_fusion_errors_total`.
 
 ### 7.3 Test results (final cold‑start run)
@@ -440,15 +454,15 @@ flowchart LR
     FS -->|detection.fanout<br/>1,527 each| D4[detect.auth]
     FS -->|detection.fanout<br/>1,527 each| D5[detect.schema]
     D1 & D2 & D3 & D4 & D5 -->|fusion.result| FR[fusion.results]
-    FR --> FE[Fusion Engine<br/>3s window]
-    FE -->|anomaly.fused<br/>603| AD
-    FE -->|suppress<br/>~924| X[ ]
+    FR --> FE[Fusion Engine<br/>5s window]
+    FE -->|anomaly.fused<br/>532| AD
+    FE -->|suppress<br/>995| X[ ]
 ```
 
 ## Open Items (Layer 1)
 
 - [ ] Detector config files (thresholds currently hardcoded).
-- [ ] Feature Store `silence_duration_s` bug (compares against `datetime.now()` instead of event timestamp).
+- [ ] Feature Store `silence_duration_s` bug.
 - [ ] PSI as primary detector — needs corpus with tighter component distributions.
 - [ ] Isolation Forest hybrid mode for CPU detector.
 - [ ] `fusion_results.jsonl` path should be config-driven.

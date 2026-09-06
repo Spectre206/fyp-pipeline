@@ -144,6 +144,8 @@ class AuthDetector:
                 "event_id": event_id,
                 "timestamp": event.get("timestamp"),
                 "ingestion_time": event.get("ingestion_time"),
+                "node": event.get("node"),
+                "affected_component": event.get("affected_component"),
                 "detected": detected,
                 "anomaly_type": "auth_failure_flood" if detected else "NORMAL",
                 "severity": severity,
@@ -162,6 +164,9 @@ class AuthDetector:
             return {
                 "event_id": event_id,
                 "timestamp": event.get("timestamp"),
+                "ingestion_time": event.get("ingestion_time"),
+                "node": event.get("node"),
+                "affected_component": event.get("affected_component"),
                 "detected": False,
                 "anomaly_type": "NORMAL",
                 "severity": "N/A",
