@@ -57,7 +57,7 @@ This project empirically evaluates whether a **policy-bounded, multi-agent self-
 Node 1 — stream-node                         Layer 1: Real-Time Data Plane
   SEG → Pydantic Validator → Feature Store
     → 5 Detectors (detection.fanout exchange)
-    → Fusion Engine (3s correlation window, compound incident merging)
+    → Fusion Engine (5s correlation window, compound incident merging)
     → anomaly.detected queue
 
 Node 2 — ai-brain-node                       Layer 2: AI Control Plane
@@ -80,9 +80,15 @@ Node 3 — gateway-node                        Layer 3: HITL & Observability
 
 ```mermaid
 flowchart LR
+    %% Legend
+    subgraph Legend["Legend"]
+        direction LR
+        L1["Solid line = message flow"] --> L2["Dashed line = service call / data retrieval"]
+    end
+
     subgraph Node1["Node 1 — stream-node (Layer 1: Real-Time Data Plane)"]
         direction TB
-        SEG["Synthetic Event<br/>Generator (SEG)"] --> Val["Pydantic<br/>Validator"]
+        SEG["Event Generator<br/>(SEG)"] --> Val["Pydantic<br/>Validator"]
         Val -->|"valid events"| FS["Feature Store<br/>+ ADM Runner"]
         FS --> DF["detection.fanout<br/>(Fanout Exchange)"]
         DF --> D1["CPU Spike<br/>Detector"]
@@ -95,7 +101,7 @@ flowchart LR
         D3 --> FR
         D4 --> FR
         D5 --> FR
-        FR --> FE["Fusion Engine<br/>(3s correlation window)"]
+        FR --> FE["Fusion Engine<br/>(3s correlation window)<br/>Compound merging & dedup"]
         Val -->|"schema violations"| AD["anomaly.detected"]
         FE -->|"fused incidents"| AD
     end
@@ -123,13 +129,17 @@ flowchart LR
     HITL -->|"outcome.feedback"| LA
     LA --> Chroma
     LA -.->|"LLM call"| Ollama
-    Prom -.->|"scrapes"| Node1
-    Prom -.->|"scrapes"| Node2
-    Prom -.->|"scrapes"| Node3
+    Prom -.->|"scrapes metrics"| Node1
+    Prom -.->|"scrapes metrics"| Node2
+    Prom -.->|"scrapes metrics"| Node3
+
+    %% Force all connection lines to be solid black and slightly thicker
+    linkStyle default stroke:#000,stroke-width:2px;
 
     style Node1 fill:#e1f5fe,stroke:#01579b
     style Node2 fill:#fff3e0,stroke:#e65100
     style Node3 fill:#e8f5e9,stroke:#1b5e20
+    style Legend fill:#f5f5f5,stroke:#999
 ```
 
 > **Diagram note:** Each node (SEG, detectors, agents, dashboard, etc.) is declared exactly once, inside the subgraph representing its home layer. All edges that cross node boundaries — for example, `Policy Agent → Auto-Execution Engine` or `Learning Agent → Ollama` — are declared after the three subgraphs are closed. This avoids a common Mermaid rendering fault in which a node referenced inside two different subgraph blocks gets pulled into the wrong cluster, and keeps the three-layer grouping visually accurate.
@@ -321,23 +331,23 @@ The evaluation is centred on **control-plane reasoning quality**, **fusion accur
 
 ## RabbitMQ Topology (Detailed)
 
-| Exchange | Type | Queue | Routing Key | Layer | Consumed By |
-|:---------|:-----|:------|:-------------|:------|:------------|
-| `fyp.events` | Topic | `raw.events` | `event.raw` | L1 → L1 | Validator |
-| `fyp.events` | Topic | `validated.event` | `event.valid` | L1 → L1 | ADM Runner |
-| `detection.fanout` | Fanout | `detect.cpu` | `""` | L1 → L1 | CPU Spike Detector |
-| `detection.fanout` | Fanout | `detect.error` | `""` | L1 → L1 | Error Rate Detector |
-| `detection.fanout` | Fanout | `detect.throughput` | `""` | L1 → L1 | Throughput Detector |
-| `detection.fanout` | Fanout | `detect.auth` | `""` | L1 → L1 | Auth Flood Detector |
-| `detection.fanout` | Fanout | `detect.schema` | `""` | L1 → L1 | Schema Drift Detector |
-| `fyp.events` | Topic | `fusion.results` | `fusion.result` | L1 → L1 | Fusion Engine |
-| `fyp.events` | Topic | `anomaly.detected` | `anomaly.#` | L1 → L2 | Triage Agent |
-| `fyp.events` | Topic | `triage.result` | `triage.result` | L2 → L2 | Strategy Agent |
-| `fyp.events` | Topic | `strategy.result` | `strategy.result` | L2 → L2 | Policy Agent |
-| `fyp.events` | Topic | `auto.execute` | `auto.execute` | L2 → L3 | Auto-Executor |
-| `fyp.events` | Topic | `hitl.queue` | `hitl.queue` | L2 → L3 | HITL Dashboard |
-| `fyp.events` | Topic | `outcome.feedback` | `outcome.feedback` | L3 → L2 | Learning Agent |
-| `fyp.dlx` | Direct | `dead.letters` | `dead` | All | Manual review |
+| Exchange            | Type   | Queue                | Routing Key         | Layer                | Consumed By         |
+|:--------------------|:-------|:----------------------|:---------------------|:----------------------|:---------------------|
+| `fyp.events`         | Topic  | `raw.events`           | `event.raw`           | L1 → L1              | Validator             |
+| `fyp.events`         | Topic  | `validated.event`      | `event.valid`         | L1 → L1              | ADM Runner            |
+| `detection.fanout`   | Fanout | `detect.cpu`           | `""`                  | L1 → L1              | CPU Spike Detector    |
+| `detection.fanout`   | Fanout | `detect.error`         | `""`                  | L1 → L1              | Error Rate Detector   |
+| `detection.fanout`   | Fanout | `detect.throughput`    | `""`                  | L1 → L1              | Throughput Detector   |
+| `detection.fanout`   | Fanout | `detect.auth`          | `""`                  | L1 → L1              | Auth Flood Detector   |
+| `detection.fanout`   | Fanout | `detect.schema`        | `""`                  | L1 → L1              | Schema Drift Detector |
+| `fyp.events`         | Topic  | `fusion.results`       | `fusion.result`       | L1 → L1              | Fusion Engine         |
+| `fyp.events`         | Topic  | `anomaly.detected`     | `anomaly.#`           | L1 → L2              | Triage Agent          |
+| `fyp.events`         | Topic  | `triage.result`        | `triage.result`       | L2 → L2              | Strategy Agent        |
+| `fyp.events`         | Topic  | `strategy.result`      | `strategy.result`     | L2 → L2              | Policy Agent          |
+| `fyp.events`         | Topic  | `auto.execute`         | `auto.execute`        | L2 → L3              | Auto-Executor         |
+| `fyp.events`         | Topic  | `hitl.queue`           | `hitl.queue`          | L2 → L3              | HITL Dashboard        |
+| `fyp.events`         | Topic  | `outcome.feedback`     | `outcome.feedback`    | L3 → L2              | Learning Agent        |
+| `fyp.dlx`            | Direct | `dead.letters`         | `dead`                | All                   | Manual review         |
 
 ---
 
