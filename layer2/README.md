@@ -103,4 +103,4 @@ The following files are written to `layer2/logs/`:
 
 For detailed setup instructions, startup sequencing, verification procedures, and troubleshooting guidance, refer to the **[Layer 2 User Guide](User_Guide.md)**.
 
-For the complete build history and architectural decision record, refer to the **[Layer 2 Component Build Log](../docs/layer2_component_log.md)**.
+For the complete build history and architectural decision record, refer to the **[Layer 2 Component Build Log](docs/layer2_component_log.md)**.
