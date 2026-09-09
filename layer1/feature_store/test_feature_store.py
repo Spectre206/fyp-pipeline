@@ -43,16 +43,16 @@ def run_tests():
     ]
     features = fc.compute(window, baseline=None)
 
-    required_features = ["rolling_mean_cpu_percent", "z_score_cpu_percent", "psi_score_cpu_percent"]
+    required_features = ["rolling_mean_cpu_percent", "z_score_cpu_percent"]
     for feat in required_features:
         assert feat in features, f"Test 4 Failed: {feat} missing"
     print(f"✓ Test 4 PASSED: All feature keys present")
 
-    # ── Test 5: PSI Activation ───────────────────────────────────
+    # ── Test 5: PSI removed from active runtime vector ───────────
     baseline = {"cpu_percent": [20.0, 30.0, 40.0, 50.0, 60.0]}
-    features_with_psi = fc.compute(window, baseline=baseline)
-    assert features_with_psi["psi_score_cpu_percent"] >= 0.0
-    print("✓ Test 5 PASSED: PSI active after calibration")
+    features_with_baseline = fc.compute(window, baseline=baseline)
+    assert "psi_score_cpu_percent" not in features_with_baseline
+    print("✓ Test 5 PASSED: PSI absent from active runtime vector")
 
     # ── Test 6: Z-score Spike Detection ──────────────────────────
     spike_window = [{"metrics": {"cpu_percent": 30.0}, "timestamp": "2026-04-01T10:00:00+00:00"} for _ in range(9)]
@@ -64,7 +64,12 @@ def run_tests():
     # ── Test 7: Silence Duration ─────────────────────────────────
     silent_window = [{"metrics": {"messages_per_second": 0.0}, "timestamp": "2026-04-01T10:00:01+00:00"}]
     assert fc.compute(silent_window, baseline=None)["silence_duration_s"] == 9999.0
-    print("✓ Test 7 PASSED: Silence detection working")
+    timed_silence = [
+        {"metrics": {"messages_per_second": 10.0}, "timestamp": "2026-04-01T10:00:00+00:00"},
+        {"metrics": {"messages_per_second": 0.0}, "timestamp": "2026-04-01T10:00:12+00:00"},
+    ]
+    assert fc.compute(timed_silence, baseline=None)["silence_duration_s"] == 12.0
+    print("✓ Test 7 PASSED: Silence uses event timestamps")
 
     # ── Test 8: Auth Rate Logic (v1.1: now AVERAGE, not SUM — FIX #4) ──
     now = datetime.now(timezone.utc)

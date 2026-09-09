@@ -39,7 +39,7 @@ def run_integration():
                 print(f"  Calibrated:   True")
                 print(f"  Window Depth: {enriched['window_depth']}")
                 print(f"  Mean CPU:     {enriched['feature_vector'].get('rolling_mean_cpu_percent', 0.0):.2f}")
-                print(f"  PSI Score:    {enriched['feature_vector'].get('psi_score_cpu_percent', 0.0)}")
+                print("  PSI Score:    removed from active runtime vector")
             print("-" * 30)
 
         print("\n--- Demonstrating persistence across a simulated restart ---\n")

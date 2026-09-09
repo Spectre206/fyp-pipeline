@@ -1,12 +1,12 @@
 # layer1/adm/detectors/train_auth_model.py
 """
-Train Random Forest model for Auth Failure Flood detection (Stage 2).
+Historical experiment: train a Random Forest model for Auth Failure Flood detection.
 
 Uses the KDD99 10% dataset to train a binary classifier that distinguishes
 normal traffic from auth-related attacks (guess_passwd, ftp_write, imap, etc.).
 
-The model is saved to models/auth_rf.pkl and will be loaded by auth_detector.py
-as a secondary confirmation stage after the rate-gate flags an event.
+Any output is retained solely as historical experiment evidence. The Layer 1
+runtime Auth detector does not load or use it.
 
 Run once:
     cd ~/fyp-pipeline/layer1/adm

@@ -1,0 +1,7 @@
+{
+  "cpu_spike": {"z_threshold": 2.0, "cpu_raw_threshold": 70.0, "mem_raw_threshold": 70.0, "z_high_threshold": 3.0, "z_critical_threshold": 5.0, "raw_high_threshold": 85.0, "raw_critical_threshold": 95.0, "z_confidence_divisor": 6.0, "raw_confidence_divisor": 100.0},
+  "error_rate": {"z_threshold": 2.0, "error_rate_threshold": 10.0, "z_high_threshold": 4.0, "z_critical_threshold": 5.0, "rate_high_threshold": 18.0, "rate_critical_threshold": 30.0, "z_confidence_divisor": 6.0, "rate_confidence_divisor": 30.0},
+  "throughput_drop": {"silence_timeout_s": 30.0, "drop_ratio": 0.4, "min_baseline_mps": 5.0, "near_zero_mps": 2.0, "raw_drop_threshold": 40.0, "drop_high_percent": 60.0, "drop_critical_percent": 80.0, "raw_high_mps": 20.0, "silence_confidence_cap": 0.95, "raw_confidence_cap": 0.9},
+  "auth_flood": {"rate_threshold": 20.0, "rate_change_threshold": 15.0, "high_rate_threshold": 40.0, "critical_rate_threshold": 100.0, "current_confidence_cap": 0.95, "rolling_confidence_cap": 0.9, "rate_change_confidence_cap": 0.85, "rate_confidence_divisor": 100.0, "rate_change_confidence_divisor": 50.0},
+  "schema_drift": {"distribution_shift_marker": 1.0, "confidence": 0.7}
+}

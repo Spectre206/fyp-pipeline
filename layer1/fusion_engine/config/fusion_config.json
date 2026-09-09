@@ -10,7 +10,7 @@
     "output_exchange": "fyp.events",
     "output_routing_key": "anomaly.fused"
   },
-  "correlation_window_s": 5.0,
+  "correlation_window_s": 3.0,
   "correlation_recovery_window_s": 0.75,
   "min_confidence_to_publish": 0.3,
   "fast_path_critical": true,
@@ -18,8 +18,8 @@
   "model_weights": {
     "z_score_error_rate": 0.80,
     "moving_average_throughput": 0.75,
-    "rate_gate_auth_rf": 0.85,
+    "statistical_auth_rate": 0.85,
     "z_score_cpu_memory": 0.80,
-    "psi_detector": 0.70
+    "distribution_shift_marker": 0.70
   }
 }

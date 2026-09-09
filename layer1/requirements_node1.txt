@@ -4,12 +4,9 @@ pika==1.3.2
 # Schema validation
 pydantic==2.7.0
 
-# Anomaly detection
-scikit-learn==1.4.2
+# Statistical feature extraction and anomaly detection
 numpy==1.26.4
-pandas==2.2.2
-scipy==1.13.0
-joblib==1.4.2
+python-dateutil==2.9.0.post0
 drain3==0.9.11
 
 # Monitoring

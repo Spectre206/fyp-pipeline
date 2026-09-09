@@ -1,6 +1,7 @@
 # feature_store.py — v1.2.1 (split window/calibration keys)
 
 import logging
+import os
 import re
 from collections import deque
 from pathlib import Path
@@ -14,7 +15,9 @@ log = logging.getLogger(__name__)
 WINDOW_SIZE       = 30
 MAX_DEQUE_SIZE    = 1000
 CALIBRATION_N     = 20          # final settled value
-DEFAULT_BASELINE_DIR = "baselines"
+DEFAULT_BASELINE_DIR = Path(
+    os.environ.get("LAYER1_BASELINES_DIR", Path(__file__).resolve().parent / "baselines")
+)
 
 _SANITIZE_RE = re.compile(r"[^A-Za-z0-9_-]+")
 

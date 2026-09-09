@@ -192,9 +192,9 @@ FUSION_DETECTORS_RECEIVED = Histogram(
 EXPECTED_DETECTORS = {
     "z_score_error_rate",
     "moving_average_throughput",
-    "rate_gate_auth_rf",
+    "statistical_auth_rate",
     "z_score_cpu_memory",
-    "psi_detector",
+    "distribution_shift_marker",
 }
 
 
@@ -281,9 +281,7 @@ class FusionEngine:
         self.output_routing_key = rmq["output_routing_key"]
 
         # ─────────────────────────────────────────────────────────────
-        # Primary correlation window.
-        #
-        # Keep this at 3 seconds.
+        # Primary correlation window, supplied by configuration.
         # ─────────────────────────────────────────────────────────────
 
         self.window_s = float(
@@ -293,14 +291,8 @@ class FusionEngine:
         # ─────────────────────────────────────────────────────────────
         # Late-arrival recovery window.
         #
-        # Recommended:
-        #     0.75 seconds
-        #
-        # Effective maximum:
-        #     3.0 + 0.75 = 3.75 seconds
-        #
-        # The primary correlation window is still 3 seconds.
-        # Recovery is only used for incomplete events.
+        # Recovery is only used for incomplete events, so the effective
+        # maximum is ``correlation_window_s + recovery_window_s``.
         # ─────────────────────────────────────────────────────────────
 
         self.recovery_window_s = float(
@@ -689,8 +681,7 @@ class FusionEngine:
 
         Timeline:
 
-            0.0s ---------------- 3.0s ---------------- 3.75s
-                  normal window        recovery window
+            0.0s ---- primary window ---- recovery window
         """
 
         if not self.pending:
