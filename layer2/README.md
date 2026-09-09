@@ -6,101 +6,71 @@
 ---
 
 ## 1. Overview
+Layer 2 is the asynchronous AI Control Plane of the self-healing data pipeline. It acts as the bridge between Layer 1 (anomaly detection) and Layer 3 (execution). 
 
-Layer 2 constitutes the asynchronous reasoning core of the self-healing pipeline. It comprises four independent agents that consume anomaly events from the Fusion Engine, enrich them with historical context retrieved via ChromaDB-based Retrieval-Augmented Generation (RAG), generate remediation strategies through a locally hosted large language model (qwen3:1.7b), and determine whether an incident should be executed automatically or escalated to a human operator.
+Layer 2 receives anomaly events, fetches historical incident context, evaluates the best remediation strategy using local Large Language Models (LLMs), and applies deterministic policy rules to route the incident for either human review (HITL) or autonomous execution.
 
-A fifth process — the **Learning Agent** — consumes post-resolution feedback from Layer 3, updates the ChromaDB knowledge base, and dynamically recalibrates the confidence threshold governing auto-execution decisions.
+## 2. Architecture and Agent Flow
 
-All inter-agent communication is conducted through RabbitMQ queues hosted on Node 1. LLM inference and vector storage are performed locally on this node.
+Layer 2 consists of four distinct agents running asynchronously on Node 2. The agents communicate strictly via RabbitMQ queues on Node 1, decoupling reasoning from anomaly detection.
 
----
+```mermaid
+flowchart TD
+    L1[Layer 1: anomaly.detected] --> Triage
+    
+    subgraph Layer 2: Node 2 (ai-brain-node)
+        Triage[Triage Agent\nRule-based + RAG] --> |triage.result| Strategy
+        Strategy[Strategy Agent\nLLM: qwen3:1.7b] --> |strategy.result| Policy
+        Policy[Policy Agent\nDeterministic Rules] 
+    end
+    
+    Policy --> |auto.execute| L3[Layer 3: Execution]
+    Policy --> |hitl.queue| L3
+    
+    L3 --> |outcome.feedback| Learning
+    
+    subgraph Layer 2: Node 2
+        Learning[Learning Agent\nLLM: qwen3:0.6b] --> |Upsert| ChromaDB[(ChromaDB)]
+    end
+    
+    ChromaDB -.-> |Query| Triage
+```
 
-## 2. Components
+### Agent Responsibilities
+1. **Triage Agent:** A deterministic, rule-based classifier that normalizes incoming anomalies and queries ChromaDB for historical context. **It is NOT an LLM agent.**
+2. **Strategy Agent:** The core LLM reasoning component. Uses `qwen3:1.7b` via Ollama to generate a strict 7-field JSON remediation strategy.
+3. **Policy Agent:** A deterministic policy enforcement boundary. It evaluates the Strategy Agent's output against a 5-rule table to safely authorize execution or mandate human-in-the-loop (HITL) review.
+4. **Learning Agent:** Summarizes outcomes from Layer 3 using `qwen3:0.6b` and writes incidents to ChromaDB. It mathematically adjusts the auto-execution confidence threshold using an Exponential Moving Average (EMA).
 
-| Component | Directory / File | Role |
-|:----------|:-----------------|:-----|
-| Triage Agent | `agents/triage_agent.py` | Performs rule-based classification and ChromaDB RAG retrieval. Produces `triage.result`. |
-| Strategy Agent | `agents/strategy_agent.py` | Invokes **qwen3:1.7b** via Ollama to generate a seven-field JSON remediation plan. Produces `strategy.result`. |
-| Policy Agent | `agents/policy_agent.py` | Applies a deterministic five-rule routing table, directing incidents to `auto.execute` or `hitl.queue` based on risk tier and confidence. |
-| Learning Agent | `agents/learning_agent.py` | Invokes **qwen3:0.6b** for incident summarisation, upserts records into ChromaDB, and updates the EMA-based confidence threshold. |
-| ChromaDB | `chromadb_utils/` + `chromadb_data/` | Persistent vector store supporting historical incident retrieval (RAG). |
-| Ollama | `ollama/` (client) | Local LLM inference server (`localhost:11434`). |
-| File Logger | `utils/file_logger.py` | Shared, append-only JSONL logger used across all agents. |
-| Runtime Logs | `logs/` | Persistent per-agent logs enabling restart-safe result tracking. |
+## 3. The Policy and Safety Boundary
+Layer 2 enforces a strict boundary between LLM reasoning and operational authority:
+- **LLM Proposes:** The Strategy Agent proposes a remediation strategy, assigning a risk tier and a confidence score.
+- **Policy Constrains:** The Policy Agent strictly enforces safety. It blocks any proposal that is marked as `HIGH` risk, falls below the dynamic confidence threshold, or lacks valid JSON parsing, routing them deterministically to HITL. Autonomous execution is strictly constrained by these policies.
 
----
+## 4. LLM and ChromaDB Integration
+- **Local Inference:** Layer 2 runs CPU-only LLM inference via Ollama (`http://localhost:11434`). No GPU/CUDA hardware is required.
+- **Historical Context (RAG):** ChromaDB (`all-MiniLM-L6-v2` embeddings) provides Retrieval-Augmented Generation (RAG). The Triage Agent retrieves similar incidents with positive outcomes to help the Strategy Agent calibrate its risk judgements.
+- **Learning/Persistence:** The Learning Agent uses ChromaDB for persistent historical memory, but does not perform any model weight updating or fine-tuning. 
 
-## 3. RabbitMQ Queues
+## 5. Observability and Metrics
+All agents expose Prometheus metrics (ports 8010–8013) and write append-only logs to `layer2/logs/` (e.g., `strategy_agent.jsonl`, `parse_error.jsonl`).
 
-| Queue | Direction | Purpose |
-|:------|:----------|:--------|
-| `anomaly.detected` | Fusion Engine → Triage Agent | Fused anomaly events |
-| `triage.result` | Triage Agent → Strategy Agent | Enriched event with RAG context |
-| `strategy.result` | Strategy Agent → Policy Agent | LLM-generated response with schema validation |
-| `auto.execute` | Policy Agent → Layer 3 | Incidents approved for automatic remediation |
-| `hitl.queue` | Policy Agent → Layer 3 | Incidents requiring human review |
-| `outcome.feedback` | Layer 3 → Learning Agent | Post-resolution outcomes |
+**Key Latency Boundaries:**
+- **MTTA (Mean Time To Acknowledge):** Computed strictly as the control-plane interval between `triage_timestamp` and `policy_timestamp`.
+- **MTTR (Mean Time To Recovery):** Computed as the interval from `triage_timestamp` to the receipt of Layer 3 `outcome.feedback`. 
+*(Note: These measure decision latency, not infrastructure recovery times).*
 
----
+## 6. Evaluation Status
+- **Strategy Model Benchmark:** In an offline Phase 0 model-selection benchmark, `qwen3:1.7b` achieved approximately 90% schema-valid outputs across 30 strict adversarial prompts. This is a model-level benchmark and distinct from the runtime end-to-end System Schema Validity Rate (SVR).
+- **Learning Agent Formal Evaluation:** Formal quantitative evaluation of the Learning Agent's downstream learning improvement or summarization accuracy is not currently measured or demonstrated in the implementation.
 
-## 4. Key Design Features
+## 7. Known Limitations
+- The Learning Agent provides observability and dynamically updates a mathematical threshold, but formal end-to-end learning accuracy has not been experimentally validated.
+- Several configurations are currently hardcoded (e.g., RabbitMQ host to `stream-node`, Ollama to `localhost:11434`, ChromaDB directory paths).
+- Risk Tier Accuracy metrics lack an automated mechanism to compare against ground truth datasets in production. 
 
-- **Decoupled asynchronous processing** — Layer 2 operates independently of Layer 1; all inter-layer communication occurs via RabbitMQ, ensuring Layer 1 is never blocked.
-- **RAG-enhanced reasoning** — The Triage Agent retrieves up to three similar past incidents from ChromaDB prior to the LLM call, improving the accuracy of risk-tier classification.
-- **Policy-bounded autonomy** — The Policy Agent enforces a strict, tiered routing table; execution authority resides exclusively within Layer 3.
-- **Adaptive thresholding** — The Learning Agent employs an exponential moving average (EMA, α = 0.9) to adjust the auto-execution confidence threshold in response to real-world outcomes.
-- **Persistent logging** — Every agent appends one JSON line per processed message to `logs/*.jsonl`, ensuring that cumulative counts remain accurate across process restarts and multi-session pipeline runs.
-- **Robust JSON extraction** — The Strategy Agent strips markdown code fences and extracts the first complete JSON object from the LLM output, reducing parsing errors.
-- **Full observability** — All agents expose Prometheus metrics on ports 8010–8013.
+## 8. Cross-Layer Contracts
+- **Layer 1 to Layer 2:** The `anomaly.detected` payload processes both structural anomalies (which bypass Fusion and contain a direct `anomaly_type`) and Fused incidents (which require the Triage Agent to derive the type from `contributing_models`). 
+- **Layer 2 to Layer 3:** The Policy Agent is the sole publisher to Layer 3, guaranteeing a strictly validated and safety-checked JSON payload to either `auto.execute` or `hitl.queue`.
 
----
-
-## 5. Timestamp Semantics
-
-Three distinct timestamps are tracked throughout the pipeline:
-
-| Timestamp | Meaning |
-|-----------|---------|
-| `timestamp` | Original synthetic event time |
-| `ingestion_time` | Actual pipeline entry time during replay |
-| `triage_timestamp` | Time at which the Triage Agent processed the event |
-
-**Mean Time to Acknowledge (MTTA)** and **Mean Time to Resolution (MTTR)** are defined as control-plane latencies:
-
-- **MTTA** = `policy_timestamp` − `triage_timestamp`
-- **MTTR** = `outcome_feedback_time` − `triage_timestamp`
-
-These metrics capture AI reasoning and routing latency independently of queue backlog effects.
-
----
-
-## 6. Logs
-
-The following files are written to `layer2/logs/`:
-
-| File | Written By | Content |
-|------|-----------|---------|
-| `triage_agent.jsonl` | Triage Agent | Event ID, anomaly type, severity, protocol, RAG documents, latency |
-| `strategy_agent.jsonl` | Strategy Agent | Event ID, JSON validity, schema validity, issues, latency, tokens/second |
-| `policy_agent.jsonl` | Policy Agent | Event ID, decision, reason, threshold, latency |
-| `learning_agent.jsonl` | Learning Agent | Event ID, outcome type, summary, latency |
-| `parse_error.jsonl` | Strategy Agent | Raw LLM output recorded upon JSON parsing failure |
-
-**Note:** The `logs/` directory contains runtime data and is excluded from version control (Git). It should be cleared prior to each clean evaluation run.
-
----
-
-## 7. Configuration
-
-- `config/threshold_config.json` — EMA-based confidence threshold applied by the Policy Agent; updated automatically by the Learning Agent.
-- `prompts/strategy_system_prompt.txt` — System prompt for qwen3:1.7b.
-- `prompts/learning_system_prompt.txt` — System prompt for qwen3:0.6b.
-- `.env` — Configuration parameters for RabbitMQ, Ollama, and model settings.
-
----
-
-## 8. Setup & Usage
-
-For detailed setup instructions, startup sequencing, verification procedures, and troubleshooting guidance, refer to the **[Layer 2 User Guide](User_Guide.md)**.
-
-For the complete build history and architectural decision record, refer to the **[Layer 2 Component Build Log](docs/layer2_component_log.md)**.
+For precise implementation details, message schemas, and historical logs, consult the **[Layer 2 Component Log](docs/layer2_component_log.md)**.

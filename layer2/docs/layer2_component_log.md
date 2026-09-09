@@ -1,325 +1,173 @@
-# Layer 2 — Component-by-Component Build Log
-
-**Project:** Distributed Multi-Agent Coordination for Self-Healing Data Pipelines
-**Layer:** Layer 2 — AI Control Plane (Node 2, `ai-brain-node`)
-**Purpose:** A single, continuously maintained record documenting the implementation of each Layer 2 component.
-**Format:** Follows the conventions established in the Layer 1 Component Build Log.
-
-> **Final evaluation note:** This document has been updated following the final gapped run.
-> The pipeline was executed across multiple sessions with intervening gaps.
-> Consequently, **Prometheus counters reset upon restart** and cannot be treated as reliable cumulative totals.
-> The final figures presented below are **reconstructed from persistent data** (SQLite, ChromaDB, detector files) unless explicitly identified as live-metric values.
-
-> **Logging update:** All agents now write **append-only JSONL logs** to `layer2/logs/`.
-> This enables accurate cumulative counts even when the pipeline is executed across multiple sessions.
-> See Section 7 for further detail.
-
----
-
-## 1. Triage Agent
-
-**Files:** `agents/triage_agent.py`, `chromadb_utils/query.py`, `chromadb_utils/client.py`, `rabbitmq/connection.py`, `utils/file_logger.py`
-**Status:** ✅ **v1.2 — Rule-based classification with ChromaDB RAG integration and persistent logging.**
-
-### 1.0 Environment Prerequisites (Verified)
-
-- `ai-brain-node` is SSH-accessible, with the virtual environment auto-activating.
-- Ollama is running with `qwen3:1.7b` (1.4 GB) and `qwen3:0.6b` (522 MB).
-- The ChromaDB collection `incident_history` exists.
-- RabbitMQ connectivity to `stream-node:5672` is established.
-- **Fix applied:** `chromadb_utils/client.py` was modified to include offline mode and an absolute `chromadb_data` path.
-
-### 1.1 Files Built / Modified
-
-| File | Action | Purpose |
-|---|---|---|
-| `rabbitmq/connection.py` | Replaced stub | Provides `get_connection()` and `publish()` helper functions |
-| `chromadb_utils/client.py` | Added offline mode + absolute path | Prevents HuggingFace hang and avoids stray data directories |
-| `chromadb_utils/query.py` | Built from stub | Implements three-step RAG retrieval |
-| `agents/triage_agent.py` | Built from stub, with logging added | Performs classification and RAG retrieval; publishes `triage.result`; writes `triage_agent.jsonl` |
-| `utils/file_logger.py` | New shared logger | Provides append-only JSONL logging for all agents |
-
-### 1.2 Classification Logic
-
-```mermaid
-flowchart TD
-    A[anomaly.detected queue] --> B[Receive event]
-    B --> C{Has anomaly_type?}
-    C -- No Fusion Engine --> D["_normalize_event: derive type<br/>from contributing_models,<br/>severity from fused_severity"]
-    C -- Yes Validator bypass --> E[Use fields as-is]
-    D --> F[Classify: PROTOCOL_TABLE lookup]
-    E --> F
-    F --> G[Query ChromaDB: retrieve_rag_context]
-    G --> H{Cold start?}
-    H -- Yes, less than 3 docs --> I[RAG context empty]
-    H -- No --> J[Format top-3 incidents]
-    I --> K[Build triage.result payload]
-    J --> K
-    K --> L[Publish to triage.result queue]
-    L --> M[Append to triage_agent.jsonl]
-```
-
-- **Lookup table:** `(anomaly_type, severity) → response_protocol` (18 entries).
-- **Fallback sequence:** exact match → `(anomaly_type, HIGH)` → `GENERIC_INVESTIGATE`.
-- **Fused event normalization:** derives `anomaly_type` from `contributing_models` and applies `fused_severity`.
-
-### 1.3 RAG Retrieval
-
-- Queries the ChromaDB `incident_history` collection.
-- Retrieves the top five results by similarity, applies a positive-outcome filter and a risk-tier balance check, and returns up to three examples.
-- On cold start (0 documents), returns an empty list (`[]`).
-
-### 1.4 Final-Run Results (Previous Gapped Run)
-
-- **Total events processed: 632**
-  Reconstructed from downstream Policy decisions.
-  Consistent with `532 fused + 100 validator-bypass = 632`.
-- **Validator-bypass events:** 100 schema-drift events classified as `HALT_INGESTION_REVIEW_SCHEMA` or `FLAG_FOR_SCHEMA_REVIEW`.
-- **Fused events:** 532 classified using derived anomaly types.
-- **RAG context:** ChromaDB was initially empty and accumulated 632 documents by the end of the run.
-
-### 1.5 Open Items
-
-- [ ] The impact of RAG on risk-tier classification accuracy (H1) has not been formally measured within this gapped run.
-- [ ] The count of fused/compound events is low; a corpus update may be warranted to capture more compound incidents.
-
----
-
-## 2. Strategy Agent
-
-**Files:** `ollama/client.py`, `agents/schema_validator.py`, `agents/strategy_agent.py`, `utils/file_logger.py`
-**Status:** ✅ **v1.2 — qwen3:1.7b via Ollama, seven-field schema validation, 35-second timeout, robust JSON extraction, persistent logging.**
-
-### 2.1 Files Built
-
-| File | Action | Purpose |
-|---|---|---|
-| `ollama/client.py` | Replaced stub | Provides an Ollama HTTP wrapper |
-| `agents/schema_validator.py` | Replaced stub | Performs seven-field JSON validation |
-| `agents/strategy_agent.py` | Replaced stub; added logging and JSON extraction | Consumes `triage.result`, invokes the LLM, publishes `strategy.result`, and logs outcomes |
-| `utils/file_logger.py` | New shared logger | Provides append-only JSONL logging |
-
-### 2.2 Flow
-
-```mermaid
-flowchart TD
-    A[triage.result queue] --> B[Receive triage message]
-    B --> C["Build prompt:<br/>anomaly_type, severity, component,<br/>protocol, RAG context"]
-    C --> D["Call qwen3:1.7b via Ollama<br/>timeout=35s, num_predict=512"]
-    D --> E{Response?}
-    E -- Timeout --> F["timed_out=true<br/>issues=llm_timeout"]
-    E -- Response received --> G[Robust JSON extraction]
-    G -- Valid JSON --> H[Validate 7-field schema]
-    G -- JSON parse error --> I["valid_json=false<br/>issues=json_parse_failed<br/>raw saved to parse_error.jsonl"]
-    H -- Schema valid --> J[schema_valid=true]
-    H -- Schema invalid --> K["schema_valid=false<br/>log issues"]
-    F --> L[Assemble strategy.result payload]
-    I --> L
-    J --> L
-    K --> L
-    L --> M[Publish to strategy.result queue]
-    M --> N[Append to strategy_agent.jsonl]
-```
-
-### 2.3 Key Design Decisions
-
-- The system prompt is loaded from `prompts/strategy_system_prompt.txt`.
-- Timeout is set to `35 seconds` (increased from 30 s in v1.0).
-- `num_predict=512`, adopted from the Phase 0 fix.
-- **Robust JSON extraction** strips markdown code fences and extracts the first `{...}` object.
-- On parse failure, the raw response is saved to `logs/parse_error.jsonl`.
-- Prometheus metrics are exposed on port 8011.
-
-### 2.4 Final-Run Results (Previous Gapped Run)
-
-- **Total strategy requests processed: 632** (matching Triage Agent output).
-- **Timeouts routed to HITL:** 4
-- **Parse errors routed to HITL:** 83
-- `valid_json == False` accounted for 4 + 83 = 87 events.
-- The remaining `545` events contained valid JSON and were evaluated by the schema validator.
-- **Exact schema_valid/invalid totals could not be recovered** from persistent data due to the Prometheus counter reset.
-- **Risk-tier distribution (from the decisions table):** HIGH: 409, LOW: 133, MEDIUM: 1, MISSING: 89.
-- **Confidence scores:** minimum 0.00, maximum 0.98, average 0.70.
-
-### 2.5 Known Issues
-
-- **Gapped execution invalidated live Prometheus metrics.**
-- **RAG context** was available only for later events in the run.
-- A **single continuous run** is required to establish a definitive schema-valid rate.
-- Parse errors are expected to decrease once robust JSON extraction is applied in the subsequent run.
-
----
-
-## 3. Policy Agent
-
-**Files:** `agents/policy_agent.py`, `utils/file_logger.py`
-**Status:** ✅ **v1.2 — Five-rule routing table, threshold-aware, MTTA computed from `triage_timestamp`, persistent logging.**
-
-### 3.1 Flow
-
-```mermaid
-flowchart TD
-    A[strategy.result queue] --> B[Receive strategy message]
-    B --> C["Load threshold from<br/>config/threshold_config.json"]
-    C --> D["Extract: timed_out, valid_json,<br/>risk_tier, confidence, fusion_type"]
-    D --> E{timed_out<br/>or not valid_json?}
-    E -- Yes --> F["HITL: TIMEOUT<br/>or PARSE_ERROR"]
-    E -- No --> G{fusion_type<br/>== low_confidence?}
-    G -- Yes --> H["HITL: FUSION_LOW_CONFIDENCE"]
-    G -- No --> I{risk_tier == HIGH?}
-    I -- Yes --> J["HITL: HIGH_RISK"]
-    I -- No --> K{confidence < threshold?}
-    K -- Yes --> L["HITL: LOW_CONFIDENCE"]
-    K -- No --> M["AUTO: LOW_RISK_HIGH_CONFIDENCE"]
-    F --> N[Publish to hitl.queue or auto.execute]
-    H --> N
-    J --> N
-    L --> N
-    M --> N
-    N --> O[Append to policy_agent.jsonl]
-```
-
-### 3.2 Key Design Decisions
-
-- Routing is deterministic, with sub-millisecond latency.
-- The threshold is loaded from disk on every message.
-- Hard bounds are set at `[0.60, 0.90]`.
-- The MTTA histogram measures the interval `triage_timestamp → policy_timestamp`.
-- Prometheus metrics are exposed on port 8012.
-
-### 3.3 Final-Run Results (Previous Gapped Run)
-
-- **Total routed: 632**
-- **AUTO routed:** 99 (15.7%)
-- **HITL routed:** 533 (84.3%)
-
-| Routing Reason | Count |
-|----------------|-------|
-| HIGH_RISK | 411 |
-| LOW_RISK_HIGH_CONFIDENCE | 99 |
-| PARSE_ERROR | 83 |
-| LOW_CONFIDENCE | 35 |
-| TIMEOUT | 4 |
-
-- **Policy latency:** ≤2 ms.
-- **Threshold values during the run:** started at 0.65, ended at 0.7108.
-
-### 3.4 Interpretation
-
-- The high HITL rate is driven predominantly by HIGH_RISK classifications (411 of 632).
-- PARSE_ERROR (83) is the second-largest contributor; TIMEOUT is negligible (4) following the timeout increase.
-- Auto-execution succeeded for all 99 routed events.
-
----
-
-## 4. Learning Agent
-
-**Files:** `chromadb_utils/upsert.py`, `agents/learning_agent.py`, `utils/file_logger.py`
-**Status:** ✅ **v1.2 — qwen3:0.6b summarisation, ChromaDB upsert, EMA threshold update, MTTR computed from `triage_timestamp`, persistent logging.**
-
-### 4.1 Files Built
-
-| File | Action | Purpose |
-|---|---|---|
-| `chromadb_utils/upsert.py` | Replaced stub | Upserts incident summaries into ChromaDB |
-| `agents/learning_agent.py` | Replaced stub, with logging added | Consumes `outcome.feedback`, invokes qwen3:0.6b, updates ChromaDB and the EMA threshold, and logs outcomes |
-| `utils/file_logger.py` | New shared logger | Provides append-only JSONL logging |
-
-### 4.2 Flow
-
-```mermaid
-flowchart TD
-    A[outcome.feedback queue] --> B[Receive outcome message]
-    B --> C[Build summary prompt<br/>from incident + outcome]
-    C --> D[Call qwen3:0.6b via Ollama<br/>timeout=10s, num_predict=256]
-    D --> E{LLM response?}
-    E -- Success --> F[Extract summary sentence]
-    E -- Timeout/Error --> G[Use fallback summary]
-    F --> H[Build ChromaDB metadata<br/>including negative_example flag]
-    G --> H
-    H --> I[upsert_incident to ChromaDB]
-    I --> J["Update EMA threshold<br/>α=0.9, bounds [0.60, 0.90]"]
-    J --> K[Acknowledge message]
-    K --> L[Append to learning_agent.jsonl]
-```
-
-### 4.3 Key Design Decisions
-
-- The agent has zero impact on the main pipeline.
-- `qwen3:0.6b` is used for lightweight summarisation.
-- A fallback summary is applied if the LLM call fails.
-- The EMA formula is: `new = α × old + (1 − α) × signal`.
-- Prometheus metrics are exposed on port 8013.
-
-### 4.4 Final-Run Results (Previous Gapped Run)
-
-- **Outcomes processed:** 632
-  - `AUTO_EXECUTE_SUCCESS`: 99
-  - `HITL_APPROVED`: 448
-  - `HITL_REJECTED`: 85
-- **ChromaDB documents after run:** 632
-- **EMA threshold:** initial 0.65, final 0.7108, across 632 updates.
-
-### 4.5 Open Items
-
-- [ ] EMA convergence (OQ6) has not yet been plotted across a continuous run.
-- [ ] Summarisation quality (OQ5) has not been formally scored.
-- [ ] Negative examples are stored but not yet used to refine RAG retrieval beyond the positive-outcome filter.
-
----
-
-## 5. Control-Plane Latency (CPL)
-
-**Status:** ⚠️ **Not measurable from the previous gapped run.**
-
-- A filtered query for contiguous HITL events (`triage → strategy ≤ 60 s`) returned zero samples.
-- Because the pipeline was stopped and restarted across sessions, triage and strategy timestamps were frequently separated by hours.
-- The average CPL computed from raw persisted payloads (`~82,845 s`) is therefore invalid.
-
-**Required action:**
-The pipeline must be run **continuously**, from `anomaly.detected` through `outcome.feedback`, to capture valid CPL, MTTA, and MTTR figures. The newly added file logs will support this even in the presence of minor gaps.
-
----
-
-## 6. Final Data Summary (Reconstructed from Persistent Data, Previous Gapped Run)
-
-| Metric | Value |
-|--------|-------|
-| Detector result rows per detector | 1,527 each |
-| Detector anomalies (sum) | 643 |
-| Fusion published | 532 |
-| Validator bypass | 100 |
-| Total `anomaly.detected` events | 632 |
-| Total Policy decisions | 632 |
-| AUTO routed | 99 |
-| HITL routed | 533 |
-| HITL APPROVED | 448 |
-| HITL REJECTED | 85 |
-| Auto-Executor successes | 99 |
-| ChromaDB documents | 632 |
-| EMA threshold (final) | 0.7108 |
-| EMA updates | 632 |
-| Control-Plane Latency | ❌ Unavailable |
-
----
-
-## 7. Persistent Logging (Added After Previous Run)
-
-All four agents now write append-only JSONL logs via `utils/file_logger.py`, ensuring that results remain recoverable across restarts and multiple sessions.
-
-| Log File | Written By | Content |
-|----------|-----------|---------|
-| `triage_agent.jsonl` | Triage Agent | Event ID, anomaly type, severity, protocol, RAG documents, latency (ms) |
-| `strategy_agent.jsonl` | Strategy Agent | Event ID, JSON validity, schema validity, issues, latency (ms), tokens/second, timeout status |
-| `policy_agent.jsonl` | Policy Agent | Event ID, decision, reason, threshold used, latency (ms) |
-| `learning_agent.jsonl` | Learning Agent | Event ID, outcome type, summary, latency (ms) |
-| `parse_error.jsonl` | Strategy Agent | Raw LLM response recorded upon JSON parsing failure |
-
-**Log directory:** `layer2/logs/` (excluded from version control; cleared before each fresh run).
-
-With these logs in place, future runs — whether continuous or gapped — will preserve cumulative agent-level counts and support precise post-run analysis.
-
----
-
-> **Prepared following the final gapped run and subsequent logging enhancements.**
-> A **single, uninterrupted evaluation run** remains necessary to obtain citable latency metrics; however, all cumulative counts are now independently recoverable from the persistent file logs.
+# Layer 2 Component Log
+
+## 1. Purpose
+This document serves as the technical implementation record of Layer 2 — the AI Control Plane. It strictly documents what is actually implemented in the codebase today, prioritizing source code and configuration reality over intended architecture or design goals.
+
+## 2. Layer 2 Scope
+Layer 2 functions as the asynchronous AI Control Plane of the self-healing pipeline. It consumes anomalies detected by Layer 1, retrieves historical context, formulates JSON-structured remediation strategies using a local LLM, and enforces deterministic policy rules to route the incident for either automatic execution or human-in-the-loop (HITL) review. It operates completely independently of Layer 1.
+
+## 3. Physical Deployment
+- **Node:** Node 2 (`ai-brain-node`).
+- **Hardware:** CPU-only execution (AMD Ryzen 5, 8 GB RAM). No GPU or CUDA requirements.
+- **OS:** Ubuntu 24.04 Server (headless).
+- **Core Services:** Local Ollama inference server (`http://localhost:11434`), ChromaDB.
+
+## 4. Layer 2 Architecture
+Layer 2 consists of four distinct agents communicating via RabbitMQ. 
+The architecture enforces a strict boundary between reasoning and policy:
+- **Triage (Rule-based)** normalizes and classifies incoming events.
+- **Strategy (LLM-based)** proposes remediation strategies.
+- **Policy (Rule-based)** enforces safety boundaries and decides execution authority.
+- **Learning (LLM/Math)** updates the memory and thresholds based on outcomes.
+
+## 5. Agent Components
+
+### 5.1 Triage Agent
+- **Purpose:** Normalizes incoming Layer 1 anomalies, applies deterministic rule-based classification, and retrieves RAG context from ChromaDB. **It is NOT an LLM agent.**
+- **File:** `agents/triage_agent.py`
+- **Input:** `anomaly.detected` queue.
+- **Output:** `triage.result` queue.
+- **Processing Logic:** Uses a hardcoded `PROTOCOL_TABLE` to map `(anomaly_type, severity)` to a `response_protocol`. It also derives `anomaly_type` from `contributing_models` for fused events.
+- **RAG Usage:** Queries ChromaDB for up to 3 similar incidents with positive outcomes to provide historical context.
+
+### 5.2 Strategy Agent
+- **Purpose:** Ollama-backed reasoning component that generates a structured JSON remediation plan.
+- **File:** `agents/strategy_agent.py`
+- **Input:** `triage.result` queue.
+- **Output:** `strategy.result` queue.
+- **Model:** `qwen3:1.7b` via local Ollama.
+- **Processing Logic:** Compiles a prompt using the original event, Triage response protocol, and RAG context. Generates a response and extracts the JSON object (stripping markdown).
+- **Validation:** Enforces a strict 7-field JSON schema.
+- **Fallback:** On JSON extraction failure or LLM timeout, sets `valid_json=False` or `timed_out=True`, which the Policy Agent will subsequently route to HITL.
+
+### 5.3 Policy Agent
+- **Purpose:** Deterministic policy enforcement component. **It does NOT use an LLM.**
+- **File:** `agents/policy_agent.py`
+- **Input:** `strategy.result` queue.
+- **Output:** `auto.execute` or `hitl.queue` queue.
+- **Processing Logic:** Uses a 5-rule deterministic routing table:
+  1. Timeout or parse error → HITL
+  2. Fusion Engine low confidence → HITL
+  3. Risk tier HIGH → HITL
+  4. Confidence < Threshold → HITL
+  5. Low risk, high confidence → AUTO
+
+### 5.4 Learning Agent
+- **Purpose:** Summarizes resolved incidents, upserts them to ChromaDB, and mathematically updates the confidence threshold.
+- **File:** `agents/learning_agent.py`
+- **Physical Location:** Runs on Node 2 (`ai-brain-node`), alongside other Layer 2 agents.
+- **Input:** `outcome.feedback` queue (from Layer 3).
+- **Model:** `qwen3:0.6b` via local Ollama.
+- **Processing Logic:** Generates a one-sentence incident summary. Upserts the summary and incident metadata to ChromaDB. 
+- **Learning Mechanism:** Updates the `confidence_threshold` via an Exponential Moving Average (EMA, α=0.9) mathematically based on the outcome type. No formal LLM model fine-tuning or weight updating occurs. 
+
+## 6. Agent Communication
+All agents communicate entirely asynchronously via the `fyp.events` exchange on the Node 1 RabbitMQ broker. Agents consume messages, process them, and publish to the next queue without direct agent-to-agent synchronous calls.
+
+## 7. RabbitMQ Topology
+
+| Exchange | Type | Queue | Routing Key | Producer | Consumer |
+| -------- | ---- | ----- | ----------- | -------- | -------- |
+| `fyp.events` | `topic` | `anomaly.detected` | `anomaly.#` | Layer 1 | Triage Agent |
+| `fyp.events` | `topic` | `triage.result` | `triage.result` | Triage Agent | Strategy Agent |
+| `fyp.events` | `topic` | `strategy.result` | `strategy.result` | Strategy Agent | Policy Agent |
+| `fyp.events` | `topic` | `hitl.queue` | `hitl.queue` | Policy Agent | Layer 3 |
+| `fyp.events` | `topic` | `auto.execute` | `auto.execute` | Policy Agent | Layer 3 |
+| `fyp.events` | `topic` | `outcome.feedback` | `outcome.feedback` | Layer 3 | Learning Agent |
+
+## 8. Message Contracts
+
+### Layer 1 → Triage (`anomaly.detected`)
+- **Required fields:** `event_id`, `timestamp`
+- Layer 2 receives two distinct structures here:
+  - **Structural Schema Anomalies:** Have `anomaly_type="schema_drift"` and `severity`.
+  - **Fused Incidents:** Lack `anomaly_type` directly; use `contributing_models` and `fused_severity`.
+
+### Triage → Strategy (`triage.result`)
+- **Required fields:** `event_id`, `triage_timestamp`, `response_protocol`, `original_event`.
+- **Optional/Generated:** `rag_context`, `rag_context_formatted`, `triage_agent_latency_ms`.
+
+### Strategy → Policy (`strategy.result`)
+- **Required fields:** `event_id`, `strategy_timestamp`, `valid_json`, `schema_valid`, `timed_out`, `triage_result`.
+- **Schema Output:** `llm_response` (containing 7 required fields: `anomaly_type`, `severity`, `affected_component`, `recommended_actions`, `confidence`, `risk_tier`, `reasoning`).
+
+## 9. LLM Integration
+| Component | LLM | Model | Provider | ChromaDB/RAG | Purpose |
+| --------- | --- | ----- | -------- | ------------ | ------- |
+| Triage | No | N/A | N/A | Retrieval | Searches historical context to calibrate risk tier. |
+| Strategy | Yes | `qwen3:1.7b` | Ollama (Local) | None | Generates JSON remediation plan. |
+| Policy | No | N/A | N/A | None | Deterministic routing rules. |
+| Learning | Yes | `qwen3:0.6b` | Ollama (Local) | Persistence | Summarizes incident for long-term ChromaDB storage. |
+
+## 10. Ollama Configuration
+- **Host:** `http://localhost:11434`
+- **Execution:** CPU-only.
+- **Strategy Agent:** `qwen3:1.7b`, timeout 35s, `num_predict=512`.
+- **Learning Agent:** `qwen3:0.6b`, timeout 10s, `num_predict=256`.
+
+## 11. ChromaDB / Historical Memory
+- **Collection Name:** `incident_history`
+- **Embedding:** `all-MiniLM-L6-v2` (SentenceTransformers)
+- **Retrieval:** Triage Agent retrieves up to 3 documents filtering only for positive outcomes (`AUTO_EXECUTE_SUCCESS` or `HITL_APPROVED`) to inject into the Strategy prompt.
+- **Persistence:** Learning Agent upserts resolved incidents. Negative examples are stored (with `negative_example=True`) but are excluded from RAG retrieval.
+
+## 12. Decision Flow
+1. **Layer 1** detects an anomaly.
+2. **Triage Agent** assigns a baseline protocol and fetches historical RAG context.
+3. **Strategy Agent** (LLM) evaluates context and outputs a confident score and a risk tier.
+4. **Policy Agent** acts as a hard boundary. If Strategy's confidence is too low or risk tier is too high, it overrides and routes to HITL. Otherwise, it routes to AUTO.
+
+## 13. Policy and Safety Boundaries
+The LLM does **not** have unconstrained authority to execute actions. 
+- Strategy **proposes** a remediation strategy and calculates a confidence score.
+- Policy **enforces** safety. It strictly blocks `HIGH` risk tier actions and low-confidence proposals from auto-execution. 
+- All JSON schema parse failures or timeouts are deterministically routed to HITL.
+
+## 14. Error Handling
+- **Missing Layer 1 Fields:** Triage Agent's `_normalize_event()` explicitly maps missing `anomaly_type` fields from `contributing_models` for fused incidents.
+- **LLM Parse Failure:** Strategy Agent sets `valid_json=False`, saves raw text to `parse_error.jsonl`.
+- **RAG Failure:** Triage Agent uses an empty list `[]` and proceeds.
+- **Learning LLM Failure:** Learning Agent uses a hardcoded fallback string.
+- **Missing Timestamps:** Policy/Learning Agents increment a `fyp_timestamp_missing_total` Prometheus counter and skip MTTA/MTTR calculations.
+
+## 15. Retry / Failure Behavior
+- RabbitMQ failures are handled via `basic_nack(requeue=False)` when an unhandled exception occurs inside the agent, effectively dropping or dead-lettering the message to prevent infinite loops.
+- There are no LLM internal retry loops. A failed LLM generation results in a `TIMEOUT` or `PARSE_ERROR` route to Layer 3.
+
+## 16. Metrics and Observability
+All agents export Prometheus metrics:
+- **Triage (8010):** `fyp_triage_latency_s`, `fyp_triage_processed_total`
+- **Strategy (8011):** `fyp_strategy_latency_s`, `fyp_strategy_schema_valid_total`, `fyp_strategy_tokens_per_s`
+- **Policy (8012):** `fyp_policy_latency_s`, `fyp_routing_decision_total`, `fyp_mtta_seconds`
+- **Learning (8013):** `fyp_learning_outcomes_total`, `fyp_learning_threshold_updates_total`, `fyp_mttr_seconds`
+
+**Logging:** All agents use append-only JSONL files in `layer2/logs/` (`triage_agent.jsonl`, `strategy_agent.jsonl`, `policy_agent.jsonl`, `learning_agent.jsonl`, `parse_error.jsonl`).
+
+## 17. Evaluation and Research Metrics
+- **Control Plane Latency (CPL):** Defined as `triage_timestamp` to `policy_timestamp`. Documented target `< 30s`.
+- **MTTA:** Measured in Policy Agent as `policy_timestamp - triage_timestamp`. Note: This is an AI control-plane acknowledgement latency, not human MTTA.
+- **MTTR:** Measured in Learning Agent as `outcome_time - triage_timestamp`. Note: This is a decision-to-outcome latency, not infrastructure recovery time.
+- **Schema Validity Rate (SVR):** Tracked dynamically by Strategy Agent.
+- **Model Benchmark Distinction:** The Phase 0 Offline Benchmark demonstrated `qwen3:1.7b` achieving ~90% schema-valid outputs on 30 strict adversarial prompts. This is a **model-level benchmark** and is explicitly distinct from the runtime system SVR target (≥95%).
+- **Learning Evaluation:** Formal quantitative Learning Agent quality/accuracy evaluation was **not found in the inspected repository**. Learning is currently an observable implementation of threshold Math updates and ChromaDB writes.
+
+## 18. Known Implementation Limitations
+- Formal Learning Agent quantitative accuracy evaluation is missing.
+- Risk Tier Accuracy comparison against a ground truth dataset is not implemented in code.
+- Continuous end-to-end runs are required to establish an accurate runtime CPL and SVR; previous gapped runs invalidated Prometheus counters.
+
+## 19. Hardcoded Configuration / Deployment Limitations
+- **ChromaDB Path:** `chromadb_utils/client.py` uses an absolute/relative path combo that assumes the current working directory structure.
+- **RabbitMQ Host:** `layer2/rabbitmq/connection.py` hardcodes the default host to `stream-node`.
+- **Ollama Host:** `layer2/ollama/client.py` hardcodes `localhost:11434`.
+- **Deployment:** The Node 2 IP `192.168.18.102` is statically tied to the Layer 2 documentation context.
+
+## 20. Cross-Layer Contracts
+- **Layer 1 to Layer 2:** 
+  - Structural schema drift events arrive with `anomaly_type="schema_drift"`.
+  - Fused events arrive **without** an `anomaly_type`. Triage Agent bridges this contract by dynamically parsing `contributing_models` to establish a classification.
+- **Layer 2 to Layer 3:**
+  - Policy Agent guarantees a strict, schema-validated route decision out to `auto.execute` or `hitl.queue`.
+
+## 21. Current Implementation Status
+The implementation reflects an asynchronous multi-agent system where a rule-based Triage Agent fetches RAG context, an LLM Strategy Agent generates JSON, and a deterministic Policy Agent enforces routing boundaries.
