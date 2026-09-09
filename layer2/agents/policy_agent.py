@@ -1,5 +1,6 @@
 """Policy Agent — Deterministic 5-rule routing table."""
 import json
+import math
 import time
 import sys
 import os
@@ -13,6 +14,7 @@ from prometheus_client import Counter, Histogram, start_http_server
 
 from rabbitmq.connection import get_connection, publish
 from utils.file_logger import append_log
+from evaluation.artifacts import record as record_evaluation
 
 log = structlog.get_logger()
 
@@ -33,6 +35,19 @@ start_http_server(8012)
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 THRESHOLD_PATH = BASE_DIR / "config" / "threshold_config.json"
+
+# Symbolic remediation identifiers already used by Triage's protocol table.
+# Auto Executor currently simulates these identifiers; Policy must not pass
+# arbitrary LLM prose to a future real executor.
+ALLOWED_ACTIONS = {
+    "EMERGENCY_RESTART_CONSUMER", "SCALE_CONSUMER_RESOURCES",
+    "MONITOR_AND_ALERT", "LOG_AND_CONTINUE", "CIRCUIT_BREAKER_OPEN",
+    "RATE_LIMIT_ENDPOINT", "INVESTIGATE_UPSTREAM", "RESTART_ALL_CONSUMERS",
+    "RESTART_FAILED_CONSUMER", "CHECK_QUEUE_DEPTH", "ISOLATE_NODE",
+    "RATE_LIMIT_AUTH", "ALERT_SECURITY_TEAM", "HALT_INGESTION_REVIEW_SCHEMA",
+    "FLAG_FOR_SCHEMA_REVIEW", "EMERGENCY_FULL_PIPELINE_REVIEW",
+    "COORDINATED_REMEDIATION", "GENERIC_INVESTIGATE",
+}
 
 
 def load_threshold() -> float:
@@ -57,28 +72,39 @@ class PolicyAgent:
         llm = strategy.get("llm_response", {})
         timed = strategy.get("timed_out", False)
         valid = strategy.get("valid_json", False)
+        schema_valid = strategy.get("schema_valid", False)
         f_type = triage.get("original_event", {}).get("fusion_type", "")
-        tier = llm.get("risk_tier", "HIGH")
-        conf = float(llm.get("confidence", 0.0))
+        tier = llm.get("risk_tier")
+        confidence = llm.get("confidence")
+        actions = llm.get("recommended_actions")
 
         # Rule 1 — Timeout or parse error
-        if timed or not valid:
-            reason = "TIMEOUT" if timed else "PARSE_ERROR"
-            return "HITL", reason, "hitl.queue"
+        if timed:
+            return "HITL", "TIMEOUT", "hitl.queue"
+        if not valid:
+            return "HITL", "PARSE_ERROR", "hitl.queue"
+        if schema_valid is not True:
+            return "HITL", "SCHEMA_INVALID", "hitl.queue"
+        if tier not in {"LOW", "HIGH"}:
+            return "HITL", "INVALID_RISK_TIER", "hitl.queue"
+        if not isinstance(confidence, (int, float)) or isinstance(confidence, bool):
+            return "HITL", "INVALID_CONFIDENCE", "hitl.queue"
+        conf = float(confidence)
+        if not math.isfinite(conf) or not 0.0 <= conf <= 1.0:
+            return "HITL", "INVALID_CONFIDENCE", "hitl.queue"
+        if not isinstance(actions, list) or len(actions) != 3 or any(
+            not isinstance(action, str) or action not in ALLOWED_ACTIONS for action in actions
+        ):
+            return "HITL", "UNSUPPORTED_ACTION", "hitl.queue"
 
-        # Rule 2 — Fusion Engine low confidence (v1.2)
+        # Retained for compatibility with historical Fusion payloads.
         if f_type == "low_confidence":
             return "HITL", "FUSION_LOW_CONFIDENCE", "hitl.queue"
 
-        # Rule 3 — High risk tier
         if tier == "HIGH":
             return "HITL", "HIGH_RISK", "hitl.queue"
-
-        # Rule 4 — Low risk but uncertain
         if conf < threshold:
             return "HITL", "LOW_CONFIDENCE", "hitl.queue"
-
-        # Rule 5 — Safe for automatic execution
         return "AUTO", "LOW_RISK_HIGH_CONFIDENCE", "auto.execute"
 
     def on_message(self, ch, method, props, body):
@@ -128,6 +154,22 @@ class PolicyAgent:
                     "strategy_result": strategy,
                 },
             }
+            triage_latency_s = (strategy.get("triage_result", {}).get("triage_agent_latency_ms") or 0) / 1000.0
+            control_plane_latency_s = None
+            try:
+                control_plane_latency_s = (datetime.now(timezone.utc) - datetime.fromisoformat(strategy["triage_result"]["triage_timestamp"])).total_seconds()
+            except Exception:
+                pass
+            record_evaluation("policy", {
+                "event_id": event_id,
+                "routing_decision": decision,
+                "routing_reason": reason,
+                "destination_queue": target_queue,
+                "policy_timestamp": result["policy_timestamp"],
+                "policy_latency_s": result["policy_agent_latency_ms"] / 1000.0,
+                "triage_latency_s": triage_latency_s,
+                "control_plane_latency_s": control_plane_latency_s,
+            })
 
             # ---- File-based persistent log ----
             append_log("policy_agent.jsonl", {

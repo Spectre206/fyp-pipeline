@@ -13,6 +13,7 @@ from prometheus_client import Counter, Histogram, start_http_server
 from rabbitmq.connection import get_connection, publish
 from chromadb_utils.query import retrieve_rag_context, format_rag_context
 from utils.file_logger import append_log
+from evaluation.artifacts import record as record_evaluation
 
 log = structlog.get_logger()
 
@@ -51,6 +52,9 @@ MODEL_TO_TYPE = {
     "z_score_cpu_memory":        "cpu_memory_spike",
     "z_score_error_rate":        "error_rate_surge",
     "moving_average_throughput": "throughput_drop",
+    "statistical_auth_rate":     "auth_failure_flood",
+    "distribution_shift_marker": "schema_drift",
+    # Historical Layer 1 aliases retained for replay/backfill compatibility.
     "rate_gate_auth_rf":         "auth_failure_flood",
     "psi_detector":              "schema_drift",
 }
@@ -140,6 +144,15 @@ class TriageAgent:
                 "triage_agent_latency_ms": round((time.monotonic() - t0) * 1000),
                 "original_event":          original_event,
             }
+            record_evaluation("triage", {
+                "event_id": event_id,
+                "anomaly_type": result["anomaly_type"],
+                "source_anomaly_type": original_event.get("anomaly_type"),
+                "severity": result["severity"],
+                "response_protocol": protocol,
+                "triage_timestamp": result["triage_timestamp"],
+                "triage_latency_s": result["triage_agent_latency_ms"] / 1000.0,
+            })
 
             # ---- File-based persistent log ----
             append_log("triage_agent.jsonl", {

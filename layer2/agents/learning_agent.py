@@ -3,6 +3,7 @@ import json
 import time
 import sys
 import os
+import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -15,6 +16,7 @@ from rabbitmq.connection import get_connection
 from chromadb_utils.upsert import upsert_incident
 from ollama.client import generate
 from utils.file_logger import append_log
+from evaluation.artifacts import record as record_evaluation
 
 log = structlog.get_logger()
 
@@ -70,7 +72,15 @@ THRESHOLD_GAUGE.set(current_cfg.get("confidence_threshold", 0.65))
 
 
 def save_threshold_config(data: dict):
-    THRESHOLD_PATH.write_text(json.dumps(data, indent=2))
+    THRESHOLD_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(
+        "w", encoding="utf-8", dir=THRESHOLD_PATH.parent, delete=False
+    ) as temporary_file:
+        json.dump(data, temporary_file, indent=2)
+        temporary_file.flush()
+        os.fsync(temporary_file.fileno())
+        temporary_path = temporary_file.name
+    os.replace(temporary_path, THRESHOLD_PATH)
 
 
 def update_ema(outcome_type: str):
@@ -134,6 +144,8 @@ class LearningAgent:
             outcome = json.loads(body)
             event_id = outcome.get("event_id", "unknown")
             outcome_type = outcome.get("outcome_type", "UNKNOWN")
+            feedback_timestamp = datetime.now(timezone.utc).isoformat()
+            feedback_latency_s = None
 
             OUTCOMES_PROCESSED.labels(outcome_type=outcome_type).inc()
 
@@ -155,6 +167,7 @@ class LearningAgent:
                             start_time = start_time.astimezone(timezone.utc)
 
                         mttr = (datetime.now(timezone.utc) - start_time).total_seconds()
+                        feedback_latency_s = mttr
                         MTTR_HISTOGRAM.observe(mttr)
                     except Exception:
                         log.warning("mttr_timestamp_parse_failed", event_id=event_id, ts=ts)
@@ -165,6 +178,15 @@ class LearningAgent:
             except Exception:
                 pass
             # ---------------------------------------
+
+            # This records receipt before best-effort learning work begins.
+            # A separate learning record below captures successful processing.
+            record_evaluation("feedback", {
+                "event_id": event_id,
+                "outcome_type": outcome_type,
+                "feedback_timestamp": feedback_timestamp,
+                "feedback_latency_s": feedback_latency_s,
+            })
 
             # Summarise with qwen3:0.6b
             summary = f"Incident {event_id} - {outcome_type}"
@@ -211,6 +233,13 @@ class LearningAgent:
             CHROMADB_UPSERTS.inc()
 
             update_ema(outcome_type)
+            record_evaluation("learning", {
+                "event_id": event_id,
+                "outcome_type": outcome_type,
+                "learning_latency_s": time.monotonic() - t0,
+                "chromadb_upsert_id": event_id,
+                "threshold_updated": outcome_type in OUTCOME_SIGNALS,
+            })
 
             # ---- File-based persistent log ----
             append_log("learning_agent.jsonl", {
