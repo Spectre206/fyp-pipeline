@@ -1,27 +1,14 @@
-# layer1/adm/detectors/auth_detector.py
-"""
-Auth Failure Flood Detector — Rate-Gate + Random Forest (Model 4)
+"""Statistical Auth Failure Flood Detector.
 
-Consumes enriched events from the detect.auth queue.
-Two-stage detection:
-  1. Rate-gate: auth_failures_per_min > 20 → immediate flag
-  2. Random Forest: loads trained model (auth_rf.pkl), maps event metrics
-     to KDD99 features, and provides secondary confirmation for flagged events.
-
-Always publishes a result to fusion.results (detected=True or False).
-"""
-
-"""
-Auth Failure Flood Detector — Rate-Gate + Random Forest with Prometheus Metrics
+Consumes enriched events from ``detect.auth`` and makes a deterministic decision
+from three Layer 1 signals: the current authentication-failure rate, its rolling
+60-second mean, and its event-to-event rate of change.  No trained model or
+external model artifact participates in the runtime path.
 """
 
 import json
 import logging
 import time
-import os
-from pathlib import Path
-
-import numpy as np
 import pika
 import structlog
 from prometheus_client import Counter, Histogram, start_http_server
@@ -58,20 +45,11 @@ LATENCY = Histogram(
 )
 
 RATE_THRESHOLD = 20.0
+RATE_CHANGE_THRESHOLD = 15.0
 INPUT_QUEUE    = "detect.auth"
 OUTPUT_EXCHANGE = "fyp.events"
 ROUTING_KEY    = "fusion.result"
-MODEL_NAME     = "rate_gate_auth_rf"
-MODEL_PATH     = "/home/asim/fyp-pipeline/layer1/adm/models/auth_rf.pkl"
-
-RF_FEATURES = [
-    "duration", "src_bytes", "dst_bytes",
-    "num_failed_logins", "logged_in", "num_compromised",
-    "root_shell", "su_attempted", "num_root",
-    "count", "srv_count", "serror_rate", "rerror_rate",
-    "same_srv_rate", "dst_host_count", "dst_host_srv_count",
-    "dst_host_serror_rate", "dst_host_rerror_rate",
-]
+MODEL_NAME     = "statistical_auth_rate"
 
 
 class AuthDetector:
@@ -84,28 +62,11 @@ class AuthDetector:
         self.conn = pika.BlockingConnection(params)
         self.ch = self.conn.channel()
 
-        self.rf_model = None
-        if os.path.exists(MODEL_PATH):
-            import joblib
-            self.rf_model = joblib.load(MODEL_PATH)
-            log.info("rf_model_loaded", path=MODEL_PATH)
-        else:
-            log.warning("rf_model_not_found", path=MODEL_PATH)
-
-        log.info("auth_detector_initialised", rate_threshold=RATE_THRESHOLD,
-                 rf_available=self.rf_model is not None)
-
-    def _map_to_rf_features(self, event: dict) -> np.ndarray:
-        mv = event.get("metric_values", {})
-        if not isinstance(mv, dict):
-            return np.zeros(len(RF_FEATURES))
-        feature_map = {
-            "src_bytes": mv.get("src_bytes", 0),
-            "serror_rate": mv.get("error_rate_percent", 0) / 100.0,
-            "num_failed_logins": mv.get("auth_failures_per_min", 0),
-        }
-        features = [float(feature_map.get(name, 0.0)) for name in RF_FEATURES]
-        return np.array(features).reshape(1, -1)
+        log.info(
+            "auth_detector_initialised",
+            rate_threshold=RATE_THRESHOLD,
+            rate_change_threshold=RATE_CHANGE_THRESHOLD,
+        )
 
     def detect(self, event: dict) -> dict:
         start = time.time()
@@ -115,25 +76,36 @@ class AuthDetector:
 
         try:
             fv = event.get("feature_vector", {})
-            auth_rate = fv.get("auth_failures_per_min", 0.0)
+            metrics = event.get("metric_values", {})
+            if not isinstance(fv, dict):
+                fv = {}
+            if not isinstance(metrics, dict):
+                metrics = {}
 
-            detected = auth_rate > RATE_THRESHOLD
-            severity = self._severity(auth_rate) if detected else "N/A"
-            confidence = min(0.95, auth_rate / 100.0) if detected else 0.0
+            # The current raw rate catches an abrupt flood before a rolling
+            # statistic can be diluted by normal observations.  The rolling
+            # mean and rate-of-change retain sensitivity to sustained floods.
+            current_rate = float(metrics.get("auth_failures_per_min", 0.0))
+            rolling_rate = float(fv.get("auth_failures_per_min", 0.0))
+            rate_change = float(fv.get("rate_of_change_auth_failures_per_min", 0.0))
+            detected = (
+                current_rate > RATE_THRESHOLD
+                or rolling_rate > RATE_THRESHOLD
+                or rate_change >= RATE_CHANGE_THRESHOLD
+            )
+            signal_rate = max(current_rate, rolling_rate)
+            severity = self._severity(signal_rate) if detected else "N/A"
+            confidence = self._confidence(current_rate, rolling_rate, rate_change)
 
-            rf_vote = None
-            if detected and self.rf_model is not None:
-                try:
-                    features = self._map_to_rf_features(event)
-                    rf_pred = self.rf_model.predict(features)[0]
-                    rf_proba = self.rf_model.predict_proba(features)[0]
-                    rf_vote = int(rf_pred)
-                    if rf_pred == 1:
-                        confidence = min(0.98, confidence + rf_proba[1] * 0.3)
-                    else:
-                        confidence = max(0.30, confidence - 0.20)
-                except Exception as exc:
-                    log.warning("rf_inference_error", error=str(exc))
+            reasons = []
+            if current_rate > RATE_THRESHOLD:
+                reasons.append(f"current_rate {current_rate:.1f} > {RATE_THRESHOLD}")
+            if rolling_rate > RATE_THRESHOLD:
+                reasons.append(f"rolling_rate {rolling_rate:.1f} > {RATE_THRESHOLD}")
+            if rate_change >= RATE_CHANGE_THRESHOLD:
+                reasons.append(
+                    f"rate_change {rate_change:.1f} >= {RATE_CHANGE_THRESHOLD}"
+                )
 
             if detected:
                 ANOMALY_COUNT.labels(
@@ -152,10 +124,12 @@ class AuthDetector:
                 "confidence": round(confidence, 4),
                 "model_name": MODEL_NAME,
                 "metadata": {
-                    "auth_failures_per_min": round(auth_rate, 4),
+                    "current_auth_failures_per_min": round(current_rate, 4),
+                    "rolling_auth_failures_per_min": round(rolling_rate, 4),
+                    "auth_failure_rate_change": round(rate_change, 4),
                     "rate_threshold": RATE_THRESHOLD,
-                    "rf_vote": rf_vote,
-                    "reason": f"auth_failures_per_min {auth_rate:.1f} > {RATE_THRESHOLD}" if detected else "",
+                    "rate_change_threshold": RATE_CHANGE_THRESHOLD,
+                    "reason": "; ".join(reasons),
                 }
             }
         except Exception as exc:
@@ -182,6 +156,18 @@ class AuthDetector:
         elif rate >= 40: return "HIGH"
         return "MEDIUM"
 
+    def _confidence(self, current_rate: float, rolling_rate: float, rate_change: float) -> float:
+        if (
+            current_rate <= RATE_THRESHOLD
+            and rolling_rate <= RATE_THRESHOLD
+            and rate_change < RATE_CHANGE_THRESHOLD
+        ):
+            return 0.0
+        current_conf = min(0.95, current_rate / 100.0)
+        rolling_conf = min(0.90, rolling_rate / 100.0)
+        change_conf = min(0.85, rate_change / 50.0)
+        return round(max(current_conf, rolling_conf, change_conf), 4)
+
     def on_message(self, ch, method, props, body):
         try:
             event = json.loads(body)
@@ -203,8 +189,8 @@ class AuthDetector:
 
             if result["detected"]:
                 log.info("anomaly_detected", event_id=result["event_id"],
-                         severity=result["severity"], rate=result["metadata"]["auth_failures_per_min"],
-                         rf_vote=result["metadata"]["rf_vote"])
+                         severity=result["severity"],
+                         rate=result["metadata"]["current_auth_failures_per_min"])
             else:
                 log.debug("event_clean", event_id=result["event_id"])
         except Exception as exc:

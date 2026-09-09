@@ -1,12 +1,12 @@
 # layer1/adm/detectors/train_cpu_model.py
 """
-Train Isolation Forest model for CPU/Memory Spike detection (Model 1).
+Historical experiment: train an Isolation Forest model for CPU/Memory spikes.
 
 Uses NAB datasets (cpu_utilization_asg_misconfiguration + machine_temperature_system_failure)
 to train an unsupervised Isolation Forest that learns normal CPU/memory behaviour.
 
-The model is saved to models/isolation_forest_cpu.pkl and will be loaded by
-cpu_detector.py for anomaly scoring.
+Any output is retained solely as historical experiment evidence. The Layer 1
+CPU detector does not load or use it for anomaly scoring.
 
 Run once:
     cd ~/fyp-pipeline/layer1/adm

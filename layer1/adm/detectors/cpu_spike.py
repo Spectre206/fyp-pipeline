@@ -12,10 +12,6 @@ Detection logic:
      (catches spikes the rolling window may initially lag on)
   3. Severity based on Z‑score magnitude or raw percentage.
 
-Note: An Isolation Forest model was trained on NAB data (train_cpu_model.py)
-and saved to models/isolation_forest_cpu.pkl. It is not used in this version
-but remains available for a future hybrid confidence‑adjustment stage.
-
 Always publishes a result to fusion.results (detected=True or False).
 """
 

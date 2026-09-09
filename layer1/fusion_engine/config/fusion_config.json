@@ -18,7 +18,7 @@
   "model_weights": {
     "z_score_error_rate": 0.80,
     "moving_average_throughput": 0.75,
-    "rate_gate_auth_rf": 0.85,
+    "statistical_auth_rate": 0.85,
     "z_score_cpu_memory": 0.80,
     "psi_detector": 0.70
   }

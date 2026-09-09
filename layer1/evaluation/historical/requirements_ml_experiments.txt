@@ -1,0 +1,6 @@
+# Historical-only dependencies for the archived Random Forest and Isolation
+# Forest experiments. They are not required by the Layer 1 runtime.
+numpy==1.26.4
+pandas==2.2.2
+scikit-learn==1.4.2
+joblib==1.4.2
