@@ -194,7 +194,7 @@ EXPECTED_DETECTORS = {
     "moving_average_throughput",
     "statistical_auth_rate",
     "z_score_cpu_memory",
-    "psi_detector",
+    "distribution_shift_marker",
 }
 
 

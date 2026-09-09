@@ -17,11 +17,10 @@ Error Rate Surge Detector — Statistical Z-Score (Model 2) with Prometheus Metr
 import json
 import logging
 import time
-from pathlib import Path
-
 import pika
 import structlog
 from prometheus_client import Counter, Histogram, start_http_server
+from detector_support import detector_results_path, load_detector_config
 
 logging.basicConfig(
     level=logging.INFO,
@@ -54,8 +53,9 @@ LATENCY = Histogram(
     ["detector"]
 )
 
-Z_SCORE_THRESHOLD = 2.0
-ERROR_RATE_THRESHOLD = 10.0
+_SETTINGS = load_detector_config("error_rate", {"z_threshold": 2.0, "error_rate_threshold": 10.0, "z_high_threshold": 4.0, "z_critical_threshold": 5.0, "rate_high_threshold": 18.0, "rate_critical_threshold": 30.0, "z_confidence_divisor": 6.0, "rate_confidence_divisor": 30.0})
+Z_SCORE_THRESHOLD = _SETTINGS["z_threshold"]
+ERROR_RATE_THRESHOLD = _SETTINGS["error_rate_threshold"]
 
 INPUT_QUEUE      = "detect.error"
 OUTPUT_EXCHANGE  = "fyp.events"
@@ -143,18 +143,18 @@ class ErrorRateDetector:
             LATENCY.labels(detector=DETECTOR_NAME).observe(time.time() - start)
 
     def _severity_from_z(self, abs_z: float) -> str:
-        if abs_z >= 5.0: return "CRITICAL"
-        elif abs_z >= 4.0: return "HIGH"
+        if abs_z >= _SETTINGS["z_critical_threshold"]: return "CRITICAL"
+        elif abs_z >= _SETTINGS["z_high_threshold"]: return "HIGH"
         return "MEDIUM"
 
     def _severity_from_rate(self, rate: float) -> str:
-        if rate >= 30.0: return "CRITICAL"
-        elif rate >= 18.0: return "HIGH"
+        if rate >= _SETTINGS["rate_critical_threshold"]: return "CRITICAL"
+        elif rate >= _SETTINGS["rate_high_threshold"]: return "HIGH"
         return "MEDIUM"
 
     def _confidence(self, abs_z: float, error_rate: float) -> float:
-        z_conf = min(0.95, abs_z / 6.0)
-        rate_conf = min(0.90, error_rate / 30.0)
+        z_conf = min(0.95, abs_z / _SETTINGS["z_confidence_divisor"])
+        rate_conf = min(0.90, error_rate / _SETTINGS["rate_confidence_divisor"])
         return round(max(z_conf, rate_conf), 4)
 
     def on_message(self, ch, method, props, body):
@@ -177,7 +177,7 @@ class ErrorRateDetector:
                     content_type="application/json"
                 )
             )
-            with open("/home/asim/fyp-pipeline/layer1/adm/error_results.jsonl", "a") as f:
+            with detector_results_path("error_results.jsonl").open("a") as f:
                 f.write(json.dumps(result) + "\n")
 
             if result["detected"]:

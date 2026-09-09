@@ -1,10 +1,8 @@
-# layer1/adm/detectors/schema_shift.py
-"""
-Schema Drift Detector — PSI-Based (Model 5, Statistical Half)
+"""Schema Drift Detector — structural bypass complement.
 
 Consumes enriched events from the detect.schema queue.
-Uses pre‑computed PSI (Population Stability Index) scores from the Feature Store
-and the distribution_shift_marker flag from value_shift events.
+Uses the explicit, structurally valid distribution-shift marker from value-shift
+events. PSI is intentionally not computed in the active runtime vector.
 
 Note: Only the statistical half of Model 5 is implemented here. The structural half
 (missing fields, type mutations) is caught earlier by the Pydantic Validator and
@@ -14,26 +12,16 @@ Detection logic:
   - Primary: distribution_shift_marker == 1.0 catches genuine value_shift events.
     These are schema_drift events where the metric distribution is statistically
     shifted but the structure is valid (so they pass Pydantic validation).
-  - PSI scores are computed correctly by the Feature Store (v1.2 fix applied),
-    but the synthetic corpus characteristics (high variance within components)
-    cause elevated PSI across most events. PSI is therefore used as a confidence
-    booster rather than a standalone detector. See LAYER1_COMPONENT_LOG.md.
-
 Always publishes a result to fusion.results (detected=True or False).
-"""
-
-"""
-Schema Drift Detector — PSI + Shift Marker (Model 5) with Prometheus Metrics
 """
 
 import json
 import logging
 import time
-from pathlib import Path
-
 import pika
 import structlog
 from prometheus_client import Counter, Histogram, start_http_server
+from detector_support import detector_results_path, load_detector_config
 
 logging.basicConfig(
     level=logging.INFO,
@@ -66,13 +54,12 @@ LATENCY = Histogram(
     ["detector"]
 )
 
-PSI_HIGH_THRESHOLD   = 0.5
-PSI_MEDIUM_THRESHOLD = 0.2
+_SETTINGS = load_detector_config("schema_drift", {"distribution_shift_marker": 1.0, "confidence": 0.7})
 
 INPUT_QUEUE     = "detect.schema"
 OUTPUT_EXCHANGE = "fyp.events"
 ROUTING_KEY     = "fusion.result"
-MODEL_NAME      = "psi_detector"
+MODEL_NAME      = "distribution_shift_marker"
 
 
 class SchemaDetector:
@@ -84,9 +71,7 @@ class SchemaDetector:
         )
         self.conn = pika.BlockingConnection(params)
         self.ch = self.conn.channel()
-        log.info("schema_detector_initialised",
-                 psi_medium_threshold=PSI_MEDIUM_THRESHOLD,
-                 psi_high_threshold=PSI_HIGH_THRESHOLD)
+        log.info("schema_detector_initialised", shift_marker=_SETTINGS["distribution_shift_marker"])
 
     def detect(self, event: dict) -> dict:
         start = time.time()
@@ -95,7 +80,6 @@ class SchemaDetector:
         EVAL_COUNT.labels(detector=DETECTOR_NAME, anomaly_type=anomaly_type).inc()
 
         try:
-            fv = event.get("feature_vector", {})
             raw_mv = event.get("metric_values", {})
 
             if not isinstance(raw_mv, dict):
@@ -113,28 +97,17 @@ class SchemaDetector:
                     "metadata": {"reason": "no valid metrics"}
                 }
 
-            psi_scores = {}
-            for key, value in fv.items():
-                if key.startswith("psi_score_"):
-                    metric = key.replace("psi_score_", "")
-                    psi_scores[metric] = float(value)
-
-            max_psi = max(psi_scores.values()) if psi_scores else 0.0
             shift_marker = raw_mv.get("distribution_shift_marker", 0.0)
 
             detected = False
             severity = "N/A"
             reason = ""
 
-            if shift_marker == 1.0:
+            if shift_marker == _SETTINGS["distribution_shift_marker"]:
                 detected = True
                 severity = "MEDIUM"
                 reason = "distribution_shift_marker=1.0 (value_shift event)"
-                confidence = 0.70
-                if max_psi >= PSI_HIGH_THRESHOLD:
-                    confidence = min(0.95, confidence + 0.20)
-                elif max_psi >= PSI_MEDIUM_THRESHOLD:
-                    confidence = min(0.90, confidence + 0.10)
+                confidence = _SETTINGS["confidence"]
             else:
                 detected = False
                 confidence = 0.0
@@ -156,8 +129,6 @@ class SchemaDetector:
                 "confidence": round(confidence, 4),
                 "model_name": MODEL_NAME,
                 "metadata": {
-                    "psi_scores": {k: round(v, 6) for k, v in psi_scores.items()},
-                    "max_psi": round(max_psi, 6),
                     "distribution_shift_marker": shift_marker,
                     "reason": reason,
                 }
@@ -197,12 +168,12 @@ class SchemaDetector:
                 body=json.dumps(result).encode(),
                 properties=pika.BasicProperties(delivery_mode=2, content_type="application/json")
             )
-            with open("/home/asim/fyp-pipeline/layer1/adm/schema_results.jsonl", "a") as f:
+            with detector_results_path("schema_results.jsonl").open("a") as f:
                 f.write(json.dumps(result) + "\n")
 
             if result["detected"]:
                 log.info("anomaly_detected", event_id=result["event_id"],
-                         severity=result["severity"], max_psi=result["metadata"]["max_psi"])
+                         severity=result["severity"], shift_marker=result["metadata"]["distribution_shift_marker"])
             else:
                 log.debug("event_clean", event_id=result["event_id"])
         except Exception as exc:

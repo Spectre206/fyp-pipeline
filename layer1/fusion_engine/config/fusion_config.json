@@ -20,6 +20,6 @@
     "moving_average_throughput": 0.75,
     "statistical_auth_rate": 0.85,
     "z_score_cpu_memory": 0.80,
-    "psi_detector": 0.70
+    "distribution_shift_marker": 0.70
   }
 }

@@ -22,11 +22,10 @@ Throughput Drop Detector — Moving Average Deviation (Model 3) with Prometheus 
 import json
 import logging
 import time
-from pathlib import Path
-
 import pika
 import structlog
 from prometheus_client import Counter, Histogram, start_http_server
+from detector_support import detector_results_path, load_detector_config
 
 logging.basicConfig(
     level=logging.INFO,
@@ -59,11 +58,12 @@ LATENCY = Histogram(
     ["detector"]
 )
 
-SILENCE_TIMEOUT    = 30.0
-DROP_RATIO         = 0.40
-MIN_BASELINE_MPS   = 5.0
-NEAR_ZERO_MPS      = 2.0
-RAW_DROP_THRESHOLD = 40.0
+_SETTINGS = load_detector_config("throughput_drop", {"silence_timeout_s": 30.0, "drop_ratio": 0.4, "min_baseline_mps": 5.0, "near_zero_mps": 2.0, "raw_drop_threshold": 40.0, "drop_high_percent": 60.0, "drop_critical_percent": 80.0, "raw_high_mps": 20.0, "silence_confidence_cap": 0.95, "raw_confidence_cap": 0.9})
+SILENCE_TIMEOUT = _SETTINGS["silence_timeout_s"]
+DROP_RATIO = _SETTINGS["drop_ratio"]
+MIN_BASELINE_MPS = _SETTINGS["min_baseline_mps"]
+NEAR_ZERO_MPS = _SETTINGS["near_zero_mps"]
+RAW_DROP_THRESHOLD = _SETTINGS["raw_drop_threshold"]
 
 INPUT_QUEUE      = "detect.throughput"
 OUTPUT_EXCHANGE  = "fyp.events"
@@ -161,23 +161,23 @@ class ThroughputDetector:
             LATENCY.labels(detector=DETECTOR_NAME).observe(time.time() - start)
 
     def _severity_from_drop(self, drop_pct: float) -> str:
-        if drop_pct >= 80: return "CRITICAL"
-        elif drop_pct >= 60: return "HIGH"
+        if drop_pct >= _SETTINGS["drop_critical_percent"]: return "CRITICAL"
+        elif drop_pct >= _SETTINGS["drop_high_percent"]: return "HIGH"
         return "MEDIUM"
 
     def _severity_from_raw(self, mps: float) -> str:
         if mps < 2.0: return "CRITICAL"
-        elif mps < 20.0: return "HIGH"
+        elif mps < _SETTINGS["raw_high_mps"]: return "HIGH"
         return "MEDIUM"
 
     def _confidence(self, short_ma, long_ma, silence, raw_mps) -> float:
-        silence_conf = min(0.95, silence / 60.0) if raw_mps is not None else 0.0
+        silence_conf = min(_SETTINGS["silence_confidence_cap"], silence / 60.0) if raw_mps is not None else 0.0
         if long_ma > 0:
             drop_pct = max(0, 1 - short_ma / long_ma)
             drop_conf = min(0.95, drop_pct / 0.80)
         else:
             drop_conf = 0.0
-        raw_conf = min(0.90, 1.0 - raw_mps / RAW_DROP_THRESHOLD) if raw_mps is not None and raw_mps < RAW_DROP_THRESHOLD else 0.0
+        raw_conf = min(_SETTINGS["raw_confidence_cap"], 1.0 - raw_mps / RAW_DROP_THRESHOLD) if raw_mps is not None and raw_mps < RAW_DROP_THRESHOLD else 0.0
         return round(max(silence_conf, drop_conf, raw_conf), 4)
 
     def on_message(self, ch, method, props, body):
@@ -197,7 +197,7 @@ class ThroughputDetector:
                 body=json.dumps(result).encode("utf-8"),
                 properties=pika.BasicProperties(delivery_mode=2, content_type="application/json")
             )
-            with open("/home/asim/fyp-pipeline/layer1/adm/throughput_results.jsonl", "a") as f:
+            with detector_results_path("throughput_results.jsonl").open("a") as f:
                 f.write(json.dumps(result) + "\n")
 
             if result["detected"]:

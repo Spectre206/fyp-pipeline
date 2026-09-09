@@ -12,6 +12,7 @@ import time
 import pika
 import structlog
 from prometheus_client import Counter, Histogram, start_http_server
+from detector_support import detector_results_path, load_detector_config
 
 logging.basicConfig(
     level=logging.INFO,
@@ -44,8 +45,9 @@ LATENCY = Histogram(
     ["detector"]
 )
 
-RATE_THRESHOLD = 20.0
-RATE_CHANGE_THRESHOLD = 15.0
+_SETTINGS = load_detector_config("auth_flood", {"rate_threshold": 20.0, "rate_change_threshold": 15.0, "high_rate_threshold": 40.0, "critical_rate_threshold": 100.0, "current_confidence_cap": 0.95, "rolling_confidence_cap": 0.9, "rate_change_confidence_cap": 0.85, "rate_confidence_divisor": 100.0, "rate_change_confidence_divisor": 50.0})
+RATE_THRESHOLD = _SETTINGS["rate_threshold"]
+RATE_CHANGE_THRESHOLD = _SETTINGS["rate_change_threshold"]
 INPUT_QUEUE    = "detect.auth"
 OUTPUT_EXCHANGE = "fyp.events"
 ROUTING_KEY    = "fusion.result"
@@ -152,8 +154,8 @@ class AuthDetector:
             LATENCY.labels(detector=DETECTOR_NAME).observe(time.time() - start)
 
     def _severity(self, rate: float) -> str:
-        if rate >= 100: return "CRITICAL"
-        elif rate >= 40: return "HIGH"
+        if rate >= _SETTINGS["critical_rate_threshold"]: return "CRITICAL"
+        elif rate >= _SETTINGS["high_rate_threshold"]: return "HIGH"
         return "MEDIUM"
 
     def _confidence(self, current_rate: float, rolling_rate: float, rate_change: float) -> float:
@@ -163,9 +165,9 @@ class AuthDetector:
             and rate_change < RATE_CHANGE_THRESHOLD
         ):
             return 0.0
-        current_conf = min(0.95, current_rate / 100.0)
-        rolling_conf = min(0.90, rolling_rate / 100.0)
-        change_conf = min(0.85, rate_change / 50.0)
+        current_conf = min(_SETTINGS["current_confidence_cap"], current_rate / _SETTINGS["rate_confidence_divisor"])
+        rolling_conf = min(_SETTINGS["rolling_confidence_cap"], rolling_rate / _SETTINGS["rate_confidence_divisor"])
+        change_conf = min(_SETTINGS["rate_change_confidence_cap"], rate_change / _SETTINGS["rate_change_confidence_divisor"])
         return round(max(current_conf, rolling_conf, change_conf), 4)
 
     def on_message(self, ch, method, props, body):
@@ -184,7 +186,7 @@ class AuthDetector:
                 body=json.dumps(result).encode(),
                 properties=pika.BasicProperties(delivery_mode=2, content_type="application/json")
             )
-            with open("/home/asim/fyp-pipeline/layer1/adm/auth_results.jsonl", "a") as f:
+            with detector_results_path("auth_results.jsonl").open("a") as f:
                 f.write(json.dumps(result) + "\n")
 
             if result["detected"]:
