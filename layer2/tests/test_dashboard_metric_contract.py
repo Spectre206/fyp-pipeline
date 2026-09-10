@@ -15,8 +15,8 @@ class DashboardMetricContractTests(unittest.TestCase):
 
     def test_detector_counters_are_current_process_bar_gauges(self):
         for title in (
-            "Detector Evaluations — Current Process",
-            "Detector Detections — Current Process",
+            "Detector Evaluations",
+            "Detector Detections",
         ):
             panel = self.by_title[title]
             self.assertEqual(panel["type"], "bargauge")
@@ -27,9 +27,9 @@ class DashboardMetricContractTests(unittest.TestCase):
         titles = set(self.by_title)
         self.assertNotIn("MTTA (p50 / p95)", titles)
         self.assertNotIn("MTTR (p50 / p95)", titles)
-        self.assertIn("End-to-End Decision Latency — p50 / p95", titles)
-        self.assertIn("Feedback Completion Latency — p50 / p95", titles)
-        self.assertIn("Control-Plane Processing Latency — p50 / p95", titles)
+        self.assertIn("E2E Decision Latency", titles)
+        self.assertIn("Feedback Latency", titles)
+        self.assertIn("Control-Plane Latency", titles)
         expressions = "\n".join(
             target.get("expr", "")
             for panel in self.panels for target in panel.get("targets", [])
@@ -68,20 +68,27 @@ class DashboardMetricContractTests(unittest.TestCase):
         overview = [
             "Layer 1 Published",
             "Strategy SVR",
-            "E2E Decision — p95",
+            "E2E Decision p95",
             "Policy Routing",
             "HITL Pending",
-            "Dead-Letter Queue",
+            "DLQ",
         ]
         self.assertTrue(set(overview).issubset(titles))
         self.assertNotIn("rate(", self.by_title["Strategy SVR"]["targets"][0]["expr"])
         routing = self.by_title["Policy Routing"]["targets"]
         self.assertEqual([target["legendFormat"] for target in routing], ["AUTO", "HITL"])
         self.assertTrue(all("or vector(0)" in target["expr"] for target in routing))
-        health = self.by_title["Prometheus Target Health — UP / DOWN"]
-        self.assertEqual([target["legendFormat"] for target in health["targets"]], ["UP", "DOWN"])
-        backlog = self.by_title["RabbitMQ Queue Backlog"]["targets"][0]["expr"]
-        self.assertIn('queue=~"anomaly\\.detected', backlog)
+        health = self.by_title["Prometheus Targets"]
+        self.assertEqual(
+            [target["legendFormat"] for target in health["targets"]],
+            ["UP", "DOWN", "TOTAL"],
+        )
+        self.assertEqual(
+            [target["expr"] for target in health["targets"]],
+            ["sum(up == bool 1)", "sum(up == bool 0)", "count(up)"],
+        )
+        backlog = self.by_title["RabbitMQ Backlog"]["targets"][0]["expr"]
+        self.assertIn('queue=~"raw\\.events', backlog)
         self.assertIn("dead\\.letters", backlog)
 
 if __name__ == "__main__":

@@ -7,64 +7,1678 @@
   "editable": true,
   "graphTooltip": 0,
   "refresh": "10s",
-  "time": {"from": "now-30m", "to": "now"},
+  "time": {
+    "from": "now-30m",
+    "to": "now"
+  },
   "panels": [
-    {"id":1,"type":"row","title":"SYSTEM OVERVIEW","gridPos":{"x":0,"y":0,"w":24,"h":1},"collapsed":false},
-    {"id":2,"title":"Layer 1 Published","type":"stat","gridPos":{"x":0,"y":1,"w":4,"h":4},"targets":[{"refId":"A","expr":"sum(fyp_fusion_published_total)","legendFormat":"Published","instant":true}],"datasource":{"type":"prometheus","uid":"bfg3227zf71tsd"},"fieldConfig":{"defaults":{"unit":"short"}},"description":"Current-process incidents correlated by Fusion and sent from Layer 1 to Layer 2."},
-    {"id":3,"title":"Strategy SVR","type":"stat","gridPos":{"x":4,"y":1,"w":4,"h":4},"targets":[{"refId":"A","expr":"sum(fyp_strategy_schema_valid_total) / clamp_min(sum(fyp_strategy_schema_valid_total) + sum(fyp_strategy_schema_invalid_total), 1)","legendFormat":"SVR"}],"datasource":{"type":"prometheus","uid":"bfg3227zf71tsd"},"fieldConfig":{"defaults":{"unit":"percentunit"}},"description":"Schema-valid non-timeout Strategy responses divided by all non-timeout Strategy responses."},
-    {"id":4,"title":"E2E Decision — p95","type":"stat","gridPos":{"x":8,"y":1,"w":4,"h":4},"targets":[{"refId":"A","expr":"histogram_quantile(0.95, sum by (le) (rate(fyp_end_to_end_decision_latency_seconds_bucket[$__rate_interval])))","legendFormat":"p95"}],"datasource":{"type":"prometheus","uid":"bfg3227zf71tsd"},"fieldConfig":{"defaults":{"unit":"s"}},"description":"p95 from Layer 2 incident timestamp to Policy decision, including queueing and backlog delay."},
-    {"id":5,"title":"Policy Routing","type":"bargauge","gridPos":{"x":12,"y":1,"w":4,"h":4},"targets":[{"refId":"A","expr":"sum(fyp_routing_decision_total{decision=\"AUTO\"}) or vector(0)","legendFormat":"AUTO","instant":true},{"refId":"B","expr":"sum(fyp_routing_decision_total{decision=\"HITL\"}) or vector(0)","legendFormat":"HITL","instant":true}],"datasource":{"type":"prometheus","uid":"bfg3227zf71tsd"},"fieldConfig":{"defaults":{"unit":"short"}},"description":"Current-process deterministic Policy routes. Both AUTO and HITL remain visible when either route has no decisions."},
-    {"id":8,"title":"HITL Pending","type":"stat","gridPos":{"x":16,"y":1,"w":4,"h":4},"targets":[{"refId":"A","expr":"sum(rabbitmq_queue_messages_ready{queue=\"hitl.queue\"})","legendFormat":"Pending","instant":true}],"datasource":{"type":"prometheus","uid":"bfg3227zf71tsd"},"fieldConfig":{"defaults":{"unit":"short"}},"description":"Authoritative ready depth of the HITL RabbitMQ queue."},
-    {"id":9,"title":"Dead-Letter Queue","type":"stat","gridPos":{"x":20,"y":1,"w":4,"h":4},"targets":[{"refId":"A","expr":"sum(rabbitmq_queue_messages_ready{queue=\"dead.letters\"})","legendFormat":"Messages","instant":true}],"datasource":{"type":"prometheus","uid":"bfg3227zf71tsd"},"fieldConfig":{"defaults":{"unit":"short","thresholds":{"mode":"absolute","steps":[{"color":"green","value":null},{"color":"red","value":1}]}}},"description":"Messages awaiting investigation; any non-zero depth deserves attention."},
-
-    {"id":10,"type":"row","title":"LAYER 1 — REAL-TIME STATISTICAL DATA PLANE","gridPos":{"x":0,"y":5,"w":24,"h":1},"collapsed":false},
-    {"id":11,"title":"Validator Event Flow — Current Process","type":"bargauge","gridPos":{"x":0,"y":6,"w":6,"h":5},"targets":[{"refId":"A","expr":"sum(fyp_validator_events_total)","legendFormat":"Received","instant":true},{"refId":"B","expr":"sum(fyp_validator_valid_total)","legendFormat":"Valid","instant":true},{"refId":"C","expr":"sum(fyp_validator_schema_violations_total)","legendFormat":"Schema violations","instant":true}],"datasource":{"type":"prometheus","uid":"bfg3227zf71tsd"},"fieldConfig":{"defaults":{"unit":"short"}},"description":"Current-process validator totals for received, valid, and structurally invalid events."},
-    {"id":12,"title":"Detector Evaluations — Current Process","type":"bargauge","gridPos":{"x":6,"y":6,"w":6,"h":5},"targets":[{"refId":"A","expr":"sum by (detector) (fyp_detector_evaluations_total)","legendFormat":"{{detector}}","instant":true}],"datasource":{"type":"prometheus","uid":"bfg3227zf71tsd"},"fieldConfig":{"defaults":{"unit":"short"}},"description":"Current-process evaluation totals for the five statistical detectors."},
-    {"id":13,"title":"Detector Detections — Current Process","type":"bargauge","gridPos":{"x":12,"y":6,"w":6,"h":5},"targets":[{"refId":"A","expr":"sum by (detector) (fyp_detector_anomalies_total)","legendFormat":"{{detector}}","instant":true}],"datasource":{"type":"prometheus","uid":"bfg3227zf71tsd"},"fieldConfig":{"defaults":{"unit":"short"}},"description":"Current-process anomaly detections by statistical detector; these are not offline precision or recall."},
-    {"id":14,"title":"Detector Processing Latency — p50 / p95","type":"stat","gridPos":{"x":18,"y":6,"w":6,"h":5},"targets":[{"refId":"A","expr":"histogram_quantile(0.50, sum by (le) (rate(fyp_detector_latency_seconds_bucket[$__rate_interval])))","legendFormat":"p50"},{"refId":"B","expr":"histogram_quantile(0.95, sum by (le) (rate(fyp_detector_latency_seconds_bucket[$__rate_interval])))","legendFormat":"p95"}],"datasource":{"type":"prometheus","uid":"bfg3227zf71tsd"},"fieldConfig":{"defaults":{"unit":"s"}},"description":"Aggregate per-detector computation latency from Prometheus histograms."},
-    {"id":15,"title":"Fusion Outcomes — Current Process","type":"bargauge","gridPos":{"x":0,"y":11,"w":9,"h":5},"targets":[{"refId":"A","expr":"sum(fyp_fusion_published_total)","legendFormat":"Published","instant":true},{"refId":"B","expr":"sum(fyp_fusion_suppressed_total)","legendFormat":"Suppressed","instant":true},{"refId":"C","expr":"sum(fyp_fusion_compound_total)","legendFormat":"Compound","instant":true},{"refId":"D","expr":"sum(fyp_fusion_fast_path_total)","legendFormat":"Fast Path","instant":true},{"refId":"E","expr":"sum(fyp_fusion_late_recovery_total)","legendFormat":"Late recovery","instant":true}],"datasource":{"type":"prometheus","uid":"bfg3227zf71tsd"},"fieldConfig":{"defaults":{"unit":"short"}},"description":"Current-process Fusion outcomes. Fast Path is a priority marker, not early finalization."},
-    {"id":16,"title":"Fusion Suppression Rate","type":"stat","gridPos":{"x":9,"y":11,"w":4,"h":5},"targets":[{"refId":"A","expr":"sum(fyp_fusion_suppressed_total) / clamp_min(sum(fyp_fusion_published_total) + sum(fyp_fusion_suppressed_total), 1)","legendFormat":"Suppressed"}],"datasource":{"type":"prometheus","uid":"bfg3227zf71tsd"},"fieldConfig":{"defaults":{"unit":"percentunit"}},"description":"Share of all-normal Fusion finalizations suppressed before Layer 2."},
-    {"id":17,"title":"Fusion Processing Latency — p50 / p95","type":"stat","gridPos":{"x":13,"y":11,"w":5,"h":5},"targets":[{"refId":"A","expr":"histogram_quantile(0.50, sum by (le) (rate(fyp_fusion_latency_seconds_bucket[$__rate_interval])))","legendFormat":"p50"},{"refId":"B","expr":"histogram_quantile(0.95, sum by (le) (rate(fyp_fusion_latency_seconds_bucket[$__rate_interval])))","legendFormat":"p95"}],"datasource":{"type":"prometheus","uid":"bfg3227zf71tsd"},"fieldConfig":{"defaults":{"unit":"s"}},"description":"Fusion decision computation time; correlation waiting is separate."},
-    {"id":18,"title":"Fusion Correlation Wait — p50 / p95","type":"stat","gridPos":{"x":18,"y":11,"w":6,"h":5},"targets":[{"refId":"A","expr":"histogram_quantile(0.50, sum by (le) (rate(fyp_fusion_correlation_wait_seconds_bucket[$__rate_interval])))","legendFormat":"p50"},{"refId":"B","expr":"histogram_quantile(0.95, sum by (le) (rate(fyp_fusion_correlation_wait_seconds_bucket[$__rate_interval])))","legendFormat":"p95"}],"datasource":{"type":"prometheus","uid":"bfg3227zf71tsd"},"fieldConfig":{"defaults":{"unit":"s"}},"description":"Time an event remains in Fusion correlation before finalization."},
-
-    {"id":19,"type":"row","title":"LAYER 2 — AI CONTROL PLANE","gridPos":{"x":0,"y":16,"w":24,"h":1},"collapsed":false},
-    {"id":20,"title":"Strategy Outcomes — Current Process","type":"bargauge","gridPos":{"x":0,"y":17,"w":6,"h":5},"targets":[{"refId":"A","expr":"sum(fyp_strategy_schema_valid_total)","legendFormat":"Schema valid","instant":true},{"refId":"B","expr":"sum(fyp_strategy_schema_invalid_total)","legendFormat":"Schema invalid","instant":true},{"refId":"C","expr":"sum(fyp_strategy_timeout_total)","legendFormat":"Timeout","instant":true}],"datasource":{"type":"prometheus","uid":"bfg3227zf71tsd"},"fieldConfig":{"defaults":{"unit":"short"}},"description":"Current-process Strategy outcomes. No valid-JSON metric is exported, so schema validity is not mislabelled as JSON validity."},
-    {"id":21,"title":"Strategy Schema Validity Rate","type":"stat","gridPos":{"x":6,"y":17,"w":4,"h":5},"targets":[{"refId":"A","expr":"sum(fyp_strategy_schema_valid_total) / clamp_min(sum(fyp_strategy_schema_valid_total) + sum(fyp_strategy_schema_invalid_total), 1)","legendFormat":"SVR"}],"datasource":{"type":"prometheus","uid":"bfg3227zf71tsd"},"fieldConfig":{"defaults":{"unit":"percentunit"}},"description":"Schema-valid responses divided by completed non-timeout Strategy responses."},
-    {"id":22,"title":"Strategy Timeout Rate","type":"stat","gridPos":{"x":10,"y":17,"w":4,"h":5},"targets":[{"refId":"A","expr":"sum(fyp_strategy_timeout_total) / clamp_min(sum(fyp_strategy_schema_valid_total) + sum(fyp_strategy_schema_invalid_total) + sum(fyp_strategy_timeout_total), 1)","legendFormat":"Timeouts"}],"datasource":{"type":"prometheus","uid":"bfg3227zf71tsd"},"fieldConfig":{"defaults":{"unit":"percentunit"}},"description":"Timed-out Strategy calls as a share of recorded Strategy attempts."},
-    {"id":23,"title":"Strategy Tokens per Second","type":"timeseries","gridPos":{"x":14,"y":17,"w":5,"h":5},"targets":[{"refId":"A","expr":"fyp_strategy_tokens_per_s","legendFormat":"tokens/s"}],"datasource":{"type":"prometheus","uid":"bfg3227zf71tsd"},"fieldConfig":{"defaults":{"unit":"ops"}},"description":"Observed local Strategy LLM generation throughput."},
-    {"id":24,"title":"Policy Routing — Current Process","type":"bargauge","gridPos":{"x":19,"y":17,"w":5,"h":5},"targets":[{"refId":"A","expr":"sum by (decision) (fyp_routing_decision_total)","legendFormat":"{{decision}}","instant":true}],"datasource":{"type":"prometheus","uid":"bfg3227zf71tsd"},"fieldConfig":{"defaults":{"unit":"short"}},"description":"Current-process deterministic Policy routing totals for AUTO and HITL."},
-    {"id":25,"title":"Policy Decision Reasons — Current Process","type":"bargauge","gridPos":{"x":0,"y":22,"w":6,"h":5},"targets":[{"refId":"A","expr":"sum by (reason) (fyp_routing_decision_total)","legendFormat":"{{reason}}","instant":true}],"datasource":{"type":"prometheus","uid":"bfg3227zf71tsd"},"fieldConfig":{"defaults":{"unit":"short"}},"description":"Observed deterministic Policy reasons, including high-risk, confidence, timeout, parse, schema, and action validation outcomes."},
-    {"id":26,"title":"Component Processing Latency — p95","type":"bargauge","gridPos":{"x":6,"y":22,"w":6,"h":5},"targets":[{"refId":"A","expr":"histogram_quantile(0.95, sum by (le) (rate(fyp_triage_latency_s_bucket[$__rate_interval])))","legendFormat":"Triage"},{"refId":"B","expr":"histogram_quantile(0.95, sum by (le) (rate(fyp_strategy_latency_s_bucket[$__rate_interval])))","legendFormat":"Strategy"},{"refId":"C","expr":"histogram_quantile(0.95, sum by (le) (rate(fyp_policy_latency_s_bucket[$__rate_interval])))","legendFormat":"Policy"},{"refId":"D","expr":"histogram_quantile(0.95, sum by (le) (rate(fyp_learning_processing_latency_seconds_bucket[$__rate_interval])))","legendFormat":"Learning"}],"datasource":{"type":"prometheus","uid":"bfg3227zf71tsd"},"fieldConfig":{"defaults":{"unit":"s"}},"description":"p95 component processing comparison. Strategy local inference is expected to dominate; Learning is deterministic."},
-    {"id":27,"title":"Control-Plane Processing Latency — p50 / p95","type":"stat","gridPos":{"x":12,"y":22,"w":4,"h":5},"targets":[{"refId":"A","expr":"histogram_quantile(0.50, sum by (le) (rate(fyp_control_plane_processing_latency_seconds_bucket[$__rate_interval])))","legendFormat":"p50"},{"refId":"B","expr":"histogram_quantile(0.95, sum by (le) (rate(fyp_control_plane_processing_latency_seconds_bucket[$__rate_interval])))","legendFormat":"p95"}],"datasource":{"type":"prometheus","uid":"bfg3227zf71tsd"},"fieldConfig":{"defaults":{"unit":"s"}},"description":"Triage + Strategy + Policy processing only; excludes RabbitMQ queue and backlog delay."},
-    {"id":28,"title":"End-to-End Decision Latency — p50 / p95","type":"stat","gridPos":{"x":16,"y":22,"w":4,"h":5},"targets":[{"refId":"A","expr":"histogram_quantile(0.50, sum by (le) (rate(fyp_end_to_end_decision_latency_seconds_bucket[$__rate_interval])))","legendFormat":"p50"},{"refId":"B","expr":"histogram_quantile(0.95, sum by (le) (rate(fyp_end_to_end_decision_latency_seconds_bucket[$__rate_interval])))","legendFormat":"p95"}],"datasource":{"type":"prometheus","uid":"bfg3227zf71tsd"},"fieldConfig":{"defaults":{"unit":"s"}},"description":"Layer 2 incident timestamp to Policy decision, including inter-agent queueing and backlog delay."},
-    {"id":29,"title":"Feedback Completion Latency — p50 / p95","type":"stat","gridPos":{"x":20,"y":22,"w":4,"h":5},"targets":[{"refId":"A","expr":"histogram_quantile(0.50, sum by (le) (rate(fyp_feedback_completion_latency_seconds_bucket[$__rate_interval])))","legendFormat":"p50"},{"refId":"B","expr":"histogram_quantile(0.95, sum by (le) (rate(fyp_feedback_completion_latency_seconds_bucket[$__rate_interval])))","legendFormat":"p95"}],"datasource":{"type":"prometheus","uid":"bfg3227zf71tsd"},"fieldConfig":{"defaults":{"unit":"s"}},"description":"Policy decision to outcome.feedback receipt; it is not verified service-recovery time."},
-    {"id":30,"title":"Learning Processing Latency — p50 / p95","type":"stat","gridPos":{"x":0,"y":27,"w":5,"h":5},"targets":[{"refId":"A","expr":"histogram_quantile(0.50, sum by (le) (rate(fyp_learning_processing_latency_seconds_bucket[$__rate_interval])))","legendFormat":"p50"},{"refId":"B","expr":"histogram_quantile(0.95, sum by (le) (rate(fyp_learning_processing_latency_seconds_bucket[$__rate_interval])))","legendFormat":"p95"}],"datasource":{"type":"prometheus","uid":"bfg3227zf71tsd"},"fieldConfig":{"defaults":{"unit":"s"}},"description":"Deterministic Learning Agent processing time after feedback receipt."},
-    {"id":31,"title":"ChromaDB Upserts","type":"timeseries","gridPos":{"x":5,"y":27,"w":6,"h":5},"targets":[{"refId":"A","expr":"rate(fyp_learning_chromadb_upserts_total[$__rate_interval])","legendFormat":"upserts/s"}],"datasource":{"type":"prometheus","uid":"bfg3227zf71tsd"},"fieldConfig":{"defaults":{"unit":"ops"}},"description":"Rate of deterministic Learning Agent writes to ChromaDB."},
-    {"id":32,"title":"EMA Confidence Threshold","type":"gauge","gridPos":{"x":11,"y":27,"w":4,"h":5},"targets":[{"refId":"A","expr":"fyp_learning_confidence_threshold","legendFormat":"Threshold"}],"datasource":{"type":"prometheus","uid":"bfg3227zf71tsd"},"fieldConfig":{"defaults":{"unit":"percentunit","min":0.6,"max":0.9}},"description":"Current bounded EMA confidence threshold maintained by deterministic Learning."},
-    {"id":33,"title":"Learning Outcomes","type":"timeseries","gridPos":{"x":15,"y":27,"w":5,"h":5},"targets":[{"refId":"A","expr":"sum by (outcome_type) (rate(fyp_learning_outcomes_total[$__rate_interval]))","legendFormat":"{{outcome_type}}"}],"datasource":{"type":"prometheus","uid":"bfg3227zf71tsd"},"fieldConfig":{"defaults":{"unit":"ops"}},"description":"Feedback outcome types processed by deterministic Learning."},
-    {"id":34,"title":"EMA Threshold Updates","type":"stat","gridPos":{"x":20,"y":27,"w":4,"h":5},"targets":[{"refId":"A","expr":"sum(fyp_learning_threshold_updates_total)","legendFormat":"Updates","instant":true}],"datasource":{"type":"prometheus","uid":"bfg3227zf71tsd"},"fieldConfig":{"defaults":{"unit":"short"}},"description":"Current-process count of persisted EMA threshold updates."},
-
-    {"id":35,"type":"row","title":"LAYER 3 — EXECUTION, HUMAN OVERSIGHT & OBSERVABILITY LAYER","gridPos":{"x":0,"y":32,"w":24,"h":1},"collapsed":false},
-    {"id":36,"title":"AUTO EXECUTION — Attempts","type":"stat","gridPos":{"x":0,"y":33,"w":4,"h":5},"targets":[{"refId":"A","expr":"sum(fyp_auto_executor_attempts_total)","legendFormat":"Attempts","instant":true}],"datasource":{"type":"prometheus","uid":"bfg3227zf71tsd"},"fieldConfig":{"defaults":{"unit":"short"}},"description":"Current-process automatic remediation attempts."},
-    {"id":37,"title":"AUTO EXECUTION — Outcomes","type":"bargauge","gridPos":{"x":4,"y":33,"w":6,"h":5},"targets":[{"refId":"A","expr":"sum by (outcome) (fyp_auto_executor_outcomes_total)","legendFormat":"{{outcome}}","instant":true}],"datasource":{"type":"prometheus","uid":"bfg3227zf71tsd"},"fieldConfig":{"defaults":{"unit":"short"}},"description":"Automatic remediation success and failure counts; outcomes do not establish verified recovery."},
-    {"id":38,"title":"AUTO EXECUTION — Latency p50 / p95","type":"stat","gridPos":{"x":10,"y":33,"w":5,"h":5},"targets":[{"refId":"A","expr":"histogram_quantile(0.50, sum by (le) (rate(fyp_auto_executor_execution_latency_seconds_bucket[$__rate_interval])))","legendFormat":"p50"},{"refId":"B","expr":"histogram_quantile(0.95, sum by (le) (rate(fyp_auto_executor_execution_latency_seconds_bucket[$__rate_interval])))","legendFormat":"p95"}],"datasource":{"type":"prometheus","uid":"bfg3227zf71tsd"},"fieldConfig":{"defaults":{"unit":"s"}},"description":"Auto Executor action duration, not a service-recovery measurement."},
-    {"id":39,"title":"AUTO EXECUTION — Feedback Emitted","type":"stat","gridPos":{"x":15,"y":33,"w":4,"h":5},"targets":[{"refId":"A","expr":"sum(fyp_outcome_feedback_emitted_total)","legendFormat":"Emitted","instant":true}],"datasource":{"type":"prometheus","uid":"bfg3227zf71tsd"},"fieldConfig":{"defaults":{"unit":"short"}},"description":"Successfully emitted automatic outcome.feedback messages entering the feedback loop."},
-    {"id":40,"title":"HUMAN OVERSIGHT — Pending","type":"stat","gridPos":{"x":19,"y":33,"w":5,"h":5},"targets":[{"refId":"A","expr":"sum(rabbitmq_queue_messages_ready{queue=\"hitl.queue\"})","legendFormat":"Pending","instant":true}],"datasource":{"type":"prometheus","uid":"bfg3227zf71tsd"},"fieldConfig":{"defaults":{"unit":"short"}},"description":"Authoritative ready depth for the HITL RabbitMQ queue."},
-    {"id":41,"title":"HUMAN OVERSIGHT — Decisions","type":"bargauge","gridPos":{"x":0,"y":38,"w":8,"h":5},"targets":[{"refId":"A","expr":"sum(fyp_hitl_approved_total)","legendFormat":"Approved","instant":true},{"refId":"B","expr":"sum(fyp_hitl_rejected_total)","legendFormat":"Rejected","instant":true},{"refId":"C","expr":"sum(fyp_hitl_modified_total)","legendFormat":"Modified","instant":true}],"datasource":{"type":"prometheus","uid":"bfg3227zf71tsd"},"fieldConfig":{"defaults":{"unit":"short"}},"description":"Current-process authoritative human decisions persisted by the HITL dashboard."},
-    {"id":42,"title":"Human Decision Latency — p50 / p95","type":"stat","gridPos":{"x":8,"y":38,"w":8,"h":5},"targets":[{"refId":"A","expr":"histogram_quantile(0.50, sum by (le) (rate(fyp_human_decision_latency_seconds_bucket[$__rate_interval])))","legendFormat":"p50"},{"refId":"B","expr":"histogram_quantile(0.95, sum by (le) (rate(fyp_human_decision_latency_seconds_bucket[$__rate_interval])))","legendFormat":"p95"}],"datasource":{"type":"prometheus","uid":"bfg3227zf71tsd"},"fieldConfig":{"defaults":{"unit":"s"}},"description":"Persisted HITL queue entry (arrived_at) to persisted authoritative human decision (decided_at)."},
-    {"id":43,"title":"Feedback Loop — Learning Outcomes","type":"timeseries","gridPos":{"x":16,"y":38,"w":8,"h":5},"targets":[{"refId":"A","expr":"sum by (outcome_type) (rate(fyp_learning_outcomes_total[$__rate_interval]))","legendFormat":"{{outcome_type}}"}],"datasource":{"type":"prometheus","uid":"bfg3227zf71tsd"},"fieldConfig":{"defaults":{"unit":"ops"}},"description":"Feedback processed by deterministic Learning, completing Policy → AUTO/HITL → feedback → Learning."},
-
-    {"id":44,"type":"row","title":"INFRASTRUCTURE / HARDWARE","gridPos":{"x":0,"y":43,"w":24,"h":1},"collapsed":false},
-    {"id":45,"title":"Stream Node Availability","type":"stat","gridPos":{"x":0,"y":44,"w":8,"h":4},"targets":[{"refId":"A","expr":"up{job=\"fyp-cluster\",instance=\"stream-node:9100\"}","legendFormat":"UP","instant":true}],"datasource":{"type":"prometheus","uid":"bfg3227zf71tsd"},"fieldConfig":{"defaults":{"unit":"short","min":0,"max":1,"thresholds":{"mode":"absolute","steps":[{"color":"red","value":null},{"color":"green","value":1}]}}},"description":"Liveness of the stream-node hosting Layer 1 workloads."},
-    {"id":46,"title":"AI Brain Availability","type":"stat","gridPos":{"x":8,"y":44,"w":8,"h":4},"targets":[{"refId":"A","expr":"up{job=\"fyp-cluster\",instance=\"ai-brain-node:9100\"}","legendFormat":"UP","instant":true}],"datasource":{"type":"prometheus","uid":"bfg3227zf71tsd"},"fieldConfig":{"defaults":{"unit":"short","min":0,"max":1,"thresholds":{"mode":"absolute","steps":[{"color":"red","value":null},{"color":"green","value":1}]}}},"description":"Liveness of the ai-brain-node hosting Layer 2 workloads."},
-    {"id":47,"title":"Gateway Node Availability","type":"stat","gridPos":{"x":16,"y":44,"w":8,"h":4},"targets":[{"refId":"A","expr":"up{job=\"fyp-cluster\",instance=\"gateway-node:9100\"}","legendFormat":"UP","instant":true}],"datasource":{"type":"prometheus","uid":"bfg3227zf71tsd"},"fieldConfig":{"defaults":{"unit":"short","min":0,"max":1,"thresholds":{"mode":"absolute","steps":[{"color":"red","value":null},{"color":"green","value":1}]}}},"description":"Liveness of the gateway-node hosting Layer 3 and observability services."},
-    {"id":48,"title":"CPU Utilization","type":"timeseries","gridPos":{"x":0,"y":48,"w":8,"h":6},"targets":[{"refId":"A","expr":"100 * (1 - avg by (instance) (rate(node_cpu_seconds_total{job=\"fyp-cluster\",mode=\"idle\"}[$__rate_interval])))","legendFormat":"{{instance}}"}],"datasource":{"type":"prometheus","uid":"bfg3227zf71tsd"},"fieldConfig":{"defaults":{"unit":"percent","min":0,"max":100,"thresholds":{"mode":"absolute","steps":[{"color":"green","value":null},{"color":"orange","value":80},{"color":"red","value":95}]}}},"description":"CPU utilization comparison across the three commodity nodes."},
-    {"id":49,"title":"Memory Utilization","type":"timeseries","gridPos":{"x":8,"y":48,"w":8,"h":6},"targets":[{"refId":"A","expr":"100 * (1 - (node_memory_MemAvailable_bytes{job=\"fyp-cluster\"} / node_memory_MemTotal_bytes{job=\"fyp-cluster\"}))","legendFormat":"{{instance}}"}],"datasource":{"type":"prometheus","uid":"bfg3227zf71tsd"},"fieldConfig":{"defaults":{"unit":"percent","min":0,"max":100,"thresholds":{"mode":"absolute","steps":[{"color":"green","value":null},{"color":"orange","value":80},{"color":"red","value":95}]}}},"description":"RAM utilization comparison, especially relevant during local Strategy inference."},
-    {"id":50,"title":"Root Filesystem Usage","type":"timeseries","gridPos":{"x":16,"y":48,"w":8,"h":6},"targets":[{"refId":"A","expr":"100 * (1 - (node_filesystem_avail_bytes{job=\"fyp-cluster\",mountpoint=\"/\"} / node_filesystem_size_bytes{job=\"fyp-cluster\",mountpoint=\"/\"}))","legendFormat":"{{instance}}"}],"datasource":{"type":"prometheus","uid":"bfg3227zf71tsd"},"fieldConfig":{"defaults":{"unit":"percent","min":0,"max":100}},"description":"Root filesystem usage across all nodes."},
-    {"id":51,"title":"Network Throughput","type":"timeseries","gridPos":{"x":0,"y":54,"w":12,"h":5},"targets":[{"refId":"A","expr":"sum by (instance) (rate(node_network_receive_bytes_total{job=\"fyp-cluster\",device!~\"lo|docker.*|veth.*|br-.*\"}[$__rate_interval]))","legendFormat":"{{instance}} RX"},{"refId":"B","expr":"sum by (instance) (rate(node_network_transmit_bytes_total{job=\"fyp-cluster\",device!~\"lo|docker.*|veth.*|br-.*\"}[$__rate_interval]))","legendFormat":"{{instance}} TX"}],"datasource":{"type":"prometheus","uid":"bfg3227zf71tsd"},"fieldConfig":{"defaults":{"unit":"Bps"}},"description":"Node receive and transmit throughput; works for either Wi-Fi or Ethernet experiments."},
-    {"id":52,"title":"Maximum Hardware Sensor Temperature","type":"timeseries","gridPos":{"x":12,"y":54,"w":6,"h":5},"targets":[{"refId":"A","expr":"max by (instance) (node_hwmon_temp_celsius{job=\"fyp-cluster\"})","legendFormat":"{{instance}}"}],"datasource":{"type":"prometheus","uid":"bfg3227zf71tsd"},"fieldConfig":{"defaults":{"unit":"celsius"}},"description":"Highest reported temperature per node for sustained-load thermal checks."},
-    {"id":53,"title":"NTP Clock Offset","type":"timeseries","gridPos":{"x":18,"y":54,"w":6,"h":5},"targets":[{"refId":"A","expr":"node_timex_offset_seconds{job=\"fyp-cluster\"} * 1000","legendFormat":"{{instance}}"}],"datasource":{"type":"prometheus","uid":"bfg3227zf71tsd"},"fieldConfig":{"defaults":{"unit":"ms"}},"description":"Node clock offset relevant to cross-node latency interpretation."},
-    {"id":54,"title":"RabbitMQ Queue Backlog","type":"timeseries","gridPos":{"x":0,"y":59,"w":16,"h":5},"targets":[{"refId":"A","expr":"sum by (queue) (rabbitmq_queue_messages_ready{queue=~\"anomaly\\.detected|triage\\.result|strategy\\.result|auto\\.execute|hitl\\.queue|outcome\\.feedback|dead\\.letters\"})","legendFormat":"{{queue}}"}],"datasource":{"type":"prometheus","uid":"bfg3227zf71tsd"},"fieldConfig":{"defaults":{"unit":"short"}},"description":"Ready-message backlog for the FYP pipeline queues, used with end-to-end latency to distinguish queueing from processing."},
-    {"id":55,"title":"Prometheus Target Health — UP / DOWN","type":"bargauge","gridPos":{"x":16,"y":59,"w":8,"h":5},"targets":[{"refId":"A","expr":"sum(up == 1) or vector(0)","legendFormat":"UP","instant":true},{"refId":"B","expr":"sum(up == 0) or vector(0)","legendFormat":"DOWN","instant":true}],"datasource":{"type":"prometheus","uid":"bfg3227zf71tsd"},"fieldConfig":{"defaults":{"unit":"short"}},"description":"Current Prometheus scrape-target health. The dashboard shows both reachable and unreachable target counts without assuming a fixed deployment total."}
+    {
+      "id": 1,
+      "type": "row",
+      "title": "SYSTEM OVERVIEW",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false
+    },
+    {
+      "id": 2,
+      "title": "Layer 1 Published",
+      "type": "stat",
+      "gridPos": {
+        "x": 0,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(fyp_fusion_published_total)",
+          "legendFormat": "Published",
+          "instant": true
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        }
+      },
+      "description": "Current-process incidents correlated by Fusion and sent from Layer 1 to Layer 2."
+    },
+    {
+      "id": 3,
+      "title": "Strategy SVR",
+      "type": "stat",
+      "gridPos": {
+        "x": 4,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(fyp_strategy_schema_valid_total) / clamp_min(sum(fyp_strategy_schema_valid_total) + sum(fyp_strategy_schema_invalid_total), 1)",
+          "legendFormat": "SVR"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        }
+      },
+      "description": "Schema-valid non-timeout Strategy responses divided by all non-timeout Strategy responses."
+    },
+    {
+      "id": 4,
+      "title": "E2E Decision p95",
+      "type": "stat",
+      "gridPos": {
+        "x": 8,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(fyp_end_to_end_decision_latency_seconds_bucket[$__rate_interval])))",
+          "legendFormat": "p95"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        }
+      },
+      "description": "p95 from Layer 2 incident intake to Policy decision, including queueing and backlog delay."
+    },
+    {
+      "id": 5,
+      "title": "Policy Routing",
+      "type": "bargauge",
+      "gridPos": {
+        "x": 12,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(fyp_routing_decision_total{decision=\"AUTO\"}) or vector(0)",
+          "legendFormat": "AUTO",
+          "instant": true
+        },
+        {
+          "refId": "B",
+          "expr": "sum(fyp_routing_decision_total{decision=\"HITL\"}) or vector(0)",
+          "legendFormat": "HITL",
+          "instant": true
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        }
+      },
+      "description": "Current-process deterministic Policy routes. Both AUTO and HITL remain visible when either route has no decisions."
+    },
+    {
+      "id": 8,
+      "title": "HITL Pending",
+      "type": "stat",
+      "gridPos": {
+        "x": 16,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rabbitmq_queue_messages_ready{queue=\"hitl.queue\"})",
+          "legendFormat": "Pending",
+          "instant": true
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        }
+      },
+      "description": "Authoritative ready depth of the HITL RabbitMQ queue."
+    },
+    {
+      "id": 9,
+      "title": "DLQ",
+      "type": "stat",
+      "gridPos": {
+        "x": 20,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rabbitmq_queue_messages_ready{queue=\"dead.letters\"})",
+          "legendFormat": "Messages",
+          "instant": true
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        }
+      },
+      "description": "Messages awaiting investigation; any non-zero depth deserves attention."
+    },
+    {
+      "id": 10,
+      "type": "row",
+      "title": "LAYER 1 — REAL-TIME STATISTICAL DATA PLANE",
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false
+    },
+    {
+      "id": 11,
+      "title": "Validator Flow",
+      "type": "bargauge",
+      "gridPos": {
+        "x": 0,
+        "y": 6,
+        "w": 6,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(fyp_validator_events_total)",
+          "legendFormat": "Received",
+          "instant": true
+        },
+        {
+          "refId": "B",
+          "expr": "sum(fyp_validator_valid_total)",
+          "legendFormat": "Valid",
+          "instant": true
+        },
+        {
+          "refId": "C",
+          "expr": "sum(fyp_validator_schema_violations_total)",
+          "legendFormat": "Schema violations",
+          "instant": true
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        }
+      },
+      "description": "Current-process validator totals for received, valid, and structurally invalid events."
+    },
+    {
+      "id": 12,
+      "title": "Detector Evaluations",
+      "type": "bargauge",
+      "gridPos": {
+        "x": 6,
+        "y": 6,
+        "w": 6,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (detector) (fyp_detector_evaluations_total)",
+          "legendFormat": "{{detector}}",
+          "instant": true
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        }
+      },
+      "description": "Current-process evaluation totals for the five statistical detectors."
+    },
+    {
+      "id": 13,
+      "title": "Detector Detections",
+      "type": "bargauge",
+      "gridPos": {
+        "x": 12,
+        "y": 6,
+        "w": 6,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (detector) (fyp_detector_anomalies_total)",
+          "legendFormat": "{{detector}}",
+          "instant": true
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        }
+      },
+      "description": "Current-process anomaly detections by statistical detector; these are not offline precision or recall."
+    },
+    {
+      "id": 14,
+      "title": "Detector Latency p50/p95",
+      "type": "stat",
+      "gridPos": {
+        "x": 18,
+        "y": 6,
+        "w": 6,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(fyp_detector_latency_seconds_bucket[$__rate_interval])))",
+          "legendFormat": "p50"
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(fyp_detector_latency_seconds_bucket[$__rate_interval])))",
+          "legendFormat": "p95"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        }
+      },
+      "description": "Aggregate per-detector computation latency from Prometheus histograms."
+    },
+    {
+      "id": 15,
+      "title": "Fusion Outcomes",
+      "type": "bargauge",
+      "gridPos": {
+        "x": 0,
+        "y": 11,
+        "w": 9,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(fyp_fusion_published_total)",
+          "legendFormat": "Published",
+          "instant": true
+        },
+        {
+          "refId": "B",
+          "expr": "sum(fyp_fusion_suppressed_total)",
+          "legendFormat": "Suppressed",
+          "instant": true
+        },
+        {
+          "refId": "C",
+          "expr": "sum(fyp_fusion_compound_total)",
+          "legendFormat": "Compound",
+          "instant": true
+        },
+        {
+          "refId": "D",
+          "expr": "sum(fyp_fusion_fast_path_total)",
+          "legendFormat": "Fast Path",
+          "instant": true
+        },
+        {
+          "refId": "E",
+          "expr": "sum(fyp_fusion_late_recovery_total)",
+          "legendFormat": "Late recovery",
+          "instant": true
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        }
+      },
+      "description": "Current-process Fusion outcomes. Fast Path is a priority marker, not early finalization."
+    },
+    {
+      "id": 16,
+      "title": "Fusion Suppression",
+      "type": "stat",
+      "gridPos": {
+        "x": 9,
+        "y": 11,
+        "w": 4,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(fyp_fusion_suppressed_total) / clamp_min(sum(fyp_fusion_published_total) + sum(fyp_fusion_suppressed_total), 1)",
+          "legendFormat": "Suppressed"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        }
+      },
+      "description": "Share of all-normal Fusion finalizations suppressed before Layer 2."
+    },
+    {
+      "id": 17,
+      "title": "Fusion Latency p50/p95",
+      "type": "stat",
+      "gridPos": {
+        "x": 13,
+        "y": 11,
+        "w": 5,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(fyp_fusion_latency_seconds_bucket[$__rate_interval])))",
+          "legendFormat": "p50"
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(fyp_fusion_latency_seconds_bucket[$__rate_interval])))",
+          "legendFormat": "p95"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        }
+      },
+      "description": "Fusion decision computation time; correlation waiting is separate."
+    },
+    {
+      "id": 18,
+      "title": "Correlation Wait p50/p95",
+      "type": "stat",
+      "gridPos": {
+        "x": 18,
+        "y": 11,
+        "w": 6,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(fyp_fusion_correlation_wait_seconds_bucket[$__rate_interval])))",
+          "legendFormat": "p50"
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(fyp_fusion_correlation_wait_seconds_bucket[$__rate_interval])))",
+          "legendFormat": "p95"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        }
+      },
+      "description": "Time an event remains in Fusion correlation before finalization."
+    },
+    {
+      "id": 19,
+      "type": "row",
+      "title": "LAYER 2 — AI CONTROL PLANE",
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false
+    },
+    {
+      "id": 20,
+      "title": "Strategy Outcomes",
+      "type": "bargauge",
+      "gridPos": {
+        "x": 0,
+        "y": 17,
+        "w": 6,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(fyp_strategy_schema_valid_total)",
+          "legendFormat": "Schema valid",
+          "instant": true
+        },
+        {
+          "refId": "B",
+          "expr": "sum(fyp_strategy_schema_invalid_total)",
+          "legendFormat": "Schema invalid",
+          "instant": true
+        },
+        {
+          "refId": "C",
+          "expr": "sum(fyp_strategy_timeout_total)",
+          "legendFormat": "Timeout",
+          "instant": true
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        }
+      },
+      "description": "Current-process Strategy outcomes. No valid-JSON metric is exported, so schema validity is not mislabelled as JSON validity."
+    },
+    {
+      "id": 21,
+      "title": "Strategy Validity",
+      "type": "stat",
+      "gridPos": {
+        "x": 6,
+        "y": 17,
+        "w": 4,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(fyp_strategy_schema_valid_total) / clamp_min(sum(fyp_strategy_schema_valid_total) + sum(fyp_strategy_schema_invalid_total), 1)",
+          "legendFormat": "SVR"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        }
+      },
+      "description": "Schema-valid responses divided by completed non-timeout Strategy responses."
+    },
+    {
+      "id": 22,
+      "title": "Strategy Timeout",
+      "type": "stat",
+      "gridPos": {
+        "x": 10,
+        "y": 17,
+        "w": 4,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(fyp_strategy_timeout_total) / clamp_min(sum(fyp_strategy_schema_valid_total) + sum(fyp_strategy_schema_invalid_total) + sum(fyp_strategy_timeout_total), 1)",
+          "legendFormat": "Timeouts"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        }
+      },
+      "description": "Timed-out Strategy calls as a share of recorded Strategy attempts."
+    },
+    {
+      "id": 23,
+      "title": "Strategy Tokens/s",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 14,
+        "y": 17,
+        "w": 5,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "fyp_strategy_tokens_per_s",
+          "legendFormat": "tokens/s"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        }
+      },
+      "description": "Observed local Strategy LLM generation throughput."
+    },
+    {
+      "id": 24,
+      "title": "Policy Routes",
+      "type": "bargauge",
+      "gridPos": {
+        "x": 19,
+        "y": 17,
+        "w": 5,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (decision) (fyp_routing_decision_total)",
+          "legendFormat": "{{decision}}",
+          "instant": true
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        }
+      },
+      "description": "Current-process deterministic Policy routing totals for AUTO and HITL."
+    },
+    {
+      "id": 25,
+      "title": "Policy Reasons",
+      "type": "bargauge",
+      "gridPos": {
+        "x": 0,
+        "y": 22,
+        "w": 6,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (reason) (fyp_routing_decision_total)",
+          "legendFormat": "{{reason}}",
+          "instant": true
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        }
+      },
+      "description": "Observed deterministic Policy reasons, including high-risk, confidence, timeout, parse, schema, and action validation outcomes."
+    },
+    {
+      "id": 26,
+      "title": "Component Latency p95",
+      "type": "bargauge",
+      "gridPos": {
+        "x": 6,
+        "y": 22,
+        "w": 6,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(fyp_triage_latency_s_bucket[$__rate_interval])))",
+          "legendFormat": "Triage"
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(fyp_strategy_latency_s_bucket[$__rate_interval])))",
+          "legendFormat": "Strategy"
+        },
+        {
+          "refId": "C",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(fyp_policy_latency_s_bucket[$__rate_interval])))",
+          "legendFormat": "Policy"
+        },
+        {
+          "refId": "D",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(fyp_learning_processing_latency_seconds_bucket[$__rate_interval])))",
+          "legendFormat": "Learning"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        }
+      },
+      "description": "p95 component processing comparison. Strategy local inference is expected to dominate; Learning is deterministic."
+    },
+    {
+      "id": 27,
+      "title": "Control-Plane Latency",
+      "type": "stat",
+      "gridPos": {
+        "x": 12,
+        "y": 22,
+        "w": 4,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(fyp_control_plane_processing_latency_seconds_bucket[$__rate_interval])))",
+          "legendFormat": "p50"
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(fyp_control_plane_processing_latency_seconds_bucket[$__rate_interval])))",
+          "legendFormat": "p95"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        }
+      },
+      "description": "Triage + Strategy + Policy processing only; excludes RabbitMQ queue and backlog delay."
+    },
+    {
+      "id": 28,
+      "title": "E2E Decision Latency",
+      "type": "stat",
+      "gridPos": {
+        "x": 16,
+        "y": 22,
+        "w": 4,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(fyp_end_to_end_decision_latency_seconds_bucket[$__rate_interval])))",
+          "legendFormat": "p50"
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(fyp_end_to_end_decision_latency_seconds_bucket[$__rate_interval])))",
+          "legendFormat": "p95"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        }
+      },
+      "description": "Layer 2 incident timestamp to Policy decision, including inter-agent queueing and backlog delay."
+    },
+    {
+      "id": 29,
+      "title": "Feedback Latency",
+      "type": "stat",
+      "gridPos": {
+        "x": 20,
+        "y": 22,
+        "w": 4,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(fyp_feedback_completion_latency_seconds_bucket[$__rate_interval])))",
+          "legendFormat": "p50"
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(fyp_feedback_completion_latency_seconds_bucket[$__rate_interval])))",
+          "legendFormat": "p95"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        }
+      },
+      "description": "Policy decision to outcome.feedback receipt; it is not verified service-recovery time."
+    },
+    {
+      "id": 30,
+      "title": "Learning Latency",
+      "type": "stat",
+      "gridPos": {
+        "x": 0,
+        "y": 27,
+        "w": 5,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(fyp_learning_processing_latency_seconds_bucket[$__rate_interval])))",
+          "legendFormat": "p50"
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(fyp_learning_processing_latency_seconds_bucket[$__rate_interval])))",
+          "legendFormat": "p95"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        }
+      },
+      "description": "Deterministic Learning Agent processing time after feedback receipt."
+    },
+    {
+      "id": 31,
+      "title": "ChromaDB Upserts",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 5,
+        "y": 27,
+        "w": 6,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(fyp_learning_chromadb_upserts_total[$__rate_interval])",
+          "legendFormat": "upserts/s"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        }
+      },
+      "description": "Rate of deterministic Learning Agent writes to ChromaDB."
+    },
+    {
+      "id": 32,
+      "title": "EMA Threshold",
+      "type": "gauge",
+      "gridPos": {
+        "x": 11,
+        "y": 27,
+        "w": 4,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "fyp_learning_confidence_threshold",
+          "legendFormat": "Threshold"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0.6,
+          "max": 0.9
+        }
+      },
+      "description": "Current bounded EMA confidence threshold maintained by deterministic Learning."
+    },
+    {
+      "id": 33,
+      "title": "Learning Outcomes",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 15,
+        "y": 27,
+        "w": 5,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (outcome_type) (rate(fyp_learning_outcomes_total[$__rate_interval]))",
+          "legendFormat": "{{outcome_type}}"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        }
+      },
+      "description": "Feedback outcome types processed by deterministic Learning."
+    },
+    {
+      "id": 34,
+      "title": "EMA Updates",
+      "type": "stat",
+      "gridPos": {
+        "x": 20,
+        "y": 27,
+        "w": 4,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(fyp_learning_threshold_updates_total)",
+          "legendFormat": "Updates",
+          "instant": true
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        }
+      },
+      "description": "Current-process count of persisted EMA threshold updates."
+    },
+    {
+      "id": 35,
+      "type": "row",
+      "title": "LAYER 3 — EXECUTION, HUMAN OVERSIGHT & OBSERVABILITY LAYER",
+      "gridPos": {
+        "x": 0,
+        "y": 32,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false
+    },
+    {
+      "id": 36,
+      "title": "AUTO Attempts",
+      "type": "stat",
+      "gridPos": {
+        "x": 0,
+        "y": 33,
+        "w": 4,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(fyp_auto_executor_attempts_total)",
+          "legendFormat": "Attempts",
+          "instant": true
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        }
+      },
+      "description": "Current-process automatic remediation attempts."
+    },
+    {
+      "id": 37,
+      "title": "AUTO Outcomes",
+      "type": "bargauge",
+      "gridPos": {
+        "x": 4,
+        "y": 33,
+        "w": 6,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (outcome) (fyp_auto_executor_outcomes_total)",
+          "legendFormat": "{{outcome}}",
+          "instant": true
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        }
+      },
+      "description": "Automatic remediation success and failure counts; outcomes do not establish verified recovery."
+    },
+    {
+      "id": 38,
+      "title": "AUTO Latency",
+      "type": "stat",
+      "gridPos": {
+        "x": 10,
+        "y": 33,
+        "w": 5,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(fyp_auto_executor_execution_latency_seconds_bucket[$__rate_interval])))",
+          "legendFormat": "p50"
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(fyp_auto_executor_execution_latency_seconds_bucket[$__rate_interval])))",
+          "legendFormat": "p95"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        }
+      },
+      "description": "Auto Executor action duration, not a service-recovery measurement."
+    },
+    {
+      "id": 39,
+      "title": "Feedback Emitted",
+      "type": "stat",
+      "gridPos": {
+        "x": 15,
+        "y": 33,
+        "w": 4,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(fyp_outcome_feedback_emitted_total)",
+          "legendFormat": "Emitted",
+          "instant": true
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        }
+      },
+      "description": "Successfully emitted automatic outcome.feedback messages entering the feedback loop."
+    },
+    {
+      "id": 40,
+      "title": "HITL Queue",
+      "type": "stat",
+      "gridPos": {
+        "x": 19,
+        "y": 33,
+        "w": 5,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rabbitmq_queue_messages_ready{queue=\"hitl.queue\"})",
+          "legendFormat": "Pending",
+          "instant": true
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        }
+      },
+      "description": "Authoritative ready depth for the HITL RabbitMQ queue."
+    },
+    {
+      "id": 41,
+      "title": "HITL Decisions",
+      "type": "bargauge",
+      "gridPos": {
+        "x": 0,
+        "y": 38,
+        "w": 8,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(fyp_hitl_approved_total)",
+          "legendFormat": "Approved",
+          "instant": true
+        },
+        {
+          "refId": "B",
+          "expr": "sum(fyp_hitl_rejected_total)",
+          "legendFormat": "Rejected",
+          "instant": true
+        },
+        {
+          "refId": "C",
+          "expr": "sum(fyp_hitl_modified_total)",
+          "legendFormat": "Modified",
+          "instant": true
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        }
+      },
+      "description": "Current-process authoritative human decisions persisted by the HITL dashboard."
+    },
+    {
+      "id": 42,
+      "title": "Human Decision Latency",
+      "type": "stat",
+      "gridPos": {
+        "x": 8,
+        "y": 38,
+        "w": 8,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(fyp_human_decision_latency_seconds_bucket[$__rate_interval])))",
+          "legendFormat": "p50"
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(fyp_human_decision_latency_seconds_bucket[$__rate_interval])))",
+          "legendFormat": "p95"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        }
+      },
+      "description": "Persisted HITL queue entry (arrived_at) to persisted authoritative human decision (decided_at)."
+    },
+    {
+      "id": 43,
+      "title": "Feedback Loop",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 16,
+        "y": 38,
+        "w": 8,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (outcome_type) (rate(fyp_learning_outcomes_total[$__rate_interval]))",
+          "legendFormat": "{{outcome_type}}"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        }
+      },
+      "description": "Feedback processed by deterministic Learning, completing Policy → AUTO/HITL → feedback → Learning."
+    },
+    {
+      "id": 44,
+      "type": "row",
+      "title": "INFRASTRUCTURE / HARDWARE",
+      "gridPos": {
+        "x": 0,
+        "y": 43,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false
+    },
+    {
+      "id": 45,
+      "title": "Stream Node",
+      "type": "stat",
+      "gridPos": {
+        "x": 0,
+        "y": 44,
+        "w": 8,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "up{job=\"fyp-cluster\",instance=\"stream-node:9100\"}",
+          "legendFormat": "UP",
+          "instant": true
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        }
+      },
+      "description": "Liveness of the stream-node hosting Layer 1 workloads."
+    },
+    {
+      "id": 46,
+      "title": "AI Brain Node",
+      "type": "stat",
+      "gridPos": {
+        "x": 8,
+        "y": 44,
+        "w": 8,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "up{job=\"fyp-cluster\",instance=\"ai-brain-node:9100\"}",
+          "legendFormat": "UP",
+          "instant": true
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        }
+      },
+      "description": "Liveness of the ai-brain-node hosting Layer 2 workloads."
+    },
+    {
+      "id": 47,
+      "title": "Gateway Node",
+      "type": "stat",
+      "gridPos": {
+        "x": 16,
+        "y": 44,
+        "w": 8,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "up{job=\"fyp-cluster\",instance=\"gateway-node:9100\"}",
+          "legendFormat": "UP",
+          "instant": true
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        }
+      },
+      "description": "Liveness of the gateway-node hosting Layer 3 and observability services."
+    },
+    {
+      "id": 48,
+      "title": "Node CPU",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 0,
+        "y": 48,
+        "w": 8,
+        "h": 6
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "100 * (1 - avg by (instance) (rate(node_cpu_seconds_total{job=\"fyp-cluster\",mode=\"idle\"}[$__rate_interval])))",
+          "legendFormat": "{{instance}}"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 80
+              },
+              {
+                "color": "red",
+                "value": 95
+              }
+            ]
+          }
+        }
+      },
+      "description": "CPU utilization comparison across the three commodity nodes."
+    },
+    {
+      "id": 49,
+      "title": "Node Memory",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 8,
+        "y": 48,
+        "w": 8,
+        "h": 6
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "100 * (1 - (node_memory_MemAvailable_bytes{job=\"fyp-cluster\"} / node_memory_MemTotal_bytes{job=\"fyp-cluster\"}))",
+          "legendFormat": "{{instance}}"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 80
+              },
+              {
+                "color": "red",
+                "value": 95
+              }
+            ]
+          }
+        }
+      },
+      "description": "RAM utilization comparison, especially relevant during local Strategy inference."
+    },
+    {
+      "id": 50,
+      "title": "Node Disk",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 16,
+        "y": 48,
+        "w": 8,
+        "h": 6
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "100 * (1 - (node_filesystem_avail_bytes{job=\"fyp-cluster\",mountpoint=\"/\"} / node_filesystem_size_bytes{job=\"fyp-cluster\",mountpoint=\"/\"}))",
+          "legendFormat": "{{instance}}"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100
+        }
+      },
+      "description": "Root filesystem usage across all nodes."
+    },
+    {
+      "id": 51,
+      "title": "Network RX/TX",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 0,
+        "y": 54,
+        "w": 12,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (instance) (rate(node_network_receive_bytes_total{job=\"fyp-cluster\",device!~\"lo|docker.*|veth.*|br-.*\"}[$__rate_interval]))",
+          "legendFormat": "{{instance}} RX"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (instance) (rate(node_network_transmit_bytes_total{job=\"fyp-cluster\",device!~\"lo|docker.*|veth.*|br-.*\"}[$__rate_interval]))",
+          "legendFormat": "{{instance}} TX"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps"
+        }
+      },
+      "description": "Node receive and transmit throughput; works for either Wi-Fi or Ethernet experiments."
+    },
+    {
+      "id": 52,
+      "title": "Temperature",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 12,
+        "y": 54,
+        "w": 6,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max by (instance) (node_hwmon_temp_celsius{job=\"fyp-cluster\"})",
+          "legendFormat": "{{instance}}"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "celsius"
+        }
+      },
+      "description": "Highest reported temperature per node for sustained-load thermal checks."
+    },
+    {
+      "id": 53,
+      "title": "NTP Offset",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 18,
+        "y": 54,
+        "w": 6,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "node_timex_offset_seconds{job=\"fyp-cluster\"} * 1000",
+          "legendFormat": "{{instance}}"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
+        }
+      },
+      "description": "Node clock offset relevant to cross-node latency interpretation."
+    },
+    {
+      "id": 54,
+      "title": "RabbitMQ Backlog",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 0,
+        "y": 59,
+        "w": 16,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (queue) (rabbitmq_queue_messages_ready{queue=~\"raw[.]events|validated[.]event|detect[.]cpu|detect[.]error|detect[.]throughput|detect[.]auth|detect[.]schema|fusion[.]results|anomaly[.]detected|triage[.]result|strategy[.]result|auto[.]execute|hitl[.]queue|outcome[.]feedback|dead[.]letters\"})",
+          "legendFormat": "{{queue}}"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        }
+      },
+      "description": "Current ready-message depth for active FYP queues. A zero is meaningful only when the RabbitMQ exporter is healthy; missing data is not synthesized as an empty queue."
+    },
+    {
+      "id": 55,
+      "title": "Prometheus Targets",
+      "type": "bargauge",
+      "gridPos": {
+        "x": 16,
+        "y": 59,
+        "w": 8,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(up == bool 1)",
+          "legendFormat": "UP",
+          "instant": true
+        },
+        {
+          "refId": "B",
+          "expr": "sum(up == bool 0)",
+          "legendFormat": "DOWN",
+          "instant": true
+        },
+        {
+          "refId": "C",
+          "expr": "count(up)",
+          "legendFormat": "TOTAL",
+          "instant": true
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bfg3227zf71tsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        }
+      },
+      "description": "Current counts of every discovered Prometheus scrape target reporting UP, DOWN, and total. No job filter or fixed deployment total is applied; missing Prometheus data remains visible as missing data."
+    }
   ]
 }

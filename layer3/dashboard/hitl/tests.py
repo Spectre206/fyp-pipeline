@@ -154,7 +154,7 @@ class HitlObservabilityTests(TestCase):
             panel.get("title"): panel for panel in json.loads(dashboard.read_text())["panels"]
         }
         decision_queries = "\n".join(
-            target["expr"] for target in panels["HUMAN OVERSIGHT — Decisions"]["targets"]
+            target["expr"] for target in panels["HITL Decisions"]["targets"]
         )
         self.assertIn("fyp_hitl_approved_total", decision_queries)
         self.assertIn("fyp_hitl_rejected_total", decision_queries)
@@ -163,7 +163,7 @@ class HitlObservabilityTests(TestCase):
             'rabbitmq_queue_messages_ready{queue="hitl.queue"}',
             panels["HITL Pending"]["targets"][0]["expr"],
         )
-        latency = panels["Human Decision Latency — p50 / p95"]
+        latency = panels["Human Decision Latency"]
         latency_queries = "\n".join(target["expr"] for target in latency["targets"])
         self.assertIn("fyp_human_decision_latency_seconds_bucket", latency_queries)
         self.assertIn("sum by (le)", latency_queries)
