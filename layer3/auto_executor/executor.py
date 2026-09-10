@@ -7,12 +7,24 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import structlog
-from prometheus_client import Counter, start_http_server
+from prometheus_client import Counter, Histogram, start_http_server
 from datetime import datetime, timezone
 AUTO_EXEC_OUTCOMES = Counter(
     "fyp_auto_executor_outcomes_total",
     "Auto-executor outcomes",
     ["outcome"]
+)
+AUTO_EXEC_ATTEMPTS = Counter(
+    "fyp_auto_executor_attempts_total",
+    "Auto-executor remediation attempts",
+)
+AUTO_EXEC_LATENCY = Histogram(
+    "fyp_auto_executor_execution_latency_seconds",
+    "Auto-executor remediation duration",
+)
+OUTCOME_FEEDBACK_EMITTED = Counter(
+    "fyp_outcome_feedback_emitted_total",
+    "outcome.feedback messages successfully emitted by the Auto Executor",
 )
 
 start_http_server(8014)
@@ -34,11 +46,15 @@ class AutoExecutor:
         Simulate remediation. Returns (outcome_type, resolution_time_ms).
         All successes unless actions list is empty.
         """
+        started_at = time.monotonic()
+        AUTO_EXEC_ATTEMPTS.inc()
         if not actions:
             AUTO_EXEC_OUTCOMES.labels(outcome="FAILURE").inc()
+            AUTO_EXEC_LATENCY.observe(time.monotonic() - started_at)
             return ("AUTO_EXECUTE_FAILURE", 0)
         time.sleep(0.5)  # Simulate execution time
         AUTO_EXEC_OUTCOMES.labels(outcome="SUCCESS").inc()
+        AUTO_EXEC_LATENCY.observe(time.monotonic() - started_at)
         return ("AUTO_EXECUTE_SUCCESS", 500)
 
     def on_message(self, ch, method, props, body):
@@ -84,6 +100,7 @@ class AutoExecutor:
                 "full_policy_result": policy,
             }
             publish("outcome.feedback", json.dumps(feedback))
+            OUTCOME_FEEDBACK_EMITTED.inc()
 
             ch.basic_ack(method.delivery_tag)
             log.info("auto_executed", event_id=event_id, outcome=outcome_type)

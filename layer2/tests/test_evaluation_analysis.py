@@ -28,7 +28,7 @@ class EvaluationAnalysisTests(unittest.TestCase):
                 {"event_id": "a", "timed_out": False, "valid_json": True, "schema_valid": True},
             ])
             self.write(path, "policy", [
-                {"event_id": "a", "routing_decision": "AUTO", "routing_reason": "OK", "policy_latency_s": .1, "control_plane_latency_s": .5},
+                {"event_id": "a", "routing_decision": "AUTO", "routing_reason": "OK", "policy_latency_s": .1, "end_to_end_decision_latency_s": .5},
                 {"event_id": "b", "routing_decision": "HITL", "routing_reason": "SCHEMA_INVALID"},
             ])
             self.write(path, "feedback", [{"event_id": "a", "outcome_type": "AUTO_EXECUTE_SUCCESS"}])
@@ -43,7 +43,7 @@ class EvaluationAnalysisTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             summary, _ = analyze(Path(temp))
             self.assertEqual(summary["svr"]["total_requests"], 0)
-            self.assertEqual(summary["latency_seconds"]["triage_to_policy_wall_clock"]["count"], 0)
+            self.assertEqual(summary["latency_seconds"]["end_to_end_decision_latency"]["count"], 0)
 
     def test_ground_truth_metrics_and_latency_distribution(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -68,8 +68,51 @@ class EvaluationAnalysisTests(unittest.TestCase):
             self.assertEqual(summary["risk_tier_accuracy"]["value"], .5)
             self.assertEqual(summary["false_automation_rate"]["value"], 0.0)
             self.assertEqual(summary["false_escalation_rate"]["value"], .5)
-            self.assertEqual(summary["latency_seconds"]["component_processing_sum"]["count"], 2)
-            self.assertEqual(summary["latency_seconds"]["stages"]["strategy"]["max"], .4)
+            self.assertEqual(summary["latency_seconds"]["control_plane_processing_latency"]["count"], 2)
+            self.assertEqual(summary["latency_seconds"]["strategy_processing_latency"]["max"], .4)
+
+    def test_final_latency_names_use_their_defined_event_fields(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp)
+            self.write(path, "triage", [{"event_id": "a", "triage_latency_s": .1}])
+            self.write(path, "strategy", [{"event_id": "a", "timed_out": False, "valid_json": True, "schema_valid": True, "strategy_latency_s": .2}])
+            self.write(path, "policy", [{"event_id": "a", "routing_decision": "AUTO", "policy_latency_s": .3, "end_to_end_decision_latency_s": 2.0}])
+            self.write(path, "feedback", [{"event_id": "a", "feedback_completion_latency_s": .5}])
+            self.write(path, "learning", [{"event_id": "a", "learning_latency_s": .05}])
+            summary, _ = analyze(path)
+            latencies = summary["latency_seconds"]
+            self.assertAlmostEqual(latencies["control_plane_processing_latency"]["mean"], .6)
+            self.assertEqual(latencies["end_to_end_decision_latency"]["mean"], 2.0)
+            self.assertEqual(latencies["feedback_completion_latency"]["mean"], .5)
+            self.assertEqual(latencies["learning_processing_latency"]["mean"], .05)
+
+    def test_blank_manual_ground_truth_labels_remain_not_computable(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp)
+            self.write(path, "strategy", [{"event_id": "a", "timed_out": False, "risk_tier": "LOW"}])
+            self.write(path, "policy", [{"event_id": "a", "routing_decision": "AUTO"}])
+            self.write_labels(path, [{
+                "event_id": "a", "ground_truth_risk_tier": "LOW",
+                "ground_truth_action": "AUTO_RESTART_CONSUMER",
+                "expected_route": "", "safe_to_auto": "",
+            }])
+            summary, _ = analyze(path, path / "labels.csv")
+            self.assertEqual(summary["risk_tier_accuracy"]["value"], 1.0)
+            self.assertEqual(summary["false_automation_rate"]["status"], "not_computable")
+            self.assertEqual(summary["false_escalation_rate"]["status"], "not_computable")
+
+    def test_invalid_manual_ground_truth_values_are_reported_not_used(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp)
+            self.write(path, "policy", [{"event_id": "a", "routing_decision": "AUTO"}])
+            self.write_labels(path, [{
+                "event_id": "a", "ground_truth_risk_tier": "LOW",
+                "expected_route": "MAYBE", "safe_to_auto": "unknown",
+            }])
+            summary, _ = analyze(path, path / "labels.csv")
+            self.assertEqual(summary["counts"]["malformed_ground_truth_records"], 2)
+            self.assertEqual(summary["false_automation_rate"]["status"], "not_computable")
+            self.assertEqual(summary["false_escalation_rate"]["status"], "not_computable")
 
     def test_malformed_artifacts_are_reported(self):
         with tempfile.TemporaryDirectory() as temp:

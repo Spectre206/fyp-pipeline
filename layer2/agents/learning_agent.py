@@ -28,13 +28,17 @@ THRESHOLD_UPDATES = Counter(
 CHROMADB_UPSERTS = Counter(
     "fyp_learning_chromadb_upserts_total", "ChromaDB upserts"
 )
+LEARNING_PROCESSING_LATENCY = Histogram(
+    "fyp_learning_processing_latency_seconds",
+    "Learning Agent feedback processing latency",
+)
 THRESHOLD_GAUGE = Gauge(
     "fyp_learning_confidence_threshold",
     "Current EMA confidence threshold"
 )
-MTTR_HISTOGRAM = Histogram(
-    "fyp_mttr_seconds",
-    "Mean Time To Recovery (triage_timestamp → outcome feedback received)",
+FEEDBACK_COMPLETION_LATENCY = Histogram(
+    "fyp_feedback_completion_latency_seconds",
+    "Policy decision timestamp to outcome.feedback receipt latency",
     buckets=[30, 60, 120, 180, 300, 600, 900]
 )
 TIMESTAMP_MISSING = Counter(
@@ -153,18 +157,13 @@ class LearningAgent:
             event_id = outcome.get("event_id", "unknown")
             outcome_type = outcome.get("outcome_type", "UNKNOWN")
             feedback_timestamp = datetime.now(timezone.utc).isoformat()
-            feedback_latency_s = None
+            feedback_completion_latency_s = None
 
             OUTCOMES_PROCESSED.labels(outcome_type=outcome_type).inc()
 
-            # ---------- MTTR calculation ----------
-            # Control-plane MTTR: triage_timestamp → outcome feedback received
+            # Feedback completion latency: Policy decision → feedback receipt.
             try:
-                chain = outcome.get("full_policy_result", {}).get(
-                    "full_reasoning_chain", {}
-                )
-                triage_result = chain.get("triage_result", {})
-                ts = triage_result.get("triage_timestamp")
+                ts = outcome.get("full_policy_result", {}).get("policy_timestamp")
 
                 if ts:
                     try:
@@ -174,14 +173,19 @@ class LearningAgent:
                         else:
                             start_time = start_time.astimezone(timezone.utc)
 
-                        mttr = (datetime.now(timezone.utc) - start_time).total_seconds()
-                        feedback_latency_s = mttr
-                        MTTR_HISTOGRAM.observe(mttr)
+                        feedback_completion_latency_s = (
+                            datetime.now(timezone.utc) - start_time
+                        ).total_seconds()
+                        FEEDBACK_COMPLETION_LATENCY.observe(feedback_completion_latency_s)
                     except Exception:
-                        log.warning("mttr_timestamp_parse_failed", event_id=event_id, ts=ts)
+                        log.warning(
+                            "feedback_latency_timestamp_parse_failed",
+                            event_id=event_id,
+                            ts=ts,
+                        )
                         TIMESTAMP_MISSING.labels(agent="learning").inc()
                 else:
-                    log.warning("mttr_no_timestamp", event_id=event_id)
+                    log.warning("feedback_latency_no_policy_timestamp", event_id=event_id)
                     TIMESTAMP_MISSING.labels(agent="learning").inc()
             except Exception:
                 pass
@@ -193,7 +197,7 @@ class LearningAgent:
                 "event_id": event_id,
                 "outcome_type": outcome_type,
                 "feedback_timestamp": feedback_timestamp,
-                "feedback_latency_s": feedback_latency_s,
+                "feedback_completion_latency_s": feedback_completion_latency_s,
             })
 
             summary_mode = "deterministic"
@@ -230,11 +234,13 @@ class LearningAgent:
             CHROMADB_UPSERTS.inc()
 
             update_ema(outcome_type)
+            learning_latency_s = time.monotonic() - t0
+            LEARNING_PROCESSING_LATENCY.observe(learning_latency_s)
             record_evaluation("learning", {
                 "event_id": event_id,
                 "outcome_type": outcome_type,
                 "summary_mode": summary_mode,
-                "learning_latency_s": time.monotonic() - t0,
+                "learning_latency_s": learning_latency_s,
                 "chromadb_upsert_id": event_id,
                 "threshold_updated": outcome_type in OUTCOME_SIGNALS,
             })

@@ -120,4 +120,16 @@ class ThresholdPersistenceTests(unittest.TestCase):
         self.assertIn("replace", names)
         self.assertIn("fsync", names)
 
+
+class LatencyMetricContractTests(unittest.TestCase):
+    def test_active_layer2_metrics_use_final_latency_names(self):
+        policy_source = (ROOT / "layer2" / "agents" / "policy_agent.py").read_text()
+        learning_source = (ROOT / "layer2" / "agents" / "learning_agent.py").read_text()
+        self.assertIn("fyp_control_plane_processing_latency_seconds", policy_source)
+        self.assertIn("fyp_end_to_end_decision_latency_seconds", policy_source)
+        self.assertIn("fyp_feedback_completion_latency_seconds", learning_source)
+        self.assertIn("fyp_learning_processing_latency_seconds", learning_source)
+        self.assertNotIn("fyp_mtta_seconds", policy_source)
+        self.assertNotIn("fyp_mttr_seconds", learning_source)
+
 if __name__ == "__main__": unittest.main()

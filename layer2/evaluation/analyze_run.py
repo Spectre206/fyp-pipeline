@@ -64,6 +64,12 @@ def read_ground_truth(path):
                 if not event_id:
                     malformed += 1
                     continue
+                expected_route = row.get("expected_route", "").strip()
+                safe_to_auto = row.get("safe_to_auto", "").strip()
+                if expected_route not in {"", "AUTO", "HITL"}:
+                    malformed += 1
+                if safe_to_auto not in {"", "true", "false"}:
+                    malformed += 1
                 labels[event_id] = row
     except (OSError, csv.Error):
         return {}, 0, "ground_truth_file_unreadable"
@@ -111,7 +117,7 @@ def risk_accuracy(strategy, labels):
 
 def automation_metrics(policy, labels):
     has_safe_to_auto = any(
-        row.get("safe_to_auto", "").strip().lower() in {"true", "false"}
+        row.get("safe_to_auto", "").strip() in {"true", "false"}
         for row in labels.values()
     )
     has_expected_route = any(
@@ -123,9 +129,9 @@ def automation_metrics(policy, labels):
         comparable = [
             (event_id, row) for event_id, row in policy.items()
             if row.get("routing_decision") == "AUTO" and event_id in labels
-            and labels[event_id].get("safe_to_auto", "").strip().lower() in {"true", "false"}
+            and labels[event_id].get("safe_to_auto", "").strip() in {"true", "false"}
         ]
-        unsafe = sum(labels[event_id]["safe_to_auto"].strip().lower() == "false" for event_id, _ in comparable)
+        unsafe = sum(labels[event_id]["safe_to_auto"].strip() == "false" for event_id, _ in comparable)
         far = {
             "status": "computed",
             "definition": "AUTO decisions labeled safe_to_auto=false / AUTO decisions with safe_to_auto labels",
@@ -172,15 +178,26 @@ def analyze(run_dir, ground_truth_path=None, expect_hitl_feedback=False):
         if row.get("routing_decision") == "HITL"
     }
     expected_feedback = auto_policy_ids | (hitl_policy_ids if expect_hitl_feedback else set())
-    latencies = {
-        "triage": distribution(x.get("triage_latency_s") for x in data["triage"].values()),
-        "strategy": distribution(x.get("strategy_latency_s") for x in strategy.values()),
-        "policy": distribution(x.get("policy_latency_s") for x in policy.values()),
-        "feedback_received": distribution(x.get("feedback_latency_s") for x in feedback.values()),
-        "learning": distribution(x.get("learning_latency_s") for x in learning.values()),
-    }
-    wall_clock_cpl = distribution(x.get("control_plane_latency_s") for x in policy.values())
-    component_cpl = distribution(
+    triage_processing_latency = distribution(
+        x.get("triage_latency_s") for x in data["triage"].values()
+    )
+    strategy_processing_latency = distribution(
+        x.get("strategy_latency_s") for x in strategy.values()
+    )
+    policy_processing_latency = distribution(
+        x.get("policy_latency_s") for x in policy.values()
+    )
+    feedback_completion_latency = distribution(
+        feedback[event_id].get("feedback_completion_latency_s")
+        for event_id in set(feedback) & expected_feedback
+    )
+    learning_processing_latency = distribution(
+        x.get("learning_latency_s") for x in learning.values()
+    )
+    end_to_end_decision_latency = distribution(
+        x.get("end_to_end_decision_latency_s") for x in policy.values()
+    )
+    control_plane_processing_latency = distribution(
         data["triage"][event_id].get("triage_latency_s")
         + strategy[event_id].get("strategy_latency_s")
         + policy[event_id].get("policy_latency_s")
@@ -242,9 +259,13 @@ def analyze(run_dir, ground_truth_path=None, expect_hitl_feedback=False):
           "late_feedback": unavailable("requires an experiment-defined feedback deadline"),
       },
       "latency_seconds": {
-          "stages": latencies,
-          "component_processing_sum": component_cpl,
-          "triage_to_policy_wall_clock": wall_clock_cpl,
+          "triage_processing_latency": triage_processing_latency,
+          "strategy_processing_latency": strategy_processing_latency,
+          "policy_processing_latency": policy_processing_latency,
+          "control_plane_processing_latency": control_plane_processing_latency,
+          "end_to_end_decision_latency": end_to_end_decision_latency,
+          "feedback_completion_latency": feedback_completion_latency,
+          "learning_processing_latency": learning_processing_latency,
       },
       "risk_tier_accuracy": risk_accuracy(strategy, labels),
       "false_automation_rate": far,
@@ -263,14 +284,14 @@ def main():
     )
     (args.run_dir / "evaluation_summary.json").write_text(json.dumps(summary, indent=2))
     with (args.run_dir/"per_event.csv").open("w",newline="") as output:
-        fields=["event_id","anomaly_type","triage_protocol","strategy_valid_json","strategy_schema_valid","strategy_timeout","strategy_risk_tier","strategy_confidence","policy_decision","policy_reason","feedback_received","feedback_outcome","triage_latency_s","strategy_latency_s","policy_latency_s","control_plane_latency_s"]
+        fields=["event_id","anomaly_type","triage_protocol","strategy_valid_json","strategy_schema_valid","strategy_timeout","strategy_risk_tier","strategy_confidence","policy_decision","policy_reason","feedback_received","feedback_outcome","triage_latency_s","strategy_latency_s","policy_latency_s","end_to_end_decision_latency_s","feedback_completion_latency_s","learning_latency_s"]
         writer=csv.DictWriter(output,fieldnames=fields); writer.writeheader()
         for event_id in sorted(set().union(*[set(x) for x in data.values()])):
             t, s, p, f = (
                 data[stage].get(event_id, {})
                 for stage in ("triage", "strategy", "policy", "feedback")
             )
-            writer.writerow({"event_id":event_id,"anomaly_type":t.get("anomaly_type"),"triage_protocol":t.get("response_protocol"),"strategy_valid_json":s.get("valid_json"),"strategy_schema_valid":s.get("schema_valid"),"strategy_timeout":s.get("timed_out"),"strategy_risk_tier":s.get("risk_tier"),"strategy_confidence":s.get("confidence"),"policy_decision":p.get("routing_decision"),"policy_reason":p.get("routing_reason"),"feedback_received":bool(f),"feedback_outcome":f.get("outcome_type"),"triage_latency_s":t.get("triage_latency_s"),"strategy_latency_s":s.get("strategy_latency_s"),"policy_latency_s":p.get("policy_latency_s"),"control_plane_latency_s":p.get("control_plane_latency_s")})
+            writer.writerow({"event_id":event_id,"anomaly_type":t.get("anomaly_type"),"triage_protocol":t.get("response_protocol"),"strategy_valid_json":s.get("valid_json"),"strategy_schema_valid":s.get("schema_valid"),"strategy_timeout":s.get("timed_out"),"strategy_risk_tier":s.get("risk_tier"),"strategy_confidence":s.get("confidence"),"policy_decision":p.get("routing_decision"),"policy_reason":p.get("routing_reason"),"feedback_received":bool(f),"feedback_outcome":f.get("outcome_type"),"triage_latency_s":t.get("triage_latency_s"),"strategy_latency_s":s.get("strategy_latency_s"),"policy_latency_s":p.get("policy_latency_s"),"end_to_end_decision_latency_s":p.get("end_to_end_decision_latency_s"),"feedback_completion_latency_s":f.get("feedback_completion_latency_s"),"learning_latency_s":data["learning"].get(event_id,{}).get("learning_latency_s")})
     print(f"Evaluation artifacts: {args.run_dir}")
     print(
         "SVR: "

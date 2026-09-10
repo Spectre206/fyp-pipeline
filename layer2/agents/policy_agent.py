@@ -23,9 +23,13 @@ POLICY_LATENCY = Histogram("fyp_policy_latency_s", "Policy Agent latency")
 ROUTING_DECISION = Counter(
     "fyp_routing_decision_total", "Routing decisions", ["decision", "reason"]
 )
-MTTA_HISTOGRAM = Histogram(
-    "fyp_mtta_seconds",
-    "Mean Time To Acknowledge (triage_timestamp → policy decision)",
+CONTROL_PLANE_PROCESSING_LATENCY = Histogram(
+    "fyp_control_plane_processing_latency_seconds",
+    "Triage + Strategy + Policy processing latency, excluding queue wait",
+)
+END_TO_END_DECISION_LATENCY = Histogram(
+    "fyp_end_to_end_decision_latency_seconds",
+    "Triage timestamp to Policy decision latency, including inter-agent queue wait",
     buckets=[10, 20, 30, 40, 50, 60, 90, 120, 180, 300]
 )
 TIMESTAMP_MISSING = Counter(
@@ -103,8 +107,10 @@ class PolicyAgent:
 
             decision, reason, target_queue = self.route(strategy, threshold)
 
-            # ---------- MTTA calculation ----------
-            # Control-plane MTTA: triage_timestamp → policy decision time
+            policy_time = datetime.now(timezone.utc)
+            policy_timestamp = policy_time.isoformat()
+
+            # End-to-end decision latency: Triage timestamp → Policy decision.
             try:
                 triage_result = strategy.get("triage_result", {})
                 ts = triage_result.get("triage_timestamp")
@@ -117,13 +123,13 @@ class PolicyAgent:
                         else:
                             start_time = start_time.astimezone(timezone.utc)
 
-                        mtta = (datetime.now(timezone.utc) - start_time).total_seconds()
-                        MTTA_HISTOGRAM.observe(mtta)
+                        end_to_end_latency_s = (policy_time - start_time).total_seconds()
+                        END_TO_END_DECISION_LATENCY.observe(end_to_end_latency_s)
                     except Exception:
-                        log.warning("mtta_timestamp_parse_failed", event_id=event_id, ts=ts)
+                        log.warning("decision_latency_timestamp_parse_failed", event_id=event_id, ts=ts)
                         TIMESTAMP_MISSING.labels(agent="policy").inc()
                 else:
-                    log.warning("mtta_no_timestamp", event_id=event_id)
+                    log.warning("decision_latency_no_triage_timestamp", event_id=event_id)
                     TIMESTAMP_MISSING.labels(agent="policy").inc()
             except Exception:
                 pass
@@ -131,7 +137,7 @@ class PolicyAgent:
 
             result = {
                 "event_id": event_id,
-                "policy_timestamp": datetime.now(timezone.utc).isoformat(),
+                "policy_timestamp": policy_timestamp,
                 "routing_decision": decision,
                 "routing_reason": reason,
                 "threshold_used": threshold,
@@ -141,11 +147,33 @@ class PolicyAgent:
                     "strategy_result": strategy,
                 },
             }
-            triage_latency_s = (strategy.get("triage_result", {}).get("triage_agent_latency_ms") or 0) / 1000.0
-            control_plane_latency_s = None
+            triage_latency_s = None
+            end_to_end_decision_latency_s = None
             try:
-                control_plane_latency_s = (datetime.now(timezone.utc) - datetime.fromisoformat(strategy["triage_result"]["triage_timestamp"])).total_seconds()
+                triage_latency_s = float(
+                    strategy["triage_result"]["triage_agent_latency_ms"]
+                ) / 1000.0
             except Exception:
+                pass
+            try:
+                triage_start = datetime.fromisoformat(
+                    strategy["triage_result"]["triage_timestamp"]
+                )
+                if triage_start.tzinfo is None:
+                    triage_start = triage_start.replace(tzinfo=timezone.utc)
+                else:
+                    triage_start = triage_start.astimezone(timezone.utc)
+                end_to_end_decision_latency_s = (policy_time - triage_start).total_seconds()
+            except Exception:
+                pass
+            try:
+                strategy_latency_s = float(strategy["strategy_agent_latency_ms"]) / 1000.0
+                policy_latency_s = result["policy_agent_latency_ms"] / 1000.0
+                if all(value >= 0 for value in (triage_latency_s, strategy_latency_s, policy_latency_s)):
+                    CONTROL_PLANE_PROCESSING_LATENCY.observe(
+                        triage_latency_s + strategy_latency_s + policy_latency_s
+                    )
+            except (KeyError, TypeError, ValueError):
                 pass
             record_evaluation("policy", {
                 "event_id": event_id,
@@ -155,7 +183,7 @@ class PolicyAgent:
                 "policy_timestamp": result["policy_timestamp"],
                 "policy_latency_s": result["policy_agent_latency_ms"] / 1000.0,
                 "triage_latency_s": triage_latency_s,
-                "control_plane_latency_s": control_plane_latency_s,
+                "end_to_end_decision_latency_s": end_to_end_decision_latency_s,
             })
 
             # ---- File-based persistent log ----

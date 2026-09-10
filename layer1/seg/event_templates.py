@@ -138,6 +138,8 @@ class EventTemplateFactory:
             "ground_truth_label":     "NORMAL",
             "ground_truth_risk_tier": "N/A",
             "ground_truth_action":    None,
+            "expected_route":         None,
+            "safe_to_auto":           None,
         }
 
     # ── Anomaly event ─────────────────────────────────────────────────
@@ -179,6 +181,8 @@ class EventTemplateFactory:
             "ground_truth_label":     "ANOMALY",
             "ground_truth_risk_tier": risk,
             "ground_truth_action":    GROUND_TRUTH_ACTIONS[risk],
+            "expected_route":         None,
+            "safe_to_auto":           None,
         }
 
     # ── Schema drift event ────────────────────────────────────────────
@@ -199,6 +203,8 @@ class EventTemplateFactory:
             "ground_truth_label":     "ANOMALY",
             "ground_truth_risk_tier": risk,
             "ground_truth_action":    GROUND_TRUTH_ACTIONS[risk],
+            "expected_route":         None,
+            "safe_to_auto":           None,
         }
 
         if subtype == "missing_field":

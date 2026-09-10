@@ -7,9 +7,42 @@ import os
 sys.path.insert(0, "/home/spectre/fyp-pipeline/layer3")
 
 from django.shortcuts import render, redirect
+from django.http import HttpResponse
+from django.utils import timezone
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from .models import HitlIncident
+from .metrics import (
+    HITL_APPROVED,
+    HITL_MODIFIED,
+    HITL_REJECTED,
+    HITL_REGISTRY,
+    observe_human_decision_latency,
+)
 from rabbitmq.connection import publish
 from sqlite_logger.logger import write_decision
+
+
+def metrics_view(request):
+    """Expose the Django HITL process Prometheus registry for scraping."""
+    return HttpResponse(
+        generate_latest(HITL_REGISTRY), content_type=CONTENT_TYPE_LATEST
+    )
+
+
+def _persist_human_decision(incident, status, counter):
+    """Persist one terminal transition before recording its metrics."""
+    decided_at = timezone.now()
+    updated = HitlIncident.objects.filter(
+        pk=incident.pk,
+        status="PENDING",
+    ).update(status=status, decided_at=decided_at)
+    if not updated:
+        return False
+    incident.status = status
+    incident.decided_at = decided_at
+    observe_human_decision_latency(incident.arrived_at, decided_at)
+    counter.inc()
+    return True
 
 def queue_view(request):
     incidents = HitlIncident.objects.filter(status="PENDING").order_by("arrived_at")
@@ -63,8 +96,7 @@ def approve(request, incident_id):
     actions = payload.get("full_reasoning_chain", {}).get("strategy_result", {}).get("llm_response", {}).get("recommended_actions", [])
     write_decision(_build_decision(payload, "APPROVE", "Approved by operator", actions))
     _publish_outcome(payload, "HITL_APPROVED", actions, "Approved")
-    incident.status = "APPROVED"
-    incident.save()
+    _persist_human_decision(incident, "APPROVED", HITL_APPROVED)
     return redirect("queue")
 
 def reject(request, incident_id):
@@ -72,8 +104,7 @@ def reject(request, incident_id):
     payload = json.loads(incident.payload_json)
     write_decision(_build_decision(payload, "REJECT", "Rejected by operator", []))
     _publish_outcome(payload, "HITL_REJECTED", [], "Rejected")
-    incident.status = "REJECTED"
-    incident.save()
+    _persist_human_decision(incident, "REJECTED", HITL_REJECTED)
     return redirect("queue")
 
 def modify_form(request, incident_id):
@@ -102,9 +133,8 @@ def modify_submit(request, incident_id):
         #1. Write to SQLite (always succeeds locally)
         write_decision(_build_decision(payload, "MODIFY", notes, final_actions))
 
-        # 2. Update status immediately (so dashboard reflects change even if RabbitMQ is down)
-        incident.status = "MODIFIED"
-        incident.save()
+        # 2. Persist the authoritative action before the best-effort feedback publish.
+        _persist_human_decision(incident, "MODIFIED", HITL_MODIFIED)
 
         # 3. Try to publish outcome.feedback (may fail if Node 1 is offline — status already saved)
         try:
@@ -114,5 +144,3 @@ def modify_submit(request, incident_id):
             print(f"Warning: Could not publish outcome.feedback: {e}")
 
     return redirect("queue")
-
-       
