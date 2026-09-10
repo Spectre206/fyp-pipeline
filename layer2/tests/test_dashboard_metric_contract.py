@@ -46,5 +46,43 @@ class DashboardMetricContractTests(unittest.TestCase):
         self.assertIn("fyp_auto_executor_execution_latency_seconds", source)
         self.assertIn("fyp_outcome_feedback_emitted_total", source)
 
+    def test_backlog_scale_histograms_have_resolving_buckets(self):
+        policy = (ROOT / "layer2" / "agents" / "policy_agent.py").read_text()
+        learning = (ROOT / "layer2" / "agents" / "learning_agent.py").read_text()
+        strategy = (ROOT / "layer2" / "agents" / "strategy_agent.py").read_text()
+        self.assertIn(
+            "buckets=(1, 5, 10, 30, 60, 120, 300, 600, 900, 1800)",
+            policy,
+        )
+        self.assertIn(
+            "buckets=(5, 10, 30, 60, 120, 300, 600, 900, 1800)",
+            learning,
+        )
+        self.assertIn(
+            "buckets=(0.1, 0.5, 1, 2, 5, 10, 20, 30, 35, 45, 60)",
+            strategy,
+        )
+
+    def test_overview_uses_consistent_svr_and_explicit_route_and_target_states(self):
+        titles = [panel.get("title") for panel in self.panels]
+        overview = [
+            "Layer 1 Published",
+            "Strategy SVR",
+            "E2E Decision — p95",
+            "Policy Routing",
+            "HITL Pending",
+            "Dead-Letter Queue",
+        ]
+        self.assertTrue(set(overview).issubset(titles))
+        self.assertNotIn("rate(", self.by_title["Strategy SVR"]["targets"][0]["expr"])
+        routing = self.by_title["Policy Routing"]["targets"]
+        self.assertEqual([target["legendFormat"] for target in routing], ["AUTO", "HITL"])
+        self.assertTrue(all("or vector(0)" in target["expr"] for target in routing))
+        health = self.by_title["Prometheus Target Health — UP / DOWN"]
+        self.assertEqual([target["legendFormat"] for target in health["targets"]], ["UP", "DOWN"])
+        backlog = self.by_title["RabbitMQ Queue Backlog"]["targets"][0]["expr"]
+        self.assertIn('queue=~"anomaly\\.detected', backlog)
+        self.assertIn("dead\\.letters", backlog)
+
 if __name__ == "__main__":
     unittest.main()

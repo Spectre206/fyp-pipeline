@@ -20,7 +20,11 @@ from evaluation.artifacts import record as record_evaluation
 
 log = structlog.get_logger()
 
-STRATEGY_LATENCY = Histogram("fyp_strategy_latency_s", "Strategy Agent latency")
+STRATEGY_LATENCY = Histogram(
+    "fyp_strategy_latency_s",
+    "Strategy Agent latency",
+    buckets=(0.1, 0.5, 1, 2, 5, 10, 20, 30, 35, 45, 60),
+)
 STRATEGY_VALID = Counter("fyp_strategy_schema_valid_total", "Schema valid responses")
 STRATEGY_INVALID = Counter("fyp_strategy_schema_invalid_total", "Schema invalid responses")
 STRATEGY_TIMEOUT = Counter("fyp_strategy_timeout_total", "LLM timeouts")

@@ -26,11 +26,12 @@ ROUTING_DECISION = Counter(
 CONTROL_PLANE_PROCESSING_LATENCY = Histogram(
     "fyp_control_plane_processing_latency_seconds",
     "Triage + Strategy + Policy processing latency, excluding queue wait",
+    buckets=(0.1, 0.5, 1, 2, 5, 10, 20, 30, 45, 60),
 )
 END_TO_END_DECISION_LATENCY = Histogram(
     "fyp_end_to_end_decision_latency_seconds",
     "Triage timestamp to Policy decision latency, including inter-agent queue wait",
-    buckets=[10, 20, 30, 40, 50, 60, 90, 120, 180, 300]
+    buckets=(1, 5, 10, 30, 60, 120, 300, 600, 900, 1800),
 )
 TIMESTAMP_MISSING = Counter(
     "fyp_timestamp_missing_total", "Events missing original timestamp", ["agent"]

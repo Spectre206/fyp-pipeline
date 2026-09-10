@@ -154,7 +154,7 @@ class HitlObservabilityTests(TestCase):
             panel.get("title"): panel for panel in json.loads(dashboard.read_text())["panels"]
         }
         decision_queries = "\n".join(
-            target["expr"] for target in panels["HITL Decisions"]["targets"]
+            target["expr"] for target in panels["HUMAN OVERSIGHT — Decisions"]["targets"]
         )
         self.assertIn("fyp_hitl_approved_total", decision_queries)
         self.assertIn("fyp_hitl_rejected_total", decision_queries)

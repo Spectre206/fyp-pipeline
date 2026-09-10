@@ -39,7 +39,7 @@ THRESHOLD_GAUGE = Gauge(
 FEEDBACK_COMPLETION_LATENCY = Histogram(
     "fyp_feedback_completion_latency_seconds",
     "Policy decision timestamp to outcome.feedback receipt latency",
-    buckets=[30, 60, 120, 180, 300, 600, 900]
+    buckets=(5, 10, 30, 60, 120, 300, 600, 900, 1800),
 )
 TIMESTAMP_MISSING = Counter(
     "fyp_timestamp_missing_total", "Events missing original timestamp", ["agent"]
