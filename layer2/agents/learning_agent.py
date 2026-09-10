@@ -1,4 +1,4 @@
-"""Learning Agent — qwen3:0.6b summarisation + ChromaDB upsert + EMA update."""
+"""Learning Agent — deterministic summaries + ChromaDB upsert + EMA update."""
 import json
 import time
 import sys
@@ -14,7 +14,6 @@ from prometheus_client import Counter, Gauge, Histogram, start_http_server
 
 from rabbitmq.connection import get_connection
 from chromadb_utils.upsert import upsert_incident
-from ollama.client import generate
 from utils.file_logger import append_log
 from evaluation.artifacts import record as record_evaluation
 
@@ -45,10 +44,7 @@ TIMESTAMP_MISSING = Counter(
 start_http_server(8013)
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-SYSTEM_PROMPT = (BASE_DIR / "prompts" / "learning_system_prompt.txt").read_text()
 THRESHOLD_PATH = BASE_DIR / "config" / "threshold_config.json"
-MODEL = "qwen3:0.6b"
-LEARNING_TIMEOUT = 10
 
 OUTCOME_SIGNALS = {
     "AUTO_EXECUTE_SUCCESS": 0.80,
@@ -58,28 +54,6 @@ OUTCOME_SIGNALS = {
     "HITL_MODIFIED": 0.60,
 }
 NEGATIVE_OUTCOMES = {"AUTO_EXECUTE_FAILURE", "HITL_REJECTED"}
-LLM_ENABLED_VALUES = {"true", "1", "yes", "on"}
-LLM_DISABLED_VALUES = {"false", "0", "no", "off"}
-
-
-def learning_llm_enabled(value=None) -> bool:
-    """Return the opt-in diagnostic setting, preserving enabled by default."""
-    raw_value = os.getenv("LAYER2_LEARNING_LLM_ENABLED") if value is None else value
-    if raw_value is None:
-        return True
-    normalized = str(raw_value).strip().lower()
-    if normalized in LLM_ENABLED_VALUES:
-        return True
-    if normalized in LLM_DISABLED_VALUES:
-        return False
-    log.warning(
-        "learning_llm_enabled_invalid",
-        value=str(raw_value),
-        fallback="enabled",
-    )
-    return True
-
-
 def load_threshold_config() -> dict:
     try:
         return json.loads(THRESHOLD_PATH.read_text())
@@ -134,37 +108,7 @@ class LearningAgent:
     def __init__(self):
         self.conn = get_connection()
         self.ch = self.conn.channel()
-        self.llm_enabled = learning_llm_enabled()
-        log.info(
-            "learning_agent_started",
-            model=MODEL,
-            llm_summarization=(
-                "ENABLED" if self.llm_enabled
-                else "DISABLED — deterministic summary fallback active"
-            ),
-        )
-
-    def _build_summary_prompt(self, outcome: dict) -> str:
-        pr = outcome.get("full_policy_result", {})
-        chain = pr.get("full_reasoning_chain", {})
-        st = chain.get("strategy_result", {})
-        llm = st.get("llm_response", {})
-        triage = chain.get("triage_result", {})
-        ev = triage.get("original_event", {})
-
-        anomaly_type = triage.get("anomaly_type") or ev.get("anomaly_type", "?")
-        component = ev.get("affected_component") or triage.get("anomaly_type", "?")
-        node = ev.get("node") or "?"
-
-        return (
-            f"Incident: {anomaly_type} on {component}\n"
-            f"Severity: {triage.get('severity','?')} | Risk tier: {llm.get('risk_tier','?')}\n"
-            f"Outcome: {outcome.get('outcome_type','?')}\n"
-            f"Actions taken: {outcome.get('actual_actions_taken',[])}\n"
-            f"Operator notes: {outcome.get('operator_notes','none')}\n"
-            f"Resolution time: {outcome.get('resolution_time_ms',0)}ms\n"
-            "Summarise this incident in one sentence."
-        )
+        log.info("learning_agent_started", summary_mode="deterministic")
 
     def _deterministic_summary(self, outcome: dict) -> str:
         """Build a stable Chroma document without invoking Ollama."""
@@ -176,21 +120,30 @@ class LearningAgent:
         event = triage.get("original_event", {})
 
         parts = []
+        event_id = outcome.get("event_id")
         anomaly_type = triage.get("anomaly_type") or event.get("anomaly_type")
         component = event.get("affected_component")
         actions = outcome.get("actual_actions_taken")
+        decision = policy.get("routing_decision")
         outcome_type = outcome.get("outcome_type")
         risk_tier = llm.get("risk_tier")
+        confidence = llm.get("confidence")
+        if event_id:
+            parts.append(f"event_id={event_id}")
         if anomaly_type:
             parts.append(f"anomaly_type={anomaly_type}")
         if component:
             parts.append(f"component={component}")
         if isinstance(actions, list) and actions:
             parts.append("actions=" + ", ".join(str(action) for action in actions))
+        if decision:
+            parts.append(f"decision={decision}")
         if outcome_type:
             parts.append(f"outcome={outcome_type}")
         if risk_tier:
             parts.append(f"risk={risk_tier}")
+        if isinstance(confidence, (int, float)) and not isinstance(confidence, bool):
+            parts.append(f"confidence={confidence}")
         return "; ".join(parts) or "outcome=UNKNOWN"
 
     def on_message(self, ch, method, props, body):
@@ -243,24 +196,8 @@ class LearningAgent:
                 "feedback_latency_s": feedback_latency_s,
             })
 
-            # Summarise with qwen3:0.6b unless the diagnostic switch is off.
-            summary_mode = "llm"
-            if self.llm_enabled:
-                summary = f"Incident {event_id} - {outcome_type}"
-                try:
-                    resp = generate(
-                        MODEL,
-                        self._build_summary_prompt(outcome),
-                        SYSTEM_PROMPT,
-                        num_predict=256,
-                        timeout=LEARNING_TIMEOUT,
-                    )
-                    summary = resp.get("response", summary).strip()
-                except Exception as e:
-                    log.warning("learning_llm_failed", error=str(e))
-            else:
-                summary_mode = "deterministic"
-                summary = self._deterministic_summary(outcome)
+            summary_mode = "deterministic"
+            summary = self._deterministic_summary(outcome)
 
             # Build ChromaDB metadata
             pr = outcome.get("full_policy_result", {})

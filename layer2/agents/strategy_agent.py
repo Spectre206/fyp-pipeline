@@ -13,7 +13,7 @@ from pathlib import Path
 from prometheus_client import Counter, Histogram, Gauge, start_http_server
 
 from rabbitmq.connection import get_connection, publish
-from agents.schema_validator import validate
+from agents.schema_validator import STRATEGY_RESPONSE_SCHEMA, validate
 from ollama.client import generate
 from utils.file_logger import append_log
 from evaluation.artifacts import record as record_evaluation
@@ -121,6 +121,7 @@ class StrategyAgent:
                     num_ctx=2048,
                     num_predict=512,
                     timeout=LLM_TIMEOUT_S,
+                    format=STRATEGY_RESPONSE_SCHEMA,
                 )
                 raw_response = resp.get("response", "")
                 eval_count = resp.get("eval_count", 0)

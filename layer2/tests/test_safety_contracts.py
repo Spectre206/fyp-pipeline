@@ -20,7 +20,7 @@ query_stub.format_rag_context = lambda context: ""
 sys.modules["chromadb_utils.query"] = query_stub
 
 from agents.policy_agent import PolicyAgent, ALLOWED_ACTIONS
-from agents.triage_agent import TriageAgent
+from agents.triage_agent import PROTOCOL_TABLE, TriageAgent
 from agents.strategy_agent import StrategyAgent
 
 
@@ -60,6 +60,9 @@ class TriageContractTests(unittest.TestCase):
         self.assertEqual(self.triage._normalize_event({"contributing_models": [{"model_name": "unknown"}]})["anomaly_type"], "unknown")
         structural = self.triage._normalize_event({"anomaly_type": "schema_drift", "severity": "HIGH"})
         self.assertEqual(self.triage.classify(structural), "HALT_INGESTION_REVIEW_SCHEMA")
+
+    def test_triage_protocols_use_the_shared_action_vocabulary(self):
+        self.assertTrue(set(PROTOCOL_TABLE.values()).issubset(ALLOWED_ACTIONS))
 
 
 class PolicySafetyTests(unittest.TestCase):

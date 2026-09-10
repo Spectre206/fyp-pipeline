@@ -15,6 +15,7 @@ from prometheus_client import Counter, Histogram, start_http_server
 from rabbitmq.connection import get_connection, publish
 from utils.file_logger import append_log
 from evaluation.artifacts import record as record_evaluation
+from agents.schema_validator import ALLOWED_ACTIONS
 
 log = structlog.get_logger()
 
@@ -35,20 +36,6 @@ start_http_server(8012)
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 THRESHOLD_PATH = BASE_DIR / "config" / "threshold_config.json"
-
-# Symbolic remediation identifiers already used by Triage's protocol table.
-# Auto Executor currently simulates these identifiers; Policy must not pass
-# arbitrary LLM prose to a future real executor.
-ALLOWED_ACTIONS = {
-    "EMERGENCY_RESTART_CONSUMER", "SCALE_CONSUMER_RESOURCES",
-    "MONITOR_AND_ALERT", "LOG_AND_CONTINUE", "CIRCUIT_BREAKER_OPEN",
-    "RATE_LIMIT_ENDPOINT", "INVESTIGATE_UPSTREAM", "RESTART_ALL_CONSUMERS",
-    "RESTART_FAILED_CONSUMER", "CHECK_QUEUE_DEPTH", "ISOLATE_NODE",
-    "RATE_LIMIT_AUTH", "ALERT_SECURITY_TEAM", "HALT_INGESTION_REVIEW_SCHEMA",
-    "FLAG_FOR_SCHEMA_REVIEW", "EMERGENCY_FULL_PIPELINE_REVIEW",
-    "COORDINATED_REMEDIATION", "GENERIC_INVESTIGATE",
-}
-
 
 def load_threshold() -> float:
     """Load confidence threshold from disk — called on every message."""
