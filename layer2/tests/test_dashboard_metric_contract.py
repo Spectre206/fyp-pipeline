@@ -88,8 +88,8 @@ class DashboardMetricContractTests(unittest.TestCase):
             ["sum(up == bool 1)", "sum(up == bool 0)", "count(up)"],
         )
         backlog = self.by_title["RabbitMQ Backlog"]["targets"][0]["expr"]
-        self.assertIn('queue=~"raw\\.events', backlog)
-        self.assertIn("dead\\.letters", backlog)
+        self.assertIn('queue=~"raw[.]events', backlog)
+        self.assertIn("dead[.]letters", backlog)
 
 if __name__ == "__main__":
     unittest.main()

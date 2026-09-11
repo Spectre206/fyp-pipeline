@@ -80,6 +80,10 @@ class PolicySafetyTests(unittest.TestCase):
             strategy(llm_response={"risk_tier": "LOW", "confidence": .8, "recommended_actions": ["MONITOR_AND_ALERT"]}),
         ]
         for payload in cases: self.assertEqual(self.route(payload)[0], "HITL")
+
+    def test_schema_invalid_response_routes_to_hitl(self):
+        route, reason, queue = self.route(strategy(schema_valid=False))
+        self.assertEqual((route, reason, queue), ("HITL", "SCHEMA_INVALID", "hitl.queue"))
     def test_risk_confidence_and_legacy_fusion(self):
         self.assertEqual(self.route(strategy(llm_response={"risk_tier": "HIGH", "confidence": .9, "recommended_actions": ["MONITOR_AND_ALERT"] * 3}))[1], "HIGH_RISK")
         self.assertEqual(self.route(strategy(llm_response={"risk_tier": "LOW", "confidence": .64, "recommended_actions": ["MONITOR_AND_ALERT"] * 3}))[1], "LOW_CONFIDENCE")

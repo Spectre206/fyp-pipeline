@@ -1,4 +1,5 @@
 """Single source of truth for Strategy's output contract."""
+from copy import deepcopy
 from typing import Tuple
 
 REQUIRED_FIELDS = frozenset({
@@ -41,6 +42,22 @@ STRATEGY_RESPONSE_SCHEMA = {
         "reasoning": {"type": "string"},
     },
 }
+
+
+def schema_for_triage_severity(severity: str) -> dict:
+    """Constrain Strategy output to Triage's severity and mapped risk tier.
+
+    Ollama already accepts enum constraints in the JSON schema passed to its
+    ``format`` parameter. Binding those existing fields per request preserves
+    the seven-field response contract without relying on conditional-schema
+    keywords. Application validation remains the final authority.
+    """
+    schema = deepcopy(STRATEGY_RESPONSE_SCHEMA)
+    expected_tier = RISK_TIER_MAP.get(severity)
+    if expected_tier is not None:
+        schema["properties"]["severity"]["enum"] = [severity]
+        schema["properties"]["risk_tier"]["enum"] = [expected_tier]
+    return schema
 
 
 def validate(parsed: dict) -> Tuple[bool, str]:

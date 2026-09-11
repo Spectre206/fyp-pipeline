@@ -21,10 +21,13 @@ Do NOT include any text before or after the JSON object.
 Do NOT include markdown code fences.
 
 Field constraints:
-- severity: must be one of LOW, MEDIUM, HIGH, CRITICAL
-- risk_tier: must be one of LOW, HIGH
-  - LOW/MEDIUM severity maps to LOW risk tier
-  - HIGH/CRITICAL severity maps to HIGH risk tier
+- severity: copy the Triage Severity from the incident exactly; do not reinterpret it
+- risk_tier: use this mandatory mapping from that copied severity:
+  - LOW -> LOW
+  - MEDIUM -> LOW
+  - HIGH -> HIGH
+  - CRITICAL -> HIGH
+  Before emitting JSON, verify that severity and risk_tier satisfy this mapping.
 - recommended_actions: must be a list of exactly 3 strings
 - recommended_actions: each string must be one of the supplied response-protocol
   identifiers; do not generate shell commands, prose instructions, or new action names

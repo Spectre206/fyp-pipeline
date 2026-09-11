@@ -24,6 +24,8 @@ from agents.schema_validator import (
     ALLOWED_ACTIONS,
     REQUIRED_FIELDS,
     STRATEGY_RESPONSE_SCHEMA,
+    schema_for_triage_severity,
+    validate,
 )
 from ollama import client as ollama_client
 
@@ -64,6 +66,40 @@ class StrategyStructuredOutputTests(unittest.TestCase):
         self.assertIs(payload["format"], STRATEGY_RESPONSE_SCHEMA)
         self.assertIsInstance(payload["format"], dict)
 
+    def test_triage_severity_schema_enforces_the_risk_tier_mapping(self):
+        for severity, risk_tier in {
+            "LOW": "LOW",
+            "MEDIUM": "LOW",
+            "HIGH": "HIGH",
+            "CRITICAL": "HIGH",
+        }.items():
+            with self.subTest(severity=severity):
+                schema = schema_for_triage_severity(severity)
+                self.assertEqual(schema["properties"]["severity"]["enum"], [severity])
+                self.assertEqual(schema["properties"]["risk_tier"]["enum"], [risk_tier])
+                payload = valid_response()
+                payload["severity"] = severity
+                payload["risk_tier"] = risk_tier
+                self.assertTrue(validate(payload)[0])
+
+    def test_application_validator_rejects_tier_mismatches(self):
+        for severity, risk_tier, expected_issue in (
+            ("MEDIUM", "HIGH", "tier_mismatch:expected=LOW,got=HIGH"),
+            ("HIGH", "LOW", "tier_mismatch:expected=HIGH,got=LOW"),
+        ):
+            with self.subTest(severity=severity, risk_tier=risk_tier):
+                payload = valid_response()
+                payload["severity"] = severity
+                payload["risk_tier"] = risk_tier
+                valid, issues = validate(payload)
+                self.assertFalse(valid)
+                self.assertIn(expected_issue, issues)
+
+    def test_system_prompt_contains_the_mandatory_risk_tier_mapping(self):
+        for mapping in ("LOW -> LOW", "MEDIUM -> LOW", "HIGH -> HIGH", "CRITICAL -> HIGH"):
+            self.assertIn(mapping, strategy_agent.SYSTEM_PROMPT)
+        self.assertIn("copy the Triage Severity", strategy_agent.SYSTEM_PROMPT)
+
     def test_strategy_passes_schema_and_still_rejects_invalid_response(self):
         agent = object.__new__(strategy_agent.StrategyAgent)
         agent.ch = MagicMock()
@@ -79,7 +115,13 @@ class StrategyStructuredOutputTests(unittest.TestCase):
              patch.object(strategy_agent, "record_evaluation"):
             agent.on_message(MagicMock(), SimpleNamespace(delivery_tag=1), None, json.dumps(triage))
 
-        self.assertIs(generate.call_args.kwargs["format"], STRATEGY_RESPONSE_SCHEMA)
+        output_schema = generate.call_args.kwargs["format"]
+        self.assertEqual(output_schema["properties"]["severity"]["enum"], ["MEDIUM"])
+        self.assertEqual(output_schema["properties"]["risk_tier"]["enum"], ["LOW"])
+        self.assertEqual(
+            set(output_schema["properties"]["recommended_actions"]["items"]["enum"]),
+            ALLOWED_ACTIONS,
+        )
         result = json.loads(publish.call_args.args[2])
         self.assertTrue(result["valid_json"])
         self.assertFalse(result["schema_valid"])
