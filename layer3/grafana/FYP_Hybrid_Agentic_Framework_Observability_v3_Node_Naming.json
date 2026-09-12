@@ -157,7 +157,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(rabbitmq_queue_messages_ready{queue=\"hitl.queue\"})",
+          "expr": "sum(fyp_hitl_pending_incidents)",
           "legendFormat": "Pending",
           "instant": true
         }
@@ -171,17 +171,17 @@
           "unit": "short"
         }
       },
-      "description": "Authoritative ready depth of the HITL RabbitMQ queue."
+      "description": "Persisted HITL incidents currently awaiting a human decision; this is distinct from unconsumed RabbitMQ queue depth."
     },
     {
       "id": 9,
       "title": "DLQ",
       "type": "stat",
       "gridPos": {
-        "x": 18,
-        "y": 5,
-        "w": 6,
-        "h": 5
+        "x": 19,
+        "y": 1,
+        "w": 5,
+        "h": 4
       },
       "targets": [
         {
@@ -1785,7 +1785,7 @@
     },
     {
       "id": 40,
-      "title": "HITL Queue",
+      "title": "HITL Queue Backlog",
       "type": "stat",
       "gridPos": {
         "x": 19,
@@ -1797,7 +1797,7 @@
         {
           "refId": "A",
           "expr": "sum(rabbitmq_queue_messages_ready{queue=\"hitl.queue\"})",
-          "legendFormat": "Pending",
+          "legendFormat": "Unconsumed",
           "instant": true
         }
       ],
@@ -1810,7 +1810,7 @@
           "unit": "short"
         }
       },
-      "description": "Authoritative ready depth for the HITL RabbitMQ queue."
+      "description": "Messages still waiting for the Django HITL consumer; this is not the persisted human-decision workload."
     },
     {
       "id": 41,
@@ -2010,9 +2010,9 @@
       "title": "Stream Node",
       "type": "stat",
       "gridPos": {
-        "x": 6,
+        "x": 4,
         "y": 1,
-        "w": 6,
+        "w": 5,
         "h": 4
       },
       "targets": [
@@ -2054,9 +2054,9 @@
       "title": "AI Brain Node",
       "type": "stat",
       "gridPos": {
-        "x": 12,
+        "x": 9,
         "y": 1,
-        "w": 6,
+        "w": 5,
         "h": 4
       },
       "targets": [
@@ -2098,9 +2098,9 @@
       "title": "Gateway Node",
       "type": "stat",
       "gridPos": {
-        "x": 18,
+        "x": 14,
         "y": 1,
-        "w": 6,
+        "w": 5,
         "h": 4
       },
       "targets": [
@@ -2229,6 +2229,14 @@
           }
         ]
       },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": []
+        }
+      },
       "description": "CPU utilization comparison across the three commodity nodes."
     },
     {
@@ -2323,6 +2331,14 @@
           }
         ]
       },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": []
+        }
+      },
       "description": "RAM utilization comparison, especially relevant during local Strategy inference."
     },
     {
@@ -2400,6 +2416,14 @@
           }
         ]
       },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": []
+        }
+      },
       "description": "Root filesystem usage across all nodes."
     },
     {
@@ -2409,7 +2433,7 @@
       "gridPos": {
         "x": 0,
         "y": 17,
-        "w": 12,
+        "w": 16,
         "h": 5
       },
       "targets": [
@@ -2480,6 +2504,15 @@
           }
         ]
       },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [],
+          "width": 260
+        }
+      },
       "description": "Node receive and transmit throughput; works for either Wi-Fi or Ethernet experiments."
     },
     {
@@ -2487,9 +2520,9 @@
       "title": "Temperature",
       "type": "timeseries",
       "gridPos": {
-        "x": 12,
+        "x": 16,
         "y": 17,
-        "w": 6,
+        "w": 8,
         "h": 5
       },
       "targets": [
@@ -2555,6 +2588,14 @@
           }
         ]
       },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": []
+        }
+      },
       "description": "Highest reported temperature per node for sustained-load thermal checks."
     },
     {
@@ -2562,9 +2603,9 @@
       "title": "NTP Offset",
       "type": "timeseries",
       "gridPos": {
-        "x": 12,
+        "x": 16,
         "y": 5,
-        "w": 6,
+        "w": 8,
         "h": 5
       },
       "targets": [
@@ -2583,6 +2624,14 @@
           "unit": "ms"
         }
       },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": []
+        }
+      },
       "description": "Node clock offset relevant to cross-node latency interpretation."
     },
     {
@@ -2592,7 +2641,7 @@
       "gridPos": {
         "x": 0,
         "y": 5,
-        "w": 12,
+        "w": 16,
         "h": 5
       },
       "targets": [
@@ -2611,6 +2660,15 @@
           "unit": "short"
         }
       },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [],
+          "width": 320
+        }
+      },
       "description": "Current ready-message depth for active FYP queues. A zero is meaningful only when the RabbitMQ exporter is healthy; missing data is not synthesized as an empty queue."
     },
     {
@@ -2620,7 +2678,7 @@
       "gridPos": {
         "x": 0,
         "y": 1,
-        "w": 6,
+        "w": 4,
         "h": 4
       },
       "targets": [

@@ -10,6 +10,19 @@ from django.core.management.base import BaseCommand
 from hitl.models import HitlIncident
 from rabbitmq.connection import get_connection
 
+
+def persist_hitl_incident(data):
+    """Persist one delivery without reopening a completed human decision."""
+    event_id = data.get("event_id", "unknown")
+    return HitlIncident.objects.get_or_create(
+        event_id=event_id,
+        defaults={
+            "payload_json": json.dumps(data),
+            "status": "PENDING",
+        },
+    )
+
+
 class Command(BaseCommand):
     help = "Consume hitl.queue and store incidents as HitlIncident rows"
 
@@ -22,15 +35,10 @@ class Command(BaseCommand):
             try:
                 data = json.loads(body)
                 event_id = data.get("event_id", "unknown")
-                HitlIncident.objects.update_or_create(
-                    event_id=event_id,
-                    defaults={
-                        "payload_json": json.dumps(data),
-                        "status": "PENDING",
-                    },
-                )
+                _, created = persist_hitl_incident(data)
                 ch.basic_ack(method.delivery_tag)
-                self.stdout.write(f"[HITL] Stored {event_id}")
+                state = "Stored" if created else "Duplicate ignored"
+                self.stdout.write(f"[HITL] {state} {event_id}")
             except Exception as e:
                 self.stderr.write(f"Error: {e}")
                 ch.basic_nack(method.delivery_tag, requeue=True)

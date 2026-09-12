@@ -8,6 +8,7 @@ from django.test import RequestFactory, TestCase
 from django.utils import timezone
 
 from hitl import metrics, views
+from hitl.management.commands.consume_hitl import persist_hitl_incident
 from hitl.models import HitlIncident
 
 
@@ -133,18 +134,48 @@ class HitlObservabilityTests(TestCase):
         observe.assert_not_called()
 
     def test_metrics_endpoint_exposes_hitl_collectors(self):
+        self.incident()
         response = views.metrics_view(self.factory.get("/metrics"))
         body = response.content.decode()
         self.assertEqual(response.status_code, 200)
         self.assertIn("fyp_hitl_approved_total", body)
         self.assertIn("fyp_hitl_rejected_total", body)
         self.assertIn("fyp_hitl_modified_total", body)
+        self.assertIn("fyp_hitl_pending_incidents 1.0", body)
         self.assertIn("fyp_human_decision_latency_seconds", body)
         for boundary in ("5.0", "10.0", "30.0", "60.0", "120.0", "300.0", "600.0", "900.0", "1800.0", "+Inf"):
             self.assertIn(
                 f'fyp_human_decision_latency_seconds_bucket{{le="{boundary}"}}',
                 body,
             )
+
+    def test_pending_metric_reflects_authoritative_current_state(self):
+        pending = self.incident("pending")
+        approved = self.incident("approved")
+        rejected = self.incident("rejected")
+        modified = self.incident("modified")
+        HitlIncident.objects.filter(pk=approved.pk).update(status="APPROVED")
+        HitlIncident.objects.filter(pk=rejected.pk).update(status="REJECTED")
+        HitlIncident.objects.filter(pk=modified.pk).update(status="MODIFIED")
+
+        self.assertEqual(metrics.pending_incident_count(), 1)
+        body = views.metrics_view(self.factory.get("/metrics")).content.decode()
+        self.assertIn("fyp_hitl_pending_incidents 1.0", body)
+        pending.delete()
+        self.assertEqual(metrics.pending_incident_count(), 0)
+
+    def test_duplicate_delivery_does_not_reopen_or_inflate_pending_workload(self):
+        payload = policy_payload("duplicate-event")
+        incident, created = persist_hitl_incident(payload)
+        self.assertTrue(created)
+        HitlIncident.objects.filter(pk=incident.pk).update(status="APPROVED")
+
+        duplicate, created = persist_hitl_incident(payload)
+        duplicate.refresh_from_db()
+        self.assertFalse(created)
+        self.assertEqual(duplicate.status, "APPROVED")
+        self.assertEqual(HitlIncident.objects.filter(event_id="duplicate-event").count(), 1)
+        self.assertEqual(metrics.pending_incident_count(), 0)
 
     def test_grafana_uses_authoritative_hitl_metrics(self):
         dashboard = Path(__file__).resolve().parents[2] / "grafana" / (
@@ -159,9 +190,13 @@ class HitlObservabilityTests(TestCase):
         self.assertIn("fyp_hitl_approved_total", decision_queries)
         self.assertIn("fyp_hitl_rejected_total", decision_queries)
         self.assertIn("fyp_hitl_modified_total", decision_queries)
+        self.assertEqual(
+            panels["HITL Pending"]["targets"][0]["expr"],
+            "sum(fyp_hitl_pending_incidents)",
+        )
         self.assertIn(
             'rabbitmq_queue_messages_ready{queue="hitl.queue"}',
-            panels["HITL Pending"]["targets"][0]["expr"],
+            panels["HITL Queue Backlog"]["targets"][0]["expr"],
         )
         latency = panels["Human Decision Latency"]
         latency_queries = "\n".join(target["expr"] for target in latency["targets"])
@@ -169,6 +204,22 @@ class HitlObservabilityTests(TestCase):
         self.assertIn("sum by (le)", latency_queries)
         self.assertNotIn("MTTA", latency["description"])
         self.assertNotIn("MTTR", latency["description"])
+
+    def test_dashboard_uses_readable_legends_and_balanced_hardware_grid(self):
+        dashboard = Path(__file__).resolve().parents[2] / "grafana" / (
+            "FYP_Hybrid_Agentic_Framework_Observability_v3_Node_Naming.json"
+        )
+        panels = {
+            panel.get("title"): panel for panel in json.loads(dashboard.read_text())["panels"]
+        }
+        for title, placement in (("RabbitMQ Backlog", "right"), ("NTP Offset", "bottom")):
+            legend = panels[title]["options"]["legend"]
+            self.assertTrue(legend["showLegend"])
+            self.assertEqual(legend["displayMode"], "table")
+            self.assertEqual(legend["placement"], placement)
+
+        self.assertEqual(panels["Network RX/TX"]["gridPos"], {"x": 0, "y": 17, "w": 16, "h": 5})
+        self.assertEqual(panels["Temperature"]["gridPos"], {"x": 16, "y": 17, "w": 8, "h": 5})
 
     def test_dashboard_has_final_layer_names_and_non_overlapping_panels(self):
         dashboard = Path(__file__).resolve().parents[2] / "grafana" / (
