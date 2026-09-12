@@ -218,8 +218,8 @@ class HitlObservabilityTests(TestCase):
             self.assertEqual(legend["displayMode"], "table")
             self.assertEqual(legend["placement"], placement)
 
-        self.assertEqual(panels["Network RX/TX"]["gridPos"], {"x": 0, "y": 17, "w": 16, "h": 5})
-        self.assertEqual(panels["Temperature"]["gridPos"], {"x": 16, "y": 17, "w": 8, "h": 5})
+        self.assertEqual(panels["Network RX/TX"]["gridPos"], {"x": 0, "y": 60, "w": 16, "h": 5})
+        self.assertEqual(panels["Temperature"]["gridPos"], {"x": 16, "y": 60, "w": 8, "h": 5})
 
     def test_dashboard_has_final_layer_names_and_non_overlapping_panels(self):
         dashboard = Path(__file__).resolve().parents[2] / "grafana" / (
@@ -243,12 +243,12 @@ class HitlObservabilityTests(TestCase):
         self.assertEqual(
             [panel["title"] for panel in rows],
             [
-                "SYSTEM / INFRASTRUCTURE HEALTH",
-                "HARDWARE / NODE RESOURCES",
                 "SYSTEM OVERVIEW",
                 "LAYER 1 — REAL-TIME STATISTICAL DATA PLANE",
                 "LAYER 2 — AI CONTROL PLANE",
                 "LAYER 3 — EXECUTION, HUMAN OVERSIGHT & OBSERVABILITY LAYER",
+                "SYSTEM / INFRASTRUCTURE HEALTH",
+                "HARDWARE / NODE RESOURCES",
             ],
         )
         non_rows = [panel for panel in panels if panel["type"] != "row"]

@@ -28,6 +28,11 @@ STRATEGY_LATENCY = Histogram(
 STRATEGY_VALID = Counter("fyp_strategy_schema_valid_total", "Schema valid responses")
 STRATEGY_INVALID = Counter("fyp_strategy_schema_invalid_total", "Schema invalid responses")
 STRATEGY_TIMEOUT = Counter("fyp_strategy_timeout_total", "LLM timeouts")
+STRATEGY_RETRY = Counter(
+    "fyp_strategy_retry_total",
+    "Bounded Strategy regeneration attempts after deterministic validation failure",
+    ["reason"],
+)
 STRATEGY_TPS = Gauge("fyp_strategy_tokens_per_s", "Tokens per second")
 
 start_http_server(8011)
@@ -67,6 +72,30 @@ def extract_json(text: str):
             return None, f"json_parse_failed:{e.msg}:line={e.lineno}:col={e.colno}"
 
     return None, "json_parse_failed:no_braces"
+
+
+def retry_reason_for(issues: str) -> str:
+    """Map validator output to a bounded, low-cardinality retry reason."""
+    return "duplicate_actions" if "duplicate_actions" in issues else "schema_invalid"
+
+
+def retry_prompt(prompt: str, issues: str) -> str:
+    """Request one complete, schema-constrained regeneration from the model."""
+    if "duplicate_actions" in issues:
+        feedback = (
+            "The previous response was invalid because recommended_actions "
+            "contained duplicate values."
+        )
+    else:
+        feedback = "The previous response did not satisfy deterministic schema validation."
+    return (
+        f"{prompt}\n\n<validation_feedback>\n{feedback}\n"
+        "Return the COMPLETE seven-field JSON object again. "
+        "recommended_actions must contain EXACTLY 3 DISTINCT actions from the "
+        "allowed response-protocol vocabulary; do not repeat an action. "
+        "Preserve the supplied Triage Severity exactly and its required mapped "
+        "risk_tier.\n</validation_feedback>"
+    )
 
 
 class StrategyAgent:
@@ -111,63 +140,83 @@ class StrategyAgent:
         issues = "not_attempted"
         eval_count = 0
         tokens_per_s = 0.0
+        generation_attempts = 0
+        retry_reason = None
 
         try:
             triage = json.loads(body)
             event_id = triage.get("event_id", "unknown")
             prompt = self._build_prompt(triage)
+            output_schema = schema_for_triage_severity(triage.get("severity"))
 
             try:
-                resp = generate(
-                    model=MODEL,
-                    prompt=prompt,
-                    system=SYSTEM_PROMPT,
-                    num_ctx=2048,
-                    num_predict=512,
-                    timeout=LLM_TIMEOUT_S,
-                    format=schema_for_triage_severity(triage.get("severity")),
-                )
-                raw_response = resp.get("response", "")
-                eval_count = resp.get("eval_count", 0)
-                eval_dur_ns = resp.get("eval_duration", 0)
-                tokens_per_s = (
-                    round(eval_count / (eval_dur_ns / 1e9), 2)
-                    if eval_dur_ns > 0
-                    else 0.0
-                )
-                STRATEGY_TPS.set(tokens_per_s)
+                for attempt in range(2):
+                    generation_attempts += 1
+                    response_prompt = (
+                        prompt if attempt == 0 else retry_prompt(prompt, issues)
+                    )
+                    resp = generate(
+                        model=MODEL,
+                        prompt=response_prompt,
+                        system=SYSTEM_PROMPT,
+                        num_ctx=2048,
+                        num_predict=512,
+                        timeout=LLM_TIMEOUT_S,
+                        format=output_schema,
+                    )
+                    raw_response = resp.get("response", "")
+                    eval_count = resp.get("eval_count", 0)
+                    eval_dur_ns = resp.get("eval_duration", 0)
+                    tokens_per_s = (
+                        round(eval_count / (eval_dur_ns / 1e9), 2)
+                        if eval_dur_ns > 0
+                        else 0.0
+                    )
+                    STRATEGY_TPS.set(tokens_per_s)
 
-                # ---- Robust JSON extraction + schema validation ----
-                parsed, extraction_error = extract_json(raw_response)
+                    parsed, extraction_error = extract_json(raw_response)
+                    if parsed is None:
+                        valid_json = False
+                        schema_valid = False
+                        issues = extraction_error
+                        break
 
-                if parsed is not None:
                     valid_json = True
                     schema_valid, issues = validate(parsed)
-                    if schema_valid:
-                        STRATEGY_VALID.inc()
-                    else:
-                        STRATEGY_INVALID.inc()
-                else:
-                    valid_json = False
-                    issues = extraction_error
-                    STRATEGY_INVALID.inc()
+                    if schema_valid or attempt == 1:
+                        break
 
-                    # Persist raw response for later parse-error analysis
-                    append_log("parse_error.jsonl", {
-                        "event_id": event_id,
-                        "issues": extraction_error,
-                        "raw_response": raw_response[:2000],  # trim for storage
-                    })
-
-                    log.warning(
-                        "strategy_parse_failed",
+                    retry_reason = retry_reason_for(issues)
+                    STRATEGY_RETRY.labels(reason=retry_reason).inc()
+                    log.info(
+                        "strategy_validation_retry",
                         event_id=event_id,
-                        issues=extraction_error,
+                        reason=retry_reason,
                     )
+
+                if schema_valid:
+                    STRATEGY_VALID.inc()
+                else:
+                    STRATEGY_INVALID.inc()
+                    if not valid_json:
+                        # Persist the final parse error for later analysis.
+                        append_log("parse_error.jsonl", {
+                            "event_id": event_id,
+                            "issues": issues,
+                            "raw_response": raw_response[:2000],
+                        })
+                        log.warning(
+                            "strategy_parse_failed",
+                            event_id=event_id,
+                            issues=issues,
+                        )
 
             except Exception as e:
                 # requests.Timeout is a subclass of Exception
                 timed_out = True
+                valid_json = False
+                schema_valid = False
+                parsed = {}
                 issues = "llm_timeout"
                 STRATEGY_TIMEOUT.inc()
                 log.warning("strategy_llm_timeout", event_id=event_id, error=str(e))
@@ -186,6 +235,8 @@ class StrategyAgent:
                 "tokens_per_second": tokens_per_s,
                 "eval_tokens": eval_count,
                 "timed_out": timed_out,
+                "generation_attempts": generation_attempts,
+                "retry_reason": retry_reason,
                 "triage_result": triage,
             }
             record_evaluation("strategy", {
@@ -199,6 +250,8 @@ class StrategyAgent:
                 "confidence": parsed.get("confidence") if isinstance(parsed, dict) else None,
                 "recommended_actions": parsed.get("recommended_actions") if isinstance(parsed, dict) else None,
                 "strategy_latency_s": latency_ms / 1000.0,
+                "generation_attempts": generation_attempts,
+                "retry_reason": retry_reason,
             })
 
             # ---- File-based persistent log ----
@@ -210,6 +263,8 @@ class StrategyAgent:
                 "latency_ms": latency_ms,
                 "tokens_per_second": tokens_per_s,
                 "timed_out": timed_out,
+                "generation_attempts": generation_attempts,
+                "retry_reason": retry_reason,
             })
 
             publish(self.ch, "strategy.result", json.dumps(result))
