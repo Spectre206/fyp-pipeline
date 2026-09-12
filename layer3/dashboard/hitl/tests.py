@@ -180,10 +180,26 @@ class HitlObservabilityTests(TestCase):
             "LAYER 1 — REAL-TIME STATISTICAL DATA PLANE",
             "LAYER 2 — AI CONTROL PLANE",
             "LAYER 3 — EXECUTION, HUMAN OVERSIGHT & OBSERVABILITY LAYER",
-            "INFRASTRUCTURE / HARDWARE",
+            "SYSTEM / INFRASTRUCTURE HEALTH",
+            "HARDWARE / NODE RESOURCES",
         }.issubset(titles))
         ids = [panel["id"] for panel in panels]
         self.assertEqual(len(ids), len(set(ids)))
+        rows = sorted(
+            (panel for panel in panels if panel["type"] == "row"),
+            key=lambda panel: panel["gridPos"]["y"],
+        )
+        self.assertEqual(
+            [panel["title"] for panel in rows],
+            [
+                "SYSTEM / INFRASTRUCTURE HEALTH",
+                "HARDWARE / NODE RESOURCES",
+                "SYSTEM OVERVIEW",
+                "LAYER 1 — REAL-TIME STATISTICAL DATA PLANE",
+                "LAYER 2 — AI CONTROL PLANE",
+                "LAYER 3 — EXECUTION, HUMAN OVERSIGHT & OBSERVABILITY LAYER",
+            ],
+        )
         non_rows = [panel for panel in panels if panel["type"] != "row"]
         for index, panel in enumerate(non_rows):
             x, y, w, h = (panel["gridPos"][key] for key in ("x", "y", "w", "h"))

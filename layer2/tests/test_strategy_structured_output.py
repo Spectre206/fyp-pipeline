@@ -35,7 +35,11 @@ def valid_response():
         "anomaly_type": "throughput_drop",
         "severity": "MEDIUM",
         "affected_component": "RabbitMQ consumer",
-        "recommended_actions": ["MONITOR_AND_ALERT"] * 3,
+        "recommended_actions": [
+            "MONITOR_AND_ALERT",
+            "LOG_AND_CONTINUE",
+            "CHECK_QUEUE_DEPTH",
+        ],
         "confidence": 0.8,
         "risk_tier": "LOW",
         "reasoning": "The incident is contained and low risk.",
@@ -51,6 +55,7 @@ class StrategyStructuredOutputTests(unittest.TestCase):
         actions = schema["properties"]["recommended_actions"]
         self.assertEqual(actions["minItems"], 3)
         self.assertEqual(actions["maxItems"], 3)
+        self.assertTrue(actions["uniqueItems"])
         self.assertEqual(set(actions["items"]["enum"]), ALLOWED_ACTIONS)
         self.assertEqual(schema["properties"]["risk_tier"]["enum"], ["HIGH", "LOW"])
         self.assertEqual(schema["properties"]["confidence"]["minimum"], 0)
@@ -95,6 +100,23 @@ class StrategyStructuredOutputTests(unittest.TestCase):
                 self.assertFalse(valid)
                 self.assertIn(expected_issue, issues)
 
+    def test_application_validator_requires_three_distinct_allowed_actions(self):
+        accepted = valid_response()
+        self.assertTrue(validate(accepted)[0])
+
+        for actions, expected_issue in (
+            (["MONITOR_AND_ALERT", "MONITOR_AND_ALERT", "LOG_AND_CONTINUE"], "duplicate_actions"),
+            (["MONITOR_AND_ALERT"] * 3, "duplicate_actions"),
+            (["MONITOR_AND_ALERT", "LOG_AND_CONTINUE"], "bad_actions_count:2"),
+            (["MONITOR_AND_ALERT", "LOG_AND_CONTINUE", "NOT_ALLOWED"], "bad_actions_value"),
+        ):
+            with self.subTest(actions=actions):
+                payload = valid_response()
+                payload["recommended_actions"] = actions
+                valid, issues = validate(payload)
+                self.assertFalse(valid)
+                self.assertIn(expected_issue, issues)
+
     def test_system_prompt_contains_the_mandatory_risk_tier_mapping(self):
         for mapping in ("LOW -> LOW", "MEDIUM -> LOW", "HIGH -> HIGH", "CRITICAL -> HIGH"):
             self.assertIn(mapping, strategy_agent.SYSTEM_PROMPT)
@@ -122,6 +144,7 @@ class StrategyStructuredOutputTests(unittest.TestCase):
             set(output_schema["properties"]["recommended_actions"]["items"]["enum"]),
             ALLOWED_ACTIONS,
         )
+        self.assertTrue(output_schema["properties"]["recommended_actions"]["uniqueItems"])
         result = json.loads(publish.call_args.args[2])
         self.assertTrue(result["valid_json"])
         self.assertFalse(result["schema_valid"])

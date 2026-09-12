@@ -28,7 +28,7 @@ Field constraints:
   - HIGH -> HIGH
   - CRITICAL -> HIGH
   Before emitting JSON, verify that severity and risk_tier satisfy this mapping.
-- recommended_actions: must be a list of exactly 3 strings
+- recommended_actions: must be a list of exactly 3 distinct action identifiers; never repeat an action
 - recommended_actions: each string must be one of the supplied response-protocol
   identifiers; do not generate shell commands, prose instructions, or new action names
 - confidence: must be a float between 0.0 and 1.0

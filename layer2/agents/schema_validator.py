@@ -35,6 +35,7 @@ STRATEGY_RESPONSE_SCHEMA = {
             "type": "array",
             "minItems": 3,
             "maxItems": 3,
+            "uniqueItems": True,
             "items": {"type": "string", "enum": sorted(ALLOWED_ACTIONS)},
         },
         "confidence": {"type": "number", "minimum": 0, "maximum": 1},
@@ -92,6 +93,8 @@ def validate(parsed: dict) -> Tuple[bool, str]:
         )
     elif any(not isinstance(action, str) or action not in ALLOWED_ACTIONS for action in actions):
         issues.append("bad_actions_value")
+    elif len(set(actions)) != len(actions):
+        issues.append("duplicate_actions")
 
     conf = parsed.get("confidence")
     if (

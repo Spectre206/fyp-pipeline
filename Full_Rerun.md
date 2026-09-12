@@ -18,19 +18,91 @@ This is the single operational runbook for the current implementation. Run the s
 
 For a final comparable run, use replay speed `1`. It preserves the corpus arrival-rate scale. Higher values are useful only for a diagnostic because they deliberately increase arrival rate, can build queues, and can alter End-to-End Decision Latency.
 
-## Run identity and local run directories
+## Permanent per-node environment
 
-On Node 1, choose the run identity once and copy the printed literal value to Nodes 2 and 3. Each node has its own local filesystem, so create its local run directory with the same identifier.
+On every node, add this once to `~/.bashrc`, then open a new shell or run `source ~/.bashrc`:
 
 ```bash
 export REPO="$HOME/fyp-pipeline"
-export RUN_ID="wifi_cold_$(date -u +%Y%m%d_%H%M%S)"
-export RUN_ROOT="$REPO/experiment_runs/$RUN_ID"
+```
+
+On `stream-node`, also add these Layer 1 defaults once:
+
+```bash
+export LAYER1_BASELINES_DIR="$REPO/layer1/feature_store/baselines"
+export LAYER1_RESULTS_DIR="$REPO/layer1/runtime_results"
+```
+
+Do **not** add a run ID to `~/.bashrc`. It is deliberately per-run and belongs only in the environment file below.
+
+## Run identity and local run-environment files
+
+Each node uses its own `$HOME`; therefore each node needs its own `~/fyp-run-env.sh` with the same literal `RUN_ID` and node-local `$REPO` path. Source this file in every new SSH or VS Code terminal before running an experiment command.
+
+### Node 1 — `stream-node`
+
+```bash
+source ~/.bashrc
+: "${REPO:?REPO is not set; configure ~/.bashrc first}"
+RUN_ID="wifi_cold_$(date -u +%Y%m%d_%H%M%S)"
+cat > "$HOME/fyp-run-env.sh" <<EOF
+export RUN_ID="$RUN_ID"
+export RUN_ROOT="\$REPO/experiment_runs/\$RUN_ID"
+export SEG_RUN_DIR="\$RUN_ROOT/seg"
+EOF
+chmod 600 "$HOME/fyp-run-env.sh"
+source "$HOME/fyp-run-env.sh"
+: "${RUN_ID:?RUN_ID is not set}"
+: "${RUN_ROOT:?RUN_ROOT is not set}"
+: "${SEG_RUN_DIR:?SEG_RUN_DIR is not set}"
+case "$RUN_ROOT" in "$REPO/experiment_runs/"*) ;; *) echo "Unsafe RUN_ROOT: $RUN_ROOT"; exit 1;; esac
 mkdir -p "$RUN_ROOT"
 printf 'RUN_ID=%s\n' "$RUN_ID"
 ```
 
 For an Ethernet run, use `ethernet_cold_...` instead. Do not reuse a run ID.
+
+### Node 2 — `ai-brain-node`
+
+Paste the exact literal `RUN_ID` printed on Node 1; do not copy Node 1's absolute `$RUN_ROOT` path.
+
+```bash
+source ~/.bashrc
+: "${REPO:?REPO is not set; configure ~/.bashrc first}"
+RUN_ID="<paste the exact RUN_ID from stream-node>"
+cat > "$HOME/fyp-run-env.sh" <<EOF
+export RUN_ID="$RUN_ID"
+export RUN_ROOT="\$REPO/experiment_runs/\$RUN_ID"
+export LAYER2_EVALUATION_RUN_ID="\$RUN_ID"
+export LAYER2_EVALUATION_DIR="\$RUN_ROOT/layer2_evaluation"
+EOF
+chmod 600 "$HOME/fyp-run-env.sh"
+source "$HOME/fyp-run-env.sh"
+: "${RUN_ID:?RUN_ID is not set}"
+: "${RUN_ROOT:?RUN_ROOT is not set}"
+: "${LAYER2_EVALUATION_RUN_ID:?LAYER2_EVALUATION_RUN_ID is not set}"
+: "${LAYER2_EVALUATION_DIR:?LAYER2_EVALUATION_DIR is not set}"
+case "$RUN_ROOT" in "$REPO/experiment_runs/"*) ;; *) echo "Unsafe RUN_ROOT: $RUN_ROOT"; exit 1;; esac
+mkdir -p "$RUN_ROOT" "$LAYER2_EVALUATION_DIR"
+```
+
+### Node 3 — `gateway-node`
+
+```bash
+source ~/.bashrc
+: "${REPO:?REPO is not set; configure ~/.bashrc first}"
+RUN_ID="<paste the exact RUN_ID from stream-node>"
+cat > "$HOME/fyp-run-env.sh" <<EOF
+export RUN_ID="$RUN_ID"
+export RUN_ROOT="\$REPO/experiment_runs/\$RUN_ID"
+EOF
+chmod 600 "$HOME/fyp-run-env.sh"
+source "$HOME/fyp-run-env.sh"
+: "${RUN_ID:?RUN_ID is not set}"
+: "${RUN_ROOT:?RUN_ROOT is not set}"
+case "$RUN_ROOT" in "$REPO/experiment_runs/"*) ;; *) echo "Unsafe RUN_ROOT: $RUN_ROOT"; exit 1;; esac
+mkdir -p "$RUN_ROOT"
+```
 
 ## Phase 0 — Full Cold Cleanup
 
@@ -39,10 +111,12 @@ For an Ethernet run, use `ethernet_cold_...` instead. Do not reuse a run ID.
 Open a terminal on `stream-node`.
 
 ```bash
-export REPO="$HOME/fyp-pipeline"
-export RUN_ID="<paste the exact RUN_ID chosen above>"
-export RUN_ROOT="$REPO/experiment_runs/$RUN_ID"
-mkdir -p "$RUN_ROOT"
+source ~/.bashrc
+source "$HOME/fyp-run-env.sh"
+: "${REPO:?REPO is not set}"
+: "${RUN_ID:?RUN_ID is not set}"
+: "${RUN_ROOT:?RUN_ROOT is not set}"
+case "$RUN_ROOT" in "$REPO/experiment_runs/"*) ;; *) echo "Unsafe RUN_ROOT: $RUN_ROOT"; exit 1;; esac
 cd "$REPO/layer1"
 ```
 
@@ -53,7 +127,7 @@ The Feature Store persists one calibration baseline per `affected_component`. It
 ```bash
 export BASELINES_DIR="${LAYER1_BASELINES_DIR:-$REPO/layer1/feature_store/baselines}"
 printf 'Feature Store baseline directory: %s\n' "$BASELINES_DIR"
-test -n "$BASELINES_DIR" && test "$BASELINES_DIR" != "/" || { echo 'Unsafe baseline directory'; exit 1; }
+case "$BASELINES_DIR" in "$REPO/layer1/feature_store/baselines") ;; *) echo "Unsafe baseline directory: $BASELINES_DIR"; exit 1;; esac
 mkdir -p "$BASELINES_DIR"
 find "$BASELINES_DIR" -maxdepth 1 -type f -name '*.json' -print -delete
 find "$BASELINES_DIR" -maxdepth 1 -type f -name '*.json' -print
@@ -67,6 +141,7 @@ Detector runtime results are written to `LAYER1_RESULTS_DIR`, or by default `lay
 
 ```bash
 export RESULTS_DIR="${LAYER1_RESULTS_DIR:-$REPO/layer1/runtime_results}"
+case "$RESULTS_DIR" in "$REPO/layer1/runtime_results") ;; *) echo "Unsafe results directory: $RESULTS_DIR"; exit 1;; esac
 mkdir -p "$RESULTS_DIR"
 find "$RESULTS_DIR" -maxdepth 1 -type f \( \
   -name 'error_results.jsonl' -o -name 'throughput_results.jsonl' -o \
@@ -101,12 +176,14 @@ Every experiment queue listed above must show `0` ready and `0` unacknowledged. 
 Open a terminal on `ai-brain-node`, paste the same `RUN_ID`, and do this before starting any agent.
 
 ```bash
-export REPO="$HOME/fyp-pipeline"
-export RUN_ID="<paste the exact RUN_ID chosen above>"
-export RUN_ROOT="$REPO/experiment_runs/$RUN_ID"
-export LAYER2_EVALUATION_RUN_ID="$RUN_ID"
-export LAYER2_EVALUATION_DIR="$RUN_ROOT/layer2_evaluation"
-mkdir -p "$RUN_ROOT" "$LAYER2_EVALUATION_DIR"
+source ~/.bashrc
+source "$HOME/fyp-run-env.sh"
+: "${REPO:?REPO is not set}"
+: "${RUN_ID:?RUN_ID is not set}"
+: "${RUN_ROOT:?RUN_ROOT is not set}"
+: "${LAYER2_EVALUATION_RUN_ID:?LAYER2_EVALUATION_RUN_ID is not set}"
+: "${LAYER2_EVALUATION_DIR:?LAYER2_EVALUATION_DIR is not set}"
+case "$RUN_ROOT" in "$REPO/experiment_runs/"*) ;; *) echo "Unsafe RUN_ROOT: $RUN_ROOT"; exit 1;; esac
 cd "$REPO/layer2"
 printf 'Layer 2 evaluation run: %s\n' "$LAYER2_EVALUATION_DIR/$LAYER2_EVALUATION_RUN_ID"
 ```
@@ -119,7 +196,7 @@ The persistent Chroma client uses `layer2/chromadb_data` and collection `inciden
 
 ```bash
 export CHROMA_DIR="$REPO/layer2/chromadb_data"
-test "$CHROMA_DIR" = "$REPO/layer2/chromadb_data" || { echo 'Unexpected Chroma path'; exit 1; }
+case "$CHROMA_DIR" in "$REPO/layer2/chromadb_data") ;; *) echo "Unsafe Chroma path: $CHROMA_DIR"; exit 1;; esac
 rm -rf "$CHROMA_DIR"
 mkdir -p "$CHROMA_DIR"
 python3 -c 'from chromadb_utils.client import get_document_count; count=get_document_count(); print(f"Chroma incident_history documents: {count}"); assert count == 0'
@@ -165,10 +242,12 @@ The log removal is optional diagnostic cleanup only; it does not touch the fresh
 Open a terminal on `gateway-node`, paste the same `RUN_ID`, then verify migrations before removing run state.
 
 ```bash
-export REPO="$HOME/fyp-pipeline"
-export RUN_ID="<paste the exact RUN_ID chosen above>"
-export RUN_ROOT="$REPO/experiment_runs/$RUN_ID"
-mkdir -p "$RUN_ROOT"
+source ~/.bashrc
+source "$HOME/fyp-run-env.sh"
+: "${REPO:?REPO is not set}"
+: "${RUN_ID:?RUN_ID is not set}"
+: "${RUN_ROOT:?RUN_ROOT is not set}"
+case "$RUN_ROOT" in "$REPO/experiment_runs/"*) ;; *) echo "Unsafe RUN_ROOT: $RUN_ROOT"; exit 1;; esac
 cd "$REPO/layer3/dashboard"
 python3 manage.py showmigrations hitl
 python3 manage.py migrate
@@ -202,6 +281,11 @@ Both counts must be zero. This does not delete Django migrations, the database f
 In a setup terminal on `stream-node`:
 
 ```bash
+source ~/.bashrc
+source "$HOME/fyp-run-env.sh"
+: "${REPO:?REPO is not set}"
+: "${RUN_ID:?RUN_ID is not set}"
+: "${RUN_ROOT:?RUN_ROOT is not set}"
 cd "$REPO/layer1/rabbitmq"
 python3 setup_topology.py
 sudo rabbitmqctl list_queues -p fyp name messages_ready messages_unacknowledged
@@ -214,6 +298,11 @@ If this deployment deliberately uses non-default `LAYER1_BASELINES_DIR` or `LAYE
 **Terminal L1-A — Validator (metrics `:8002`)**
 
 ```bash
+source ~/.bashrc
+source "$HOME/fyp-run-env.sh"
+: "${REPO:?REPO is not set}"
+: "${RUN_ID:?RUN_ID is not set}"
+: "${RUN_ROOT:?RUN_ROOT is not set}"
 cd "$REPO/layer1/validator"
 python3 validator.py
 ```
@@ -221,6 +310,11 @@ python3 validator.py
 **Terminal L1-B — ADM Runner / Feature Store**
 
 ```bash
+source ~/.bashrc
+source "$HOME/fyp-run-env.sh"
+: "${REPO:?REPO is not set}"
+: "${RUN_ID:?RUN_ID is not set}"
+: "${RUN_ROOT:?RUN_ROOT is not set}"
 cd "$REPO/layer1/adm"
 python3 adm_runner.py
 ```
@@ -228,6 +322,11 @@ python3 adm_runner.py
 **Terminal L1-C — Fusion Engine (metrics `:8003`)**
 
 ```bash
+source ~/.bashrc
+source "$HOME/fyp-run-env.sh"
+: "${REPO:?REPO is not set}"
+: "${RUN_ID:?RUN_ID is not set}"
+: "${RUN_ROOT:?RUN_ROOT is not set}"
 cd "$REPO/layer1/fusion_engine"
 python3 fusion_engine.py
 ```
@@ -238,67 +337,124 @@ Fusion has a primary correlation window of `3.0` seconds and a late-recovery win
 
 ```bash
 # L1-D — error detector, metrics :8004
+source ~/.bashrc
+source "$HOME/fyp-run-env.sh"
+: "${REPO:?REPO is not set}"
+: "${RUN_ID:?RUN_ID is not set}"
+: "${RUN_ROOT:?RUN_ROOT is not set}"
 cd "$REPO/layer1/adm"
 python3 detectors/error_rate.py
 ```
 
 ```bash
 # L1-E — throughput detector, metrics :8005
+source ~/.bashrc
+source "$HOME/fyp-run-env.sh"
+: "${REPO:?REPO is not set}"
+: "${RUN_ID:?RUN_ID is not set}"
+: "${RUN_ROOT:?RUN_ROOT is not set}"
 cd "$REPO/layer1/adm"
 python3 detectors/throughput_drop.py
 ```
 
 ```bash
 # L1-F — authentication detector, metrics :8006
+source ~/.bashrc
+source "$HOME/fyp-run-env.sh"
+: "${REPO:?REPO is not set}"
+: "${RUN_ID:?RUN_ID is not set}"
+: "${RUN_ROOT:?RUN_ROOT is not set}"
 cd "$REPO/layer1/adm"
 python3 detectors/auth_flood.py
 ```
 
 ```bash
 # L1-G — CPU detector, metrics :8007
+source ~/.bashrc
+source "$HOME/fyp-run-env.sh"
+: "${REPO:?REPO is not set}"
+: "${RUN_ID:?RUN_ID is not set}"
+: "${RUN_ROOT:?RUN_ROOT is not set}"
 cd "$REPO/layer1/adm"
 python3 detectors/cpu_spike.py
 ```
 
 ```bash
 # L1-H — schema detector, metrics :8008
+source ~/.bashrc
+source "$HOME/fyp-run-env.sh"
+: "${REPO:?REPO is not set}"
+: "${RUN_ID:?RUN_ID is not set}"
+: "${RUN_ROOT:?RUN_ROOT is not set}"
 cd "$REPO/layer1/adm"
 python3 detectors/schema_drift.py
 ```
 
 ## Phase 2 — Start Layer 2
 
-Every Layer 2 terminal must receive the **same literal** `RUN_ID`. An export in one terminal does not propagate to the other three. In each terminal, run the common block first.
+Every Layer 2 terminal must source Node 2's `~/fyp-run-env.sh`; an export in one terminal does not propagate to the other three.
 
 ```bash
-export REPO="$HOME/fyp-pipeline"
-export RUN_ID="<paste the exact RUN_ID chosen above>"
-export LAYER2_EVALUATION_RUN_ID="$RUN_ID"
-export LAYER2_EVALUATION_DIR="$REPO/experiment_runs/$RUN_ID/layer2_evaluation"
+source ~/.bashrc
+source "$HOME/fyp-run-env.sh"
+: "${REPO:?REPO is not set}"
+: "${RUN_ID:?RUN_ID is not set}"
+: "${RUN_ROOT:?RUN_ROOT is not set}"
+: "${LAYER2_EVALUATION_RUN_ID:?LAYER2_EVALUATION_RUN_ID is not set}"
+: "${LAYER2_EVALUATION_DIR:?LAYER2_EVALUATION_DIR is not set}"
+case "$RUN_ROOT" in "$REPO/experiment_runs/"*) ;; *) echo "Unsafe RUN_ROOT: $RUN_ROOT"; exit 1;; esac
 cd "$REPO/layer2"
 ```
 
 **Terminal L2-A — Triage Agent (metrics `:8010`)**
 
 ```bash
+source ~/.bashrc
+source "$HOME/fyp-run-env.sh"
+: "${REPO:?REPO is not set}"
+: "${RUN_ID:?RUN_ID is not set}"
+: "${RUN_ROOT:?RUN_ROOT is not set}"
+: "${LAYER2_EVALUATION_RUN_ID:?LAYER2_EVALUATION_RUN_ID is not set}"
+: "${LAYER2_EVALUATION_DIR:?LAYER2_EVALUATION_DIR is not set}"
 python3 agents/triage_agent.py
 ```
 
 **Terminal L2-B — Strategy Agent (metrics `:8011`)**
 
 ```bash
+source ~/.bashrc
+source "$HOME/fyp-run-env.sh"
+: "${REPO:?REPO is not set}"
+: "${RUN_ID:?RUN_ID is not set}"
+: "${RUN_ROOT:?RUN_ROOT is not set}"
+: "${LAYER2_EVALUATION_RUN_ID:?LAYER2_EVALUATION_RUN_ID is not set}"
+: "${LAYER2_EVALUATION_DIR:?LAYER2_EVALUATION_DIR is not set}"
 python3 agents/strategy_agent.py
 ```
 
 **Terminal L2-C — Policy Agent (metrics `:8012`)**
 
 ```bash
+source ~/.bashrc
+source "$HOME/fyp-run-env.sh"
+: "${REPO:?REPO is not set}"
+: "${RUN_ID:?RUN_ID is not set}"
+: "${RUN_ROOT:?RUN_ROOT is not set}"
+: "${LAYER2_EVALUATION_RUN_ID:?LAYER2_EVALUATION_RUN_ID is not set}"
+: "${LAYER2_EVALUATION_DIR:?LAYER2_EVALUATION_DIR is not set}"
 python3 agents/policy_agent.py
 ```
 
 **Terminal L2-D — Learning Agent (metrics `:8013`)**
 
 ```bash
+source ~/.bashrc
+source "$HOME/fyp-run-env.sh"
+: "${REPO:?REPO is not set}"
+: "${RUN_ID:?RUN_ID is not set}"
+: "${RUN_ROOT:?RUN_ROOT is not set}"
+: "${LAYER2_EVALUATION_RUN_ID:?LAYER2_EVALUATION_RUN_ID is not set}"
+: "${LAYER2_EVALUATION_DIR:?LAYER2_EVALUATION_DIR is not set}"
 python3 agents/learning_agent.py
 ```
 
@@ -313,6 +469,11 @@ Start each long-running process in its own terminal.
 **Terminal L3-A — Auto Executor (metrics `:8014`)**
 
 ```bash
+source ~/.bashrc
+source "$HOME/fyp-run-env.sh"
+: "${REPO:?REPO is not set}"
+: "${RUN_ID:?RUN_ID is not set}"
+: "${RUN_ROOT:?RUN_ROOT is not set}"
 cd "$REPO/layer3"
 python3 auto_executor/executor.py
 ```
@@ -320,6 +481,11 @@ python3 auto_executor/executor.py
 **Terminal L3-B — HITL queue consumer**
 
 ```bash
+source ~/.bashrc
+source "$HOME/fyp-run-env.sh"
+: "${REPO:?REPO is not set}"
+: "${RUN_ID:?RUN_ID is not set}"
+: "${RUN_ROOT:?RUN_ROOT is not set}"
 cd "$REPO/layer3/dashboard"
 python3 manage.py consume_hitl
 ```
@@ -327,6 +493,11 @@ python3 manage.py consume_hitl
 **Terminal L3-C — Django dashboard and HITL metrics**
 
 ```bash
+source ~/.bashrc
+source "$HOME/fyp-run-env.sh"
+: "${REPO:?REPO is not set}"
+: "${RUN_ID:?RUN_ID is not set}"
+: "${RUN_ROOT:?RUN_ROOT is not set}"
 cd "$REPO/layer3/dashboard"
 python3 manage.py runserver 0.0.0.0:8000
 ```
@@ -396,6 +567,12 @@ Check for active Layer 1, Layer 2, Layer 3, RabbitMQ (`:15692`), and node-export
 On Node 1, before replay, create an operator-owned record in the new run directory. Replace the network value as needed.
 
 ```bash
+source ~/.bashrc
+source "$HOME/fyp-run-env.sh"
+: "${REPO:?REPO is not set}"
+: "${RUN_ID:?RUN_ID is not set}"
+: "${RUN_ROOT:?RUN_ROOT is not set}"
+case "$RUN_ROOT" in "$REPO/experiment_runs/"*) ;; *) echo "Unsafe RUN_ROOT: $RUN_ROOT"; exit 1;; esac
 cd "$REPO"
 {
   printf 'recorded_at_utc=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -422,7 +599,15 @@ SEG’s configured corpus contains **1,950 events**: 1,000 normal, four 200-even
 On Node 1, create a run-specific copy of the SEG config, set its base timestamp, and generate once.
 
 ```bash
-export SEG_RUN_DIR="$RUN_ROOT/seg"
+source ~/.bashrc
+source "$HOME/fyp-run-env.sh"
+: "${REPO:?REPO is not set}"
+: "${RUN_ID:?RUN_ID is not set}"
+: "${RUN_ROOT:?RUN_ROOT is not set}"
+: "${SEG_RUN_DIR:?SEG_RUN_DIR is not set}"
+case "$RUN_ROOT" in "$REPO/experiment_runs/"*) ;; *) echo "Unsafe RUN_ROOT: $RUN_ROOT"; exit 1;; esac
+case "$SEG_RUN_DIR" in "$RUN_ROOT/seg") ;; *) echo "Unsafe SEG_RUN_DIR: $SEG_RUN_DIR"; exit 1;; esac
+printf 'REPO=%s\nRUN_ID=%s\nRUN_ROOT=%s\nSEG_RUN_DIR=%s\n' "$REPO" "$RUN_ID" "$RUN_ROOT" "$SEG_RUN_DIR"
 mkdir -p "$SEG_RUN_DIR"
 cp "$REPO/layer1/seg/config/seg_config.json" "$SEG_RUN_DIR/seg_config.json"
 python3 - "$SEG_RUN_DIR/seg_config.json" <<'PY'
@@ -448,8 +633,15 @@ Generation overwrites `events_1950.jsonl` and `labels.csv` in its output directo
 `RUN_ROOT` is node-local unless the deployment explicitly mounts shared storage. Before analysis, transfer the final label CSV from Node 1 to the matching Node 2 run directory (or use the approved shared mount). From Node 1, after annotations are complete:
 
 ```bash
-ssh ai-brain-node "mkdir -p '$RUN_ROOT/seg'"
-scp "$RUN_ROOT/seg/labels.csv" "ai-brain-node:$RUN_ROOT/seg/labels.csv"
+source ~/.bashrc
+source "$HOME/fyp-run-env.sh"
+: "${REPO:?REPO is not set}"
+: "${RUN_ID:?RUN_ID is not set}"
+: "${RUN_ROOT:?RUN_ROOT is not set}"
+case "$RUN_ROOT" in "$REPO/experiment_runs/"*) ;; *) echo "Unsafe RUN_ROOT: $RUN_ROOT"; exit 1;; esac
+test -f "$RUN_ROOT/seg/labels.csv" || { echo "Final labels unavailable: $RUN_ROOT/seg/labels.csv"; exit 1; }
+ssh ai-brain-node "mkdir -p \$HOME/fyp-pipeline/experiment_runs/$RUN_ID/seg"
+scp "$RUN_ROOT/seg/labels.csv" "ai-brain-node:fyp-pipeline/experiment_runs/$RUN_ID/seg/labels.csv"
 ```
 
 Use the same transfer for a diagnostic label subset when that diagnostic is analyzed on Node 2. The label files are offline inputs only; never copy or publish them into RabbitMQ or a runtime component.
@@ -461,6 +653,14 @@ This is evidence collection, not the authoritative final experiment. Perform the
 SEG has no `--limit` flag. Do not use the first 50 shuffled lines: a cold Feature Store would withhold an uncontrolled mixture of early per-component calibration events and may not exercise Layer 2. Instead, make a deterministic diagnostic input for one component: its first 20 normal events establish that component’s cold baseline, and the next 30 non-normal events exercise detection and the Layer 2 path. The runtime JSONL remains label-free; make a matching labels subset solely for offline analysis.
 
 ```bash
+source ~/.bashrc
+source "$HOME/fyp-run-env.sh"
+: "${REPO:?REPO is not set}"
+: "${RUN_ID:?RUN_ID is not set}"
+: "${RUN_ROOT:?RUN_ROOT is not set}"
+: "${SEG_RUN_DIR:?SEG_RUN_DIR is not set}"
+case "$RUN_ROOT" in "$REPO/experiment_runs/"*) ;; *) echo "Unsafe RUN_ROOT: $RUN_ROOT"; exit 1;; esac
+case "$SEG_RUN_DIR" in "$RUN_ROOT/seg") ;; *) echo "Unsafe SEG_RUN_DIR: $SEG_RUN_DIR"; exit 1;; esac
 export CORPUS="$SEG_RUN_DIR/events_1950.jsonl"
 export LABELS="$SEG_RUN_DIR/labels.csv"
 export DIAG_EVENTS="$SEG_RUN_DIR/events_50_diagnostic.jsonl"
@@ -495,24 +695,54 @@ with open(labels_path, newline='') as source, open(output_labels, 'w', newline='
 print(f'component={component}; events={len(selected)}; labels={len(selected_ids)}')
 PY
 wc -l "$DIAG_EVENTS"
+ssh ai-brain-node "mkdir -p \$HOME/fyp-pipeline/experiment_runs/$RUN_ID/seg"
+scp "$DIAG_LABELS" "ai-brain-node:fyp-pipeline/experiment_runs/$RUN_ID/seg/labels_50_diagnostic.csv"
 ```
 
 Replay only after every consumer is verified:
 
 ```bash
+source ~/.bashrc
+source "$HOME/fyp-run-env.sh"
+: "${REPO:?REPO is not set}"
+: "${RUN_ID:?RUN_ID is not set}"
+: "${RUN_ROOT:?RUN_ROOT is not set}"
+: "${SEG_RUN_DIR:?SEG_RUN_DIR is not set}"
+case "$RUN_ROOT" in "$REPO/experiment_runs/"*) ;; *) echo "Unsafe RUN_ROOT: $RUN_ROOT"; exit 1;; esac
+case "$SEG_RUN_DIR" in "$RUN_ROOT/seg") ;; *) echo "Unsafe SEG_RUN_DIR: $SEG_RUN_DIR"; exit 1;; esac
+DIAG_EVENTS="$SEG_RUN_DIR/events_50_diagnostic.jsonl"
+test -f "$DIAG_EVENTS" || { echo "Diagnostic events unavailable: $DIAG_EVENTS"; exit 1; }
 cd "$REPO/layer1/seg"
 python3 seg.py --mode replay --config "$SEG_RUN_DIR/seg_config.json" --input "$DIAG_EVENTS" --speed 1
 ```
 
 Exactly 50 events are published. The first 20 establish one component baseline and are withheld by Feature Store; fewer than 50 Strategy records are therefore expected, not evidence of loss. This constructed ordering is diagnostic-only and must not be used as the final corpus ordering.
 
-After the pipeline drains, inspect Strategy’s current counters from Prometheus on `gateway-node` and compare them with the diagnostic evaluation artifacts:
+After the pipeline drains, inspect Strategy’s current counters from Prometheus on `gateway-node`:
 
 ```bash
+source ~/.bashrc
+source "$HOME/fyp-run-env.sh"
+: "${REPO:?REPO is not set}"
+: "${RUN_ID:?RUN_ID is not set}"
+: "${RUN_ROOT:?RUN_ROOT is not set}"
 curl -fsS 'http://localhost:9090/api/v1/query?query=fyp_strategy_schema_valid_total'
 curl -fsS 'http://localhost:9090/api/v1/query?query=fyp_strategy_schema_invalid_total'
 curl -fsS 'http://localhost:9090/api/v1/query?query=fyp_strategy_timeout_total'
+```
 
+Then compare them with the diagnostic evaluation artifacts from `ai-brain-node`:
+
+```bash
+
+source ~/.bashrc
+source "$HOME/fyp-run-env.sh"
+: "${REPO:?REPO is not set}"
+: "${RUN_ID:?RUN_ID is not set}"
+: "${RUN_ROOT:?RUN_ROOT is not set}"
+: "${LAYER2_EVALUATION_DIR:?LAYER2_EVALUATION_DIR is not set}"
+DIAG_LABELS="$RUN_ROOT/seg/labels_50_diagnostic.csv"
+test -f "$DIAG_LABELS" || { echo "Diagnostic labels unavailable: $DIAG_LABELS"; exit 1; }
 cd "$REPO"
 python3 -m layer2.evaluation.analyze_run \
   --run-dir "$LAYER2_EVALUATION_DIR/$RUN_ID" \
@@ -528,6 +758,13 @@ Shut down all diagnostic consumers, preserve its run directory, then repeat Phas
 With the final run’s zero-state checklist complete and any required manual labels already saved, replay the full generated corpus from Node 1:
 
 ```bash
+source ~/.bashrc
+source "$HOME/fyp-run-env.sh"
+: "${REPO:?REPO is not set}"
+: "${RUN_ID:?RUN_ID is not set}"
+: "${RUN_ROOT:?RUN_ROOT is not set}"
+: "${SEG_RUN_DIR:?SEG_RUN_DIR is not set}"
+case "$SEG_RUN_DIR" in "$RUN_ROOT/seg") ;; *) echo "Unsafe SEG_RUN_DIR: $SEG_RUN_DIR"; exit 1;; esac
 cd "$REPO/layer1/seg"
 python3 seg.py --mode replay \
   --config "$RUN_ROOT/seg/seg_config.json" \
@@ -564,6 +801,13 @@ The computational queues `fusion.results`, `anomaly.detected`, `triage.result`, 
 Run from the repository root on `ai-brain-node` (or from a copy of the same run artifacts and labels):
 
 ```bash
+source ~/.bashrc
+source "$HOME/fyp-run-env.sh"
+: "${REPO:?REPO is not set}"
+: "${RUN_ID:?RUN_ID is not set}"
+: "${RUN_ROOT:?RUN_ROOT is not set}"
+: "${LAYER2_EVALUATION_DIR:?LAYER2_EVALUATION_DIR is not set}"
+test -f "$RUN_ROOT/seg/labels.csv" || { echo "Final labels unavailable: $RUN_ROOT/seg/labels.csv"; exit 1; }
 cd "$REPO"
 python3 -m layer2.evaluation.analyze_run \
   --run-dir "$LAYER2_EVALUATION_DIR/$RUN_ID" \
@@ -577,6 +821,13 @@ Use `--expect-hitl-feedback` only when the experiment intentionally provides fee
 Preserve and count the current runtime outputs; they are not ground-truth performance calculations:
 
 ```bash
+source ~/.bashrc
+source "$HOME/fyp-run-env.sh"
+: "${REPO:?REPO is not set}"
+: "${RUN_ID:?RUN_ID is not set}"
+: "${RUN_ROOT:?RUN_ROOT is not set}"
+export RESULTS_DIR="${LAYER1_RESULTS_DIR:?LAYER1_RESULTS_DIR is not set; configure ~/.bashrc}"
+case "$RESULTS_DIR" in "$REPO/layer1/runtime_results") ;; *) echo "Unsafe results directory: $RESULTS_DIR"; exit 1;; esac
 find "$RESULTS_DIR" -maxdepth 1 -type f -name '*_results.jsonl' -print -exec wc -l {} \;
 wc -l "$REPO/layer1/fusion_engine/fusion_results.jsonl"
 ```
@@ -588,6 +839,11 @@ Current code provides these runtime detector and Fusion JSONL artifacts, but it 
 On `gateway-node`:
 
 ```bash
+source ~/.bashrc
+source "$HOME/fyp-run-env.sh"
+: "${REPO:?REPO is not set}"
+: "${RUN_ID:?RUN_ID is not set}"
+: "${RUN_ROOT:?RUN_ROOT is not set}"
 cd "$REPO/layer3/dashboard"
 python3 manage.py shell -c 'from hitl.models import HitlIncident; from collections import Counter; print("HITL statuses:", dict(Counter(HitlIncident.objects.values_list("status", flat=True))))'
 python3 - <<'PY'
@@ -604,6 +860,12 @@ PY
 On `ai-brain-node`:
 
 ```bash
+source ~/.bashrc
+source "$HOME/fyp-run-env.sh"
+: "${REPO:?REPO is not set}"
+: "${RUN_ID:?RUN_ID is not set}"
+: "${RUN_ROOT:?RUN_ROOT is not set}"
+: "${LAYER2_EVALUATION_DIR:?LAYER2_EVALUATION_DIR is not set}"
 cd "$REPO/layer2"
 python3 -c 'from chromadb_utils.client import get_document_count; print("Chroma incident_history documents:", get_document_count())'
 cat "$REPO/layer2/config/threshold_config.json"

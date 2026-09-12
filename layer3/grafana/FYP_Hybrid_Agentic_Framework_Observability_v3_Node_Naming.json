@@ -18,7 +18,7 @@
       "title": "SYSTEM OVERVIEW",
       "gridPos": {
         "x": 0,
-        "y": 0,
+        "y": 22,
         "w": 24,
         "h": 1
       },
@@ -30,7 +30,7 @@
       "type": "stat",
       "gridPos": {
         "x": 0,
-        "y": 1,
+        "y": 23,
         "w": 4,
         "h": 4
       },
@@ -59,7 +59,7 @@
       "type": "stat",
       "gridPos": {
         "x": 4,
-        "y": 1,
+        "y": 23,
         "w": 4,
         "h": 4
       },
@@ -87,7 +87,7 @@
       "type": "stat",
       "gridPos": {
         "x": 8,
-        "y": 1,
+        "y": 23,
         "w": 4,
         "h": 4
       },
@@ -115,7 +115,7 @@
       "type": "bargauge",
       "gridPos": {
         "x": 12,
-        "y": 1,
+        "y": 23,
         "w": 4,
         "h": 4
       },
@@ -150,8 +150,8 @@
       "type": "stat",
       "gridPos": {
         "x": 16,
-        "y": 1,
-        "w": 4,
+        "y": 23,
+        "w": 8,
         "h": 4
       },
       "targets": [
@@ -178,10 +178,10 @@
       "title": "DLQ",
       "type": "stat",
       "gridPos": {
-        "x": 20,
-        "y": 1,
-        "w": 4,
-        "h": 4
+        "x": 18,
+        "y": 5,
+        "w": 6,
+        "h": 5
       },
       "targets": [
         {
@@ -221,7 +221,7 @@
       "title": "LAYER 1 — REAL-TIME STATISTICAL DATA PLANE",
       "gridPos": {
         "x": 0,
-        "y": 5,
+        "y": 27,
         "w": 24,
         "h": 1
       },
@@ -233,7 +233,7 @@
       "type": "bargauge",
       "gridPos": {
         "x": 0,
-        "y": 6,
+        "y": 28,
         "w": 6,
         "h": 5
       },
@@ -274,7 +274,7 @@
       "type": "bargauge",
       "gridPos": {
         "x": 6,
-        "y": 6,
+        "y": 28,
         "w": 6,
         "h": 5
       },
@@ -293,7 +293,84 @@
       "fieldConfig": {
         "defaults": {
           "unit": "short"
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "cpu_spike"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#FF9830"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "error_rate"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#E02F44"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "throughput_drop"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#5794F2"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "auth_flood"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#B877D9"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "schema_drift"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#F2CC0C"
+                }
+              }
+            ]
+          }
+        ]
       },
       "description": "Current-process evaluation totals for the five statistical detectors."
     },
@@ -303,7 +380,7 @@
       "type": "bargauge",
       "gridPos": {
         "x": 12,
-        "y": 6,
+        "y": 28,
         "w": 6,
         "h": 5
       },
@@ -322,7 +399,84 @@
       "fieldConfig": {
         "defaults": {
           "unit": "short"
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "cpu_spike"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#FF9830"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "error_rate"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#E02F44"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "throughput_drop"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#5794F2"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "auth_flood"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#B877D9"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "schema_drift"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#F2CC0C"
+                }
+              }
+            ]
+          }
+        ]
       },
       "description": "Current-process anomaly detections by statistical detector; these are not offline precision or recall."
     },
@@ -332,7 +486,7 @@
       "type": "stat",
       "gridPos": {
         "x": 18,
-        "y": 6,
+        "y": 28,
         "w": 6,
         "h": 5
       },
@@ -355,7 +509,39 @@
       "fieldConfig": {
         "defaults": {
           "unit": "s"
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "p50"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#5794F2"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "p95"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#FF9830"
+                }
+              }
+            ]
+          }
+        ]
       },
       "description": "Aggregate per-detector computation latency from Prometheus histograms."
     },
@@ -365,7 +551,7 @@
       "type": "bargauge",
       "gridPos": {
         "x": 0,
-        "y": 11,
+        "y": 33,
         "w": 9,
         "h": 5
       },
@@ -408,7 +594,84 @@
       "fieldConfig": {
         "defaults": {
           "unit": "short"
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Published"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#73BF69"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Suppressed"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#8E8E8E"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Compound"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#B877D9"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Fast Path"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#FF9830"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Late recovery"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#5794F2"
+                }
+              }
+            ]
+          }
+        ]
       },
       "description": "Current-process Fusion outcomes. Fast Path is a priority marker, not early finalization."
     },
@@ -418,7 +681,7 @@
       "type": "stat",
       "gridPos": {
         "x": 9,
-        "y": 11,
+        "y": 33,
         "w": 4,
         "h": 5
       },
@@ -446,7 +709,7 @@
       "type": "stat",
       "gridPos": {
         "x": 13,
-        "y": 11,
+        "y": 33,
         "w": 5,
         "h": 5
       },
@@ -469,7 +732,39 @@
       "fieldConfig": {
         "defaults": {
           "unit": "s"
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "p50"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#5794F2"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "p95"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#FF9830"
+                }
+              }
+            ]
+          }
+        ]
       },
       "description": "Fusion decision computation time; correlation waiting is separate."
     },
@@ -479,7 +774,7 @@
       "type": "stat",
       "gridPos": {
         "x": 18,
-        "y": 11,
+        "y": 33,
         "w": 6,
         "h": 5
       },
@@ -502,7 +797,39 @@
       "fieldConfig": {
         "defaults": {
           "unit": "s"
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "p50"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#5794F2"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "p95"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#FF9830"
+                }
+              }
+            ]
+          }
+        ]
       },
       "description": "Time an event remains in Fusion correlation before finalization."
     },
@@ -512,7 +839,7 @@
       "title": "LAYER 2 — AI CONTROL PLANE",
       "gridPos": {
         "x": 0,
-        "y": 16,
+        "y": 38,
         "w": 24,
         "h": 1
       },
@@ -524,7 +851,7 @@
       "type": "bargauge",
       "gridPos": {
         "x": 0,
-        "y": 17,
+        "y": 39,
         "w": 6,
         "h": 5
       },
@@ -555,7 +882,54 @@
       "fieldConfig": {
         "defaults": {
           "unit": "short"
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Schema valid"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#73BF69"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Schema invalid"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#E02F44"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Timeout"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#FF9830"
+                }
+              }
+            ]
+          }
+        ]
       },
       "description": "Current-process Strategy outcomes. No valid-JSON metric is exported, so schema validity is not mislabelled as JSON validity."
     },
@@ -565,7 +939,7 @@
       "type": "stat",
       "gridPos": {
         "x": 6,
-        "y": 17,
+        "y": 39,
         "w": 4,
         "h": 5
       },
@@ -593,7 +967,7 @@
       "type": "stat",
       "gridPos": {
         "x": 10,
-        "y": 17,
+        "y": 39,
         "w": 4,
         "h": 5
       },
@@ -621,7 +995,7 @@
       "type": "timeseries",
       "gridPos": {
         "x": 14,
-        "y": 17,
+        "y": 39,
         "w": 5,
         "h": 5
       },
@@ -649,7 +1023,7 @@
       "type": "bargauge",
       "gridPos": {
         "x": 19,
-        "y": 17,
+        "y": 39,
         "w": 5,
         "h": 5
       },
@@ -668,7 +1042,39 @@
       "fieldConfig": {
         "defaults": {
           "unit": "short"
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "AUTO"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#73BF69"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "HITL"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#FF9830"
+                }
+              }
+            ]
+          }
+        ]
       },
       "description": "Current-process deterministic Policy routing totals for AUTO and HITL."
     },
@@ -678,7 +1084,7 @@
       "type": "bargauge",
       "gridPos": {
         "x": 0,
-        "y": 22,
+        "y": 44,
         "w": 6,
         "h": 5
       },
@@ -697,7 +1103,69 @@
       "fieldConfig": {
         "defaults": {
           "unit": "short"
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "LOW_RISK_HIGH_CONFIDENCE"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#73BF69"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "HIGH_RISK"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#FF9830"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "SCHEMA_INVALID"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#E02F44"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*(TIMEOUT|PARSE_ERROR|INVALID_.*)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#E02F44"
+                }
+              }
+            ]
+          }
+        ]
       },
       "description": "Observed deterministic Policy reasons, including high-risk, confidence, timeout, parse, schema, and action validation outcomes."
     },
@@ -707,7 +1175,7 @@
       "type": "bargauge",
       "gridPos": {
         "x": 6,
-        "y": 22,
+        "y": 44,
         "w": 6,
         "h": 5
       },
@@ -750,7 +1218,7 @@
       "type": "stat",
       "gridPos": {
         "x": 12,
-        "y": 22,
+        "y": 44,
         "w": 4,
         "h": 5
       },
@@ -773,7 +1241,39 @@
       "fieldConfig": {
         "defaults": {
           "unit": "s"
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "p50"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#5794F2"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "p95"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#FF9830"
+                }
+              }
+            ]
+          }
+        ]
       },
       "description": "Triage + Strategy + Policy processing only; excludes RabbitMQ queue and backlog delay."
     },
@@ -783,7 +1283,7 @@
       "type": "stat",
       "gridPos": {
         "x": 16,
-        "y": 22,
+        "y": 44,
         "w": 4,
         "h": 5
       },
@@ -806,7 +1306,39 @@
       "fieldConfig": {
         "defaults": {
           "unit": "s"
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "p50"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#5794F2"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "p95"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#FF9830"
+                }
+              }
+            ]
+          }
+        ]
       },
       "description": "Layer 2 incident timestamp to Policy decision, including inter-agent queueing and backlog delay."
     },
@@ -816,7 +1348,7 @@
       "type": "stat",
       "gridPos": {
         "x": 20,
-        "y": 22,
+        "y": 44,
         "w": 4,
         "h": 5
       },
@@ -839,7 +1371,39 @@
       "fieldConfig": {
         "defaults": {
           "unit": "s"
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "p50"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#5794F2"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "p95"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#FF9830"
+                }
+              }
+            ]
+          }
+        ]
       },
       "description": "Policy decision to outcome.feedback receipt; it is not verified service-recovery time."
     },
@@ -849,7 +1413,7 @@
       "type": "stat",
       "gridPos": {
         "x": 0,
-        "y": 27,
+        "y": 49,
         "w": 5,
         "h": 5
       },
@@ -872,7 +1436,39 @@
       "fieldConfig": {
         "defaults": {
           "unit": "s"
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "p50"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#5794F2"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "p95"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#FF9830"
+                }
+              }
+            ]
+          }
+        ]
       },
       "description": "Deterministic Learning Agent processing time after feedback receipt."
     },
@@ -882,7 +1478,7 @@
       "type": "timeseries",
       "gridPos": {
         "x": 5,
-        "y": 27,
+        "y": 49,
         "w": 6,
         "h": 5
       },
@@ -910,7 +1506,7 @@
       "type": "gauge",
       "gridPos": {
         "x": 11,
-        "y": 27,
+        "y": 49,
         "w": 4,
         "h": 5
       },
@@ -940,7 +1536,7 @@
       "type": "timeseries",
       "gridPos": {
         "x": 15,
-        "y": 27,
+        "y": 49,
         "w": 5,
         "h": 5
       },
@@ -968,7 +1564,7 @@
       "type": "stat",
       "gridPos": {
         "x": 20,
-        "y": 27,
+        "y": 49,
         "w": 4,
         "h": 5
       },
@@ -997,7 +1593,7 @@
       "title": "LAYER 3 — EXECUTION, HUMAN OVERSIGHT & OBSERVABILITY LAYER",
       "gridPos": {
         "x": 0,
-        "y": 32,
+        "y": 54,
         "w": 24,
         "h": 1
       },
@@ -1009,7 +1605,7 @@
       "type": "stat",
       "gridPos": {
         "x": 0,
-        "y": 33,
+        "y": 55,
         "w": 4,
         "h": 5
       },
@@ -1038,7 +1634,7 @@
       "type": "bargauge",
       "gridPos": {
         "x": 4,
-        "y": 33,
+        "y": 55,
         "w": 6,
         "h": 5
       },
@@ -1057,7 +1653,39 @@
       "fieldConfig": {
         "defaults": {
           "unit": "short"
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "SUCCESS"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#73BF69"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "FAILURE"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#E02F44"
+                }
+              }
+            ]
+          }
+        ]
       },
       "description": "Automatic remediation success and failure counts; outcomes do not establish verified recovery."
     },
@@ -1067,7 +1695,7 @@
       "type": "stat",
       "gridPos": {
         "x": 10,
-        "y": 33,
+        "y": 55,
         "w": 5,
         "h": 5
       },
@@ -1090,7 +1718,39 @@
       "fieldConfig": {
         "defaults": {
           "unit": "s"
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "p50"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#5794F2"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "p95"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#FF9830"
+                }
+              }
+            ]
+          }
+        ]
       },
       "description": "Auto Executor action duration, not a service-recovery measurement."
     },
@@ -1100,7 +1760,7 @@
       "type": "stat",
       "gridPos": {
         "x": 15,
-        "y": 33,
+        "y": 55,
         "w": 4,
         "h": 5
       },
@@ -1129,7 +1789,7 @@
       "type": "stat",
       "gridPos": {
         "x": 19,
-        "y": 33,
+        "y": 55,
         "w": 5,
         "h": 5
       },
@@ -1158,7 +1818,7 @@
       "type": "bargauge",
       "gridPos": {
         "x": 0,
-        "y": 38,
+        "y": 60,
         "w": 8,
         "h": 5
       },
@@ -1189,7 +1849,54 @@
       "fieldConfig": {
         "defaults": {
           "unit": "short"
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Approved"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#73BF69"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Rejected"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#E02F44"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Modified"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#5794F2"
+                }
+              }
+            ]
+          }
+        ]
       },
       "description": "Current-process authoritative human decisions persisted by the HITL dashboard."
     },
@@ -1199,7 +1906,7 @@
       "type": "stat",
       "gridPos": {
         "x": 8,
-        "y": 38,
+        "y": 60,
         "w": 8,
         "h": 5
       },
@@ -1222,7 +1929,39 @@
       "fieldConfig": {
         "defaults": {
           "unit": "s"
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "p50"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#5794F2"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "p95"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#FF9830"
+                }
+              }
+            ]
+          }
+        ]
       },
       "description": "Persisted HITL queue entry (arrived_at) to persisted authoritative human decision (decided_at)."
     },
@@ -1232,7 +1971,7 @@
       "type": "timeseries",
       "gridPos": {
         "x": 16,
-        "y": 38,
+        "y": 60,
         "w": 8,
         "h": 5
       },
@@ -1257,10 +1996,10 @@
     {
       "id": 44,
       "type": "row",
-      "title": "INFRASTRUCTURE / HARDWARE",
+      "title": "SYSTEM / INFRASTRUCTURE HEALTH",
       "gridPos": {
         "x": 0,
-        "y": 43,
+        "y": 0,
         "w": 24,
         "h": 1
       },
@@ -1271,9 +2010,9 @@
       "title": "Stream Node",
       "type": "stat",
       "gridPos": {
-        "x": 0,
-        "y": 44,
-        "w": 8,
+        "x": 6,
+        "y": 1,
+        "w": 6,
         "h": 4
       },
       "targets": [
@@ -1315,9 +2054,9 @@
       "title": "AI Brain Node",
       "type": "stat",
       "gridPos": {
-        "x": 8,
-        "y": 44,
-        "w": 8,
+        "x": 12,
+        "y": 1,
+        "w": 6,
         "h": 4
       },
       "targets": [
@@ -1359,9 +2098,9 @@
       "title": "Gateway Node",
       "type": "stat",
       "gridPos": {
-        "x": 16,
-        "y": 44,
-        "w": 8,
+        "x": 18,
+        "y": 1,
+        "w": 6,
         "h": 4
       },
       "targets": [
@@ -1404,7 +2143,7 @@
       "type": "timeseries",
       "gridPos": {
         "x": 0,
-        "y": 48,
+        "y": 11,
         "w": 8,
         "h": 6
       },
@@ -1441,7 +2180,54 @@
               }
             ]
           }
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "stream-node:9100"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#5794F2"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "ai-brain-node:9100"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#FF9830"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "gateway-node:9100"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#73BF69"
+                }
+              }
+            ]
+          }
+        ]
       },
       "description": "CPU utilization comparison across the three commodity nodes."
     },
@@ -1451,7 +2237,7 @@
       "type": "timeseries",
       "gridPos": {
         "x": 8,
-        "y": 48,
+        "y": 11,
         "w": 8,
         "h": 6
       },
@@ -1488,7 +2274,54 @@
               }
             ]
           }
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "stream-node:9100"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#5794F2"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "ai-brain-node:9100"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#FF9830"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "gateway-node:9100"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#73BF69"
+                }
+              }
+            ]
+          }
+        ]
       },
       "description": "RAM utilization comparison, especially relevant during local Strategy inference."
     },
@@ -1498,7 +2331,7 @@
       "type": "timeseries",
       "gridPos": {
         "x": 16,
-        "y": 48,
+        "y": 11,
         "w": 8,
         "h": 6
       },
@@ -1518,7 +2351,54 @@
           "unit": "percent",
           "min": 0,
           "max": 100
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "stream-node:9100"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#5794F2"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "ai-brain-node:9100"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#FF9830"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "gateway-node:9100"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#73BF69"
+                }
+              }
+            ]
+          }
+        ]
       },
       "description": "Root filesystem usage across all nodes."
     },
@@ -1528,7 +2408,7 @@
       "type": "timeseries",
       "gridPos": {
         "x": 0,
-        "y": 54,
+        "y": 17,
         "w": 12,
         "h": 5
       },
@@ -1551,7 +2431,54 @@
       "fieldConfig": {
         "defaults": {
           "unit": "Bps"
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^stream-node:9100 .*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#5794F2"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^ai-brain-node:9100 .*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#FF9830"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^gateway-node:9100 .*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#73BF69"
+                }
+              }
+            ]
+          }
+        ]
       },
       "description": "Node receive and transmit throughput; works for either Wi-Fi or Ethernet experiments."
     },
@@ -1561,7 +2488,7 @@
       "type": "timeseries",
       "gridPos": {
         "x": 12,
-        "y": 54,
+        "y": 17,
         "w": 6,
         "h": 5
       },
@@ -1579,7 +2506,54 @@
       "fieldConfig": {
         "defaults": {
           "unit": "celsius"
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "stream-node:9100"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#5794F2"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "ai-brain-node:9100"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#FF9830"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "gateway-node:9100"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#73BF69"
+                }
+              }
+            ]
+          }
+        ]
       },
       "description": "Highest reported temperature per node for sustained-load thermal checks."
     },
@@ -1588,8 +2562,8 @@
       "title": "NTP Offset",
       "type": "timeseries",
       "gridPos": {
-        "x": 18,
-        "y": 54,
+        "x": 12,
+        "y": 5,
         "w": 6,
         "h": 5
       },
@@ -1617,8 +2591,8 @@
       "type": "timeseries",
       "gridPos": {
         "x": 0,
-        "y": 59,
-        "w": 16,
+        "y": 5,
+        "w": 12,
         "h": 5
       },
       "targets": [
@@ -1644,10 +2618,10 @@
       "title": "Prometheus Targets",
       "type": "bargauge",
       "gridPos": {
-        "x": 16,
-        "y": 59,
-        "w": 8,
-        "h": 5
+        "x": 0,
+        "y": 1,
+        "w": 6,
+        "h": 4
       },
       "targets": [
         {
@@ -1676,9 +2650,68 @@
       "fieldConfig": {
         "defaults": {
           "unit": "short"
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "UP"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#73BF69"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "DOWN"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#E02F44"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "TOTAL"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#5794F2"
+                }
+              }
+            ]
+          }
+        ]
       },
       "description": "Current counts of every discovered Prometheus scrape target reporting UP, DOWN, and total. No job filter or fixed deployment total is applied; missing Prometheus data remains visible as missing data."
+    },
+    {
+      "id": 56,
+      "type": "row",
+      "title": "HARDWARE / NODE RESOURCES",
+      "gridPos": {
+        "x": 0,
+        "y": 10,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false
     }
   ]
 }
