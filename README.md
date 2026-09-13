@@ -1,379 +1,510 @@
-<div align="center">
-
 # Distributed Multi-Agent Coordination for Self-Healing Data Pipelines
 
-### A Human-in-the-Loop Approach on Commodity Hardware
+> An experimental, policy-bounded research prototype for coordinating detection,
+> diagnosis, remediation planning, human oversight, and learning across three
+> commodity-hardware nodes.
 
-**Department of CS&IT, UET Peshawar — Nowshera Campus**
+## Project summary
 
-**Team:** Muhammad Adeel (23JZBCS0226) &nbsp;•&nbsp; Muhammad Asim (23JZBCS0227)
+Modern data pipelines can suffer resource spikes, error-rate surges, throughput
+degradation, authentication-failure floods, schema drift, and structural data
+violations. Monitoring often detects these symptoms, but diagnosis, remediation
+recommendation, execution, human escalation, and post-incident learning remain
+separate activities.
 
-**Supervisor:** Dr. Laeeq Ahmad — HEC Approved PhD Supervisor
+This project investigates whether those responsibilities can be coordinated by a
+distributed, heterogeneous multi-agent architecture on commodity hardware while
+retaining a deterministic safety boundary around automatic action. It is a
+research prototype, not a claim of universal or production-ready self-healing.
 
-</div>
+The authoritative final experiment is the cold-memory Wi-Fi run
+**wifi_cold_20260913_041045**, performed with frozen implementation commit
+**377250945c253b9c9da233d84391d1458d181fc9**.
 
----
+## Research problem and proposed solution
 
-## Table of Contents
+The problem is not merely anomaly detection. It is safe coordination after an
+incident is found: deciding what an incident means, proposing an appropriate
+response, ensuring an unsafe proposal cannot execute automatically, involving a
+human when needed, and preserving the outcome for future adaptation.
 
-- [What This Project Does](#what-this-project-does)
-- [Architecture at a Glance](#architecture-at-a-glance)
-- [System Architecture Diagram](#system-architecture-diagram)
-- [RabbitMQ Topology Diagram](#rabbitmq-topology-diagram)
-- [Repository Structure](#repository-structure)
-- [Selected Models](#selected-models)
-- [Evaluation Dataset](#evaluation-dataset--1950-events)
-- [Cluster Infrastructure](#cluster-infrastructure)
-- [Primary Research Metrics](#primary-research-metrics)
-- [RabbitMQ Topology (Detailed)](#rabbitmq-topology-detailed)
-- [Getting Started](#getting-started)
-- [Git Branch Strategy](#git-branch-strategy)
+The proposed solution combines:
 
----
+- statistical and deterministic incident detection;
+- RabbitMQ event-driven communication;
+- deterministic Triage with retrieval-assisted context;
+- local LLM remediation planning only in Strategy;
+- deterministic Policy enforcement;
+- controlled simulated AUTO handling;
+- persistent human-in-the-loop escalation;
+- feedback-driven ChromaDB memory and EMA threshold adaptation; and
+- Prometheus/Grafana observability across the deployment.
 
-## What This Project Does
+This division is intentional: Triage, Policy, Learning, Layer 1 detectors,
+execution control, and the HITL workflow are not LLM agents. **Only Strategy is
+LLM-backed**, using local **qwen3:1.7b** inference through Ollama.
 
-This system detects anomalies within a distributed streaming data pipeline and autonomously determines whether each anomaly should be remediated automatically or escalated to a human operator.
+## Safety and authority model
 
-The system operates on **three physical commodity machines**, with **no dependency on cloud infrastructure or GPU acceleration**. When an anomaly is detected — such as a CPU spike, an error-rate surge, an authentication flood, a throughput drop, or schema drift — the pipeline responds through the following sequence:
+~~~text
+Strategy proposes remediation.
+Policy authorizes or escalates.
+Layer 3 executes an authorized AUTO decision or presents a HITL case.
+~~~
 
-1. **Five specialised detectors** analyse the anomaly independently.
-2. A **Fusion Engine** correlates the detector signals into a single enriched incident, suppressing duplicate alerts and identifying compound anomalies.
-3. A coordinated chain of **four AI agents**:
-   - Classifies the incident and retrieves relevant historical context.
-   - Reasons about the optimal remediation strategy using a local, quantised LLM.
-   - Routes the proposed action to either automatic execution or a human-review dashboard.
-   - Learns from the eventual outcome to refine future decision-making.
+The LLM never receives unrestricted execution authority. Strategy output must
+satisfy a seven-field structured contract, an allowed action vocabulary, exactly
+three distinct actions, and the severity-to-risk-tier constraint. A bounded
+regeneration permits no more than two model-generation attempts. Deterministic
+validation and Policy then fail closed: malformed, invalid, unsafe, high-risk,
+or insufficient-confidence proposals route to HITL rather than AUTO.
 
-### Research Objective
+## Full-system architecture
 
-This project empirically evaluates whether a **policy-bounded, multi-agent self-healing framework** — a concept previously proposed largely at the architectural level — can be implemented, deployed, and benchmarked on commodity hardware, yielding measurable improvements in detection quality, reasoning reliability, and operational safety relative to a static, threshold-only baseline.
-
----
-
-## Architecture at a Glance
-
-```
-Node 1 — stream-node                         Layer 1: Real-Time Data Plane
-  SEG → Pydantic Validator → Feature Store
-    → 5 Detectors (detection.fanout exchange)
-    → Fusion Engine (5s correlation window, compound incident merging)
-    → anomaly.detected queue
-
-Node 2 — ai-brain-node                       Layer 2: AI Control Plane
-  Triage Agent (rule-based + RAG)
-    → Strategy Agent (qwen3:1.7b via Ollama)
-    → Policy Agent (tiered routing)
-    → Learning Agent (qwen3:0.6b via Ollama)
-  ChromaDB (RAG — Historical Incidents)
-
-Node 3 — gateway-node                        Layer 3: HITL & Observability
-  Django HITL Dashboard (Approve/Reject/Modify)
-    → Auto-Execution Engine
-    → SQLite Decision Log
-  Prometheus + Grafana (scraping all 3 nodes)
-```
-
----
-
-## System Architecture Diagram
-
-```mermaid
+~~~mermaid
 flowchart LR
-    %% Legend
-    subgraph Legend["Legend"]
-        direction LR
-        L1["Solid line = message flow"] --> L2["Dashed line = service call / data retrieval"]
-    end
+    classDef l1 fill:#0c4a6e,color:#fff,stroke:#0369a1,stroke-width:2px
+    classDef l2 fill:#7c2d12,color:#fff,stroke:#c2410c,stroke-width:2px
+    classDef l3 fill:#14532d,color:#fff,stroke:#166534,stroke-width:2px
+    classDef queue fill:#334155,color:#fff,stroke:#475569
+    classDef store fill:#312e81,color:#fff,stroke:#4f46e5
+    classDef obs fill:#5b215f,color:#fff,stroke:#a21caf
 
-    subgraph Node1["Node 1 — stream-node (Layer 1: Real-Time Data Plane)"]
+    subgraph N1["Node 1 — stream-node<br/>Layer 1 — Real-Time Statistical Data Plane + RabbitMQ"]
         direction TB
-        SEG["Event Generator<br/>(SEG)"] --> Val["Pydantic<br/>Validator"]
-        Val -->|"valid events"| FS["Feature Store<br/>+ ADM Runner"]
-        FS --> DF["detection.fanout<br/>(Fanout Exchange)"]
-        DF --> D1["CPU Spike<br/>Detector"]
-        DF --> D2["Error Rate<br/>Detector"]
-        DF --> D3["Throughput<br/>Detector"]
-        DF --> D4["Auth Flood<br/>Detector"]
-        DF --> D5["Schema Drift<br/>Detector"]
-        D1 --> FR["fusion.results"]
-        D2 --> FR
-        D3 --> FR
-        D4 --> FR
-        D5 --> FR
-        FR --> FE["Fusion Engine<br/>(3s correlation window)<br/>Compound merging & dedup"]
-        Val -->|"schema violations"| AD["anomaly.detected"]
-        FE -->|"fused incidents"| AD
+        SEG[Synthetic Event Generator]
+        VAL[Pydantic Validator]
+        FS[Feature Store + ADM Runner]
+        FAN[RabbitMQ<br/>detection.fanout]
+        CPU[CPU / memory detector]
+        ERR[Error-rate detector]
+        THR[Throughput detector]
+        AUTH[Auth-flood detector]
+        SCH[Schema-drift detector]
+        FUS[Fusion Engine]
+        BYP[Structural schema<br/>bypass router]
+        AD[(RabbitMQ<br/>anomaly.detected)]
+        SEG --> VAL
+        VAL -->|valid| FS --> FAN
+        FAN --> CPU
+        FAN --> ERR
+        FAN --> THR
+        FAN --> AUTH
+        FAN --> SCH
+        CPU --> FUS
+        ERR --> FUS
+        THR --> FUS
+        AUTH --> FUS
+        SCH --> FUS
+        FUS -->|fused incident| AD
+        VAL -->|structural violation| BYP --> AD
     end
 
-    subgraph Node2["Node 2 — ai-brain-node (Layer 2: AI Control Plane)"]
+    subgraph N2["Node 2 — ai-brain-node<br/>Layer 2 — AI Control Plane"]
         direction TB
-        TG["Triage Agent<br/>(rule-based + RAG)"] -->|"triage.result"| SA["Strategy Agent<br/>(qwen3:1.7b)"]
-        SA -->|"strategy.result"| PA["Policy Agent<br/>(tiered routing)"]
-        TG -.->|"RAG query"| Chroma[("ChromaDB<br/>incident_history")]
-        SA -.->|"LLM call"| Ollama["Ollama API<br/>(localhost:11434)"]
+        TRI[Triage<br/>deterministic protocol + RAG]
+        STR[Strategy<br/>qwen3:1.7b structured proposal]
+        POL[Policy<br/>deterministic authority boundary]
+        LEARN[Learning<br/>deterministic feedback + EMA]
+        OLL[Ollama]
+        CHR[(ChromaDB)]
+        TRI -->|triage.result| STR -->|strategy.result| POL
+        TRI <--> CHR
+        STR <--> OLL
+        LEARN --> CHR
+        LEARN -->|adaptive threshold| POL
     end
 
-    subgraph Node3["Node 3 — gateway-node (Layer 3: HITL & Observability)"]
+    subgraph N3["Node 3 — gateway-node<br/>Layer 3 — Execution, Human Oversight & Observability Layer"]
         direction TB
-        AE["Auto-Execution<br/>Engine"] --> SL["SQLite<br/>Decision Log"]
-        HITL["Django HITL<br/>Dashboard"] --> SL
-        LA["Learning Agent<br/>(qwen3:0.6b)"] --> Config["EMA Threshold<br/>Config"]
-        Prom["Prometheus"] --> Graf["Grafana"]
+        AUTO[Auto Executor<br/>controlled simulated handling]
+        HITL[Django HITL<br/>persistent review]
+        DB[(SQLite decision audit<br/>and HITL state)]
+        PROM[Prometheus]
+        GRAF[Grafana]
+        HITL --> DB
+        AUTO --> DB
+        PROM --> GRAF
     end
 
-    AD --> TG
-    PA -->|"auto.execute"| AE
-    PA -->|"hitl.queue"| HITL
-    AE -->|"outcome.feedback"| LA
-    HITL -->|"outcome.feedback"| LA
-    LA --> Chroma
-    LA -.->|"LLM call"| Ollama
-    Prom -.->|"scrapes metrics"| Node1
-    Prom -.->|"scrapes metrics"| Node2
-    Prom -.->|"scrapes metrics"| Node3
+    AD --> TRI
+    POL -->|AUTO: auto.execute| AUTO
+    POL -->|HITL: hitl.queue| HITL
+    AUTO -->|outcome.feedback| LEARN
+    HITL -->|outcome.feedback| LEARN
+    N1M[Layer 1 exporters] -. scrape .-> PROM
+    N2M[Layer 2 exporters] -. scrape .-> PROM
+    N3M[Layer 3 exporters + RabbitMQ] -. scrape .-> PROM
 
-    %% Force all connection lines to be solid black and slightly thicker
-    linkStyle default stroke:#000,stroke-width:2px;
+    class SEG,VAL,FS,FAN,CPU,ERR,THR,AUTH,SCH,FUS,BYP l1
+    class TRI,STR,POL,LEARN,OLL l2
+    class AUTO,HITL l3
+    class AD queue
+    class CHR,DB store
+    class PROM,GRAF,N1M,N2M,N3M obs
+~~~
 
-    style Node1 fill:#e1f5fe,stroke:#01579b
-    style Node2 fill:#fff3e0,stroke:#e65100
-    style Node3 fill:#e8f5e9,stroke:#1b5e20
-    style Legend fill:#f5f5f5,stroke:#999
-```
+The system is physically distributed but uses one consistent message backbone.
+Structural schema violations bypass Feature Store/Fusion and enter
+**anomaly.detected** directly. Valid events are enriched, analysed by five
+specialised detectors, then correlated by Fusion before moving to Layer 2.
 
-> **Diagram note:** Each node (SEG, detectors, agents, dashboard, etc.) is declared exactly once, inside the subgraph representing its home layer. All edges that cross node boundaries — for example, `Policy Agent → Auto-Execution Engine` or `Learning Agent → Ollama` — are declared after the three subgraphs are closed. This avoids a common Mermaid rendering fault in which a node referenced inside two different subgraph blocks gets pulled into the wrong cluster, and keeps the three-layer grouping visually accurate.
+## Commodity-hardware deployment
 
----
+| Node | Platform | Primary responsibilities |
+|---|---|---|
+| **Node 1 — stream-node** | Ubuntu 24.04 Desktop; AMD Ryzen 5; 8 GB RAM | Layer 1, RabbitMQ, corpus replay |
+| **Node 2 — ai-brain-node** | Ubuntu 24.04 Server; AMD Ryzen 5; 8 GB RAM | Layer 2, CPU-only Ollama inference, ChromaDB |
+| **Node 3 — gateway-node** | Ubuntu 24.04 Desktop; Intel Core i5; 8 GB RAM | Layer 3, Django HITL, Auto Executor, Prometheus, Grafana |
 
-## RabbitMQ Topology Diagram
+The deployment demonstrates a distributed research architecture on commodity
+hardware. It is not evidence of universal scalability or a production capacity
+claim.
 
-```mermaid
-flowchart LR
-    subgraph Exchanges
-        E1["fyp.events<br/>(Topic Exchange)"]
-        E2["detection.fanout<br/>(Fanout Exchange)"]
-        E3["fyp.dlx<br/>(Direct Exchange)"]
-    end
+## How an incident moves through the system
 
-    subgraph Queues_L1["Layer 1 Queues"]
-        Q1["raw.events"]
-        Q2["validated.event"]
-        Q3["detect.cpu"]
-        Q4["detect.error"]
-        Q5["detect.throughput"]
-        Q6["detect.auth"]
-        Q7["detect.schema"]
-        Q8["fusion.results"]
-    end
+1. **Generate and validate.** SEG replays the synthetic corpus. Pydantic
+   validation accepts structurally valid events and routes structural violations
+   through the schema bypass.
+2. **Enrich and detect.** The Feature Store performs component-level
+   calibration and computes rolling features. Five detectors independently
+   assess each fusion-eligible event.
+3. **Fuse.** Fusion applies a 3.0-second primary correlation window and a
+   0.75-second recovery window to suppress, correlate, and publish incidents.
+4. **Triage.** A deterministic protocol mapping normalises incident context and
+   retrieves related history from ChromaDB.
+5. **Plan.** Strategy requests a local qwen3:1.7b structured proposal through
+   Ollama; it is the only LLM-backed stage.
+6. **Authorize.** Policy independently validates the proposal and selects
+   AUTO or HITL under deterministic rules.
+7. **Handle.** AUTO messages enter controlled simulated execution. HITL
+   messages are persisted for approve, reject, or modify decisions.
+8. **Learn.** Both paths emit outcome.feedback. Learning stores feedback in
+   ChromaDB and updates the Policy confidence threshold through an EMA.
+9. **Observe.** Prometheus collects application and infrastructure metrics;
+   Grafana visualises them without participating in decisions.
 
-    subgraph Queues_L2["Layer 2/3 Queues"]
-        Q9["anomaly.detected"]
-        Q10["triage.result"]
-        Q11["strategy.result"]
-        Q12["auto.execute"]
-        Q13["hitl.queue"]
-        Q14["outcome.feedback"]
-    end
+## Technology stack
 
-    subgraph Diagnostics["Diagnostics"]
-        Q15["dead.letters"]
-    end
+| Area | Technology |
+|---|---|
+| Language | Python |
+| Messaging | RabbitMQ |
+| Validation | Pydantic |
+| Detection | Python statistical/deterministic rules with NumPy |
+| Local LLM runtime | Ollama |
+| Active Strategy model | qwen3:1.7b |
+| Retrieval memory | ChromaDB with sentence-transformer embeddings |
+| HITL application | Django and SQLite/Django ORM |
+| Metrics | Prometheus Python client |
+| Monitoring / dashboards | Prometheus and Grafana |
+| Operating system | Ubuntu 24.04 |
+| Source control | Git |
 
-    E1 -->|"event.raw"| Q1
-    E1 -->|"event.valid"| Q2
-    E1 -->|"fusion.result"| Q8
-    E1 -->|"anomaly.#"| Q9
-    E1 -->|"triage.result"| Q10
-    E1 -->|"strategy.result"| Q11
-    E1 -->|"auto.execute"| Q12
-    E1 -->|"hitl.queue"| Q13
-    E1 -->|"outcome.feedback"| Q14
+Historical Random Forest and Isolation Forest experiments are retained under
+Layer 1 historical evaluation material only; they are not active runtime
+detectors.
 
-    E2 --> Q3
-    E2 --> Q4
-    E2 --> Q5
-    E2 --> Q6
-    E2 --> Q7
+## Layer summaries
 
-    E3 -->|"dead"| Q15
-```
+### Layer 1 — Real-Time Statistical Data Plane
 
-> **Diagram note:** The five fanout bindings from `detection.fanout` (`E2`) carry no routing key by design — a fanout exchange delivers to every bound queue unconditionally — so the previous empty-string edge labels (`-->|""|`) have been removed in favour of plain, unlabeled arrows for cleaner rendering.
+Layer 1 converts the generated event stream into incidents. It contains the
+Pydantic Validator, Schema Drift Router, Feature Store, ADM Runner, CPU/memory,
+error-rate, throughput, authentication-flood, and schema-drift detectors, plus
+Fusion. The first 20 accepted events per component provide cold-state
+calibration; structural violations never enter this path. The primary Fusion
+window is 3.0 seconds with a 0.75-second recovery window.
 
----
+Read [Layer 1 overview](layer1/README.md) and the
+[detailed component log](layer1/docs/layer1_component_log.md).
 
-## Repository Structure
+### Layer 2 — AI Control Plane
 
-```text
+Triage uses deterministic protocol mapping plus Chroma retrieval. Strategy
+uses qwen3:1.7b through Ollama to produce seven fields and three distinct
+allowed actions. The severity/risk-tier relationship is dynamically constrained,
+and at most one bounded validation retry allows two generation attempts total.
+Policy is the deterministic, fail-closed safety boundary. Learning is
+deterministic: it processes feedback, writes Chroma history, and persists an
+EMA confidence threshold.
+
+Read [Layer 2 overview](layer2/README.md) and the
+[detailed component log](layer2/docs/layer2_component_log.md).
+
+### Layer 3 — Execution, Human Oversight & Observability Layer
+
+Layer 3 performs authorised AUTO handling, operates Django-based persistent
+HITL review, records decisions, emits feedback, and centralises observability.
+A RabbitMQ **HITL Queue Backlog** is unconsumed broker work; **HITL Pending** is
+the database-backed count of persisted incidents still awaiting a human
+decision. They are intentionally different measures.
+
+Read [Layer 3 overview](layer3/README.md) and the
+[detailed component log](layer3/docs/layer3_component_log.md).
+
+## Experimental methodology
+
+The authoritative Wi-Fi evaluation began from a cold state: Layer 1 calibration
+baselines were cleared, Layer 2 Chroma memory was cleared, the EMA threshold was
+reset, RabbitMQ queues and HITL state were empty, and a fresh run identifier was
+used. All three nodes used the same frozen commit. Chroma memory and the EMA
+threshold were then allowed to evolve naturally during the run.
+
+The synthetic corpus contains **1,950** events:
+
+| Event class | Count |
+|---|---:|
+| NORMAL | 1,000 |
+| CPU / memory spike | 200 |
+| Error-rate surge | 200 |
+| Throughput drop | 200 |
+| Authentication-failure flood | 200 |
+| Schema drift | 150 |
+| **Total** | **1,950** |
+
+Schema drift contains 50 missing-field cases, 50 type mutations, and 50 value
+shifts. Missing-field and type-mutation events are structural violations; value
+shifts remain structurally valid and pass through detection/Fusion. Ground-truth
+labels in **evaluation/labels.csv** are evaluation-only and are not exposed to
+runtime components.
+
+Operational reproduction commands are maintained in
+[Full_Rerun.md](Full_Rerun.md), not duplicated here.
+
+## Final Wi-Fi experiment results
+
+### Cross-layer accounting
+
+~~~text
+Generated events                 1,950
+Validated events                 1,850
+Structural schema violations       100
+Fusion-eligible events           1,527
+
+Fusion published                   539
+Structural bypass                  100
+Layer 2 incidents                  639
+
+Strategy schema-valid              493
+Strategy schema-invalid            146
+Strategy timeouts                    0
+
+AUTO                               170
+HITL                               469
+
+HITL approved                      325
+HITL rejected                      143
+HITL modified                        1
+
+Total feedback                     639
+Learning updates                   639
+Final Chroma documents             639
+~~~
+
+~~~text
+539 fused + 100 structural bypass = 639 Layer 2 incidents
+170 AUTO + 469 HITL = 639 Policy decisions
+325 approved + 143 rejected + 1 modified = 469 HITL decisions
+170 AUTO feedback + 469 HITL feedback = 639 feedback events
+~~~
+
+This reconciliation is a key experiment-integrity result: each published or
+bypassed incident can be followed through Policy, handling, feedback, and
+Learning.
+
+### Layer 1 runtime results
+
+| Measure | Final count |
+|---|---:|
+| Validator received / valid / structural violations | 1,950 / 1,850 / 100 |
+| Evaluations by each detector | 1,527 |
+| CPU / error / auth / schema / throughput runtime detections | 197 / 150 / 124 / 31 / 141 |
+| Fusion published / suppressed | 539 / 988 |
+| Fusion compound / Fast Path / late recovery | 43 / 83 / 0 |
+
+Runtime detections are operational detector counts, not true-positive claims.
+
+### Layer 2 control-plane results
+
+| Measure | Final result |
+|---|---:|
+| Strategy incidents | 639 |
+| Valid JSON / invalid JSON | 639 / 0 |
+| Schema-valid / schema-invalid | 493 / 146 |
+| Strategy schema-validity rate | 77.15% |
+| Timeouts | 0 |
+| Policy AUTO / HITL | 170 (26.60%) / 469 (73.40%) |
+| Policy reasons: HIGH_RISK / LOW_CONFIDENCE / LOW_RISK_HIGH_CONFIDENCE / SCHEMA_INVALID | 258 / 65 / 170 / 146 |
+| Risk-tier accuracy | 513 / 630 = 81.43% |
+| FAR / FER | Not computable from available ground truth |
+
+All 146 schema-invalid proposals were safely fail-closed to HITL. Schema
+validity is a structured-output compliance measure, not a measure of remediation
+correctness.
+
+### Feedback, learning, and Layer 3 results
+
+| Measure | Final result |
+|---|---:|
+| AUTO attempts / outcomes / feedback emitted | 170 / 170 / 170 |
+| HITL approved / rejected / modified | 325 / 143 / 1 |
+| Persisted HITL pending at completion | 0 |
+| Total feedback completion | 639 / 639 |
+| Learning updates / final Chroma documents | 639 / 639 |
+| Final EMA threshold | 0.7291 |
+| Prometheus targets / DOWN | 19 UP / 0 |
+| Dead-letter queue | 0 |
+
+A zero final queue depth means the queues drained; it does not claim they never
+accumulated. The dominant backlog formed around CPU-only Strategy inference and
+later drained without recorded dead-letter loss.
+
+## Latency interpretation
+
+| Measure | Mean | Median | p95 | Maximum |
+|---|---:|---:|---:|---:|
+| Strategy processing | 13.0546 s | 11.142 s | 19.409 s | 22.084 s |
+| Control-plane processing | 13.0606 s | 11.17 s | 19.41 s | 22.085 s |
+| End-to-end decision | 68.4 min | 68.5 min | 131.7 min | 139.2 min |
+| Feedback completion | 37.611 s | 23.107 s | 126.545 s | 367.597 s |
+| Learning processing | 58.97 ms | 46.09 ms | 77.73 ms | — |
+
+The offline Layer 2 analyzer is authoritative for final aggregate latency.
+End-to-end decision time includes queueing. With 639 incidents at approximately
+13.05 seconds of serial, CPU-only Strategy inference each, the approximately
+139-minute maximum is consistent with Strategy queue accumulation:
+
+~~~text
+639 incidents × 13.05 seconds ≈ 8,339 seconds ≈ 139 minutes
+~~~
+
+Do not substitute the visually clipped Grafana end-to-end panel for the
+authoritative offline p95.
+
+Layer 3 dashboard observations are separate: AUTO execution p50/p95 was
+approximately 625/738 ms, while persisted-incident-to-human-decision p50/p95
+was approximately 20/55.5 s. Neither value establishes verified service
+restoration.
+
+## Key research findings
+
+1. Complete accounting was achieved from 639 Layer 2 incidents through 639
+   feedback events and 639 final Chroma documents.
+2. No Strategy timeout occurred, but structured output was not perfect: SVR was
+   77.15%, with 146 schema-invalid proposals safely escalated.
+3. Deterministic Policy prevented those invalid proposals from reaching AUTO.
+4. All 469 HITL incidents received a human decision; none remained pending.
+5. Layer 1 processed and filtered the event stream quickly relative to Strategy.
+6. CPU-only local LLM inference was the dominant throughput bottleneck, creating
+   queueing rather than evidence of message loss.
+7. Prometheus/Grafana remained available while queues accumulated and drained.
+
+## Final Wi-Fi observability screenshots
+
+These existing screenshots are final experiment evidence; they are embedded
+without alteration.
+
+### System Overview
+
+![System Overview](docs/experiment_results/wifi/system_overview.png)
+
+Shows Layer 1 publication, Strategy validity, Policy routing, and persisted HITL
+state in the final experiment.
+
+### Layer 1 — Data Plane
+
+![Layer 1 Data Plane](docs/experiment_results/wifi/layer1_data_plane.png)
+
+Shows validator, detector, Fusion, and Layer 1 latency telemetry.
+
+### Layer 2 — AI Control Plane
+
+![Layer 2 AI Control Plane](docs/experiment_results/wifi/layer2_control_plane.png)
+
+Shows Strategy validity, Policy reasons, processing latency, EMA threshold, and
+Learning state.
+
+### Layer 3 — Execution and HITL
+
+![Layer 3 Execution and HITL](docs/experiment_results/wifi/layer3_execution_hitl.png)
+
+Shows AUTO handling, HITL decisions, pending-work semantics, and feedback
+visibility.
+
+### Infrastructure Health
+
+![Infrastructure Health](docs/experiment_results/wifi/infrastructure_health.png)
+
+Shows target health, RabbitMQ queue behaviour, dead-letter status, and clock
+synchronisation.
+
+### Hardware and Node Resources
+
+![Hardware and Node Resources](docs/experiment_results/wifi/hardware_node_resources.png)
+
+Shows qualitative resource behaviour across stream-node, ai-brain-node, and
+gateway-node.
+
+## Limitations and future work
+
+- The workload is synthetic and the three-node environment is a laboratory
+  deployment.
+- Strategy uses CPU-only qwen3:1.7b inference with constrained/serial
+  throughput; its 77.15% schema-validity result leaves 146 invalid proposals.
+- HITL throughput and observed human timing depend on the controlled reviewer
+  workflow and should not be generalized.
+- FAR and FER are not computable from the available labels; runtime detections
+  are not truth labels.
+- AUTO outcomes are controlled simulated execution-path outcomes, not verified
+  service recovery. No service-recovery duration was measured.
+- SQLite/HITL persistence and centralised observability are experimental-scale
+  choices, not high-availability or production-scale evidence.
+- The Wi-Fi run is the current authoritative result. A controlled Ethernet
+  comparison remains future work.
+
+Potential next work includes a controlled Ethernet-versus-Wi-Fi comparison,
+faster or parallel local Strategy inference, broader workloads, safer
+expected-route labels, richer Policy controls, verified service restoration, and
+replicated persistence.
+
+## Repository structure
+
+~~~text
 fyp-pipeline/
-│
-├── layer1/                        — Node 1: stream-node
-│   ├── seg/                       — Synthetic Event Generator (corpus + live replay mode)
-│   │   └── config/seg_config.json — Replay speed, seed, event counts
-│   ├── validator/                 — Pydantic schema enforcement + schema drift router
-│   ├── feature_store/             — Rolling window feature computation (10 features)
-│   ├── adm/
-│   │   ├── detectors/             — 5 detectors: Z-Score, Moving Average, Rate-gate + RF,
-│   │   │                            Z-Score (CPU), PSI + Shift Marker
-│   │   └── models/                — Trained .pkl files (git-ignored)
-│   ├── fusion_engine/             — Signal correlation, confidence scoring, compound merging
-│   └── rabbitmq/                  — One-time topology setup script
-│
-├── layer2/                        — Node 2: ai-brain-node
-│   ├── agents/                    — Triage, Strategy, Policy, Learning agents
-│   ├── chromadb_utils/            — RAG client, query (3-step protocol), upsert
-│   ├── ollama/                    — Local Ollama HTTP client
-│   ├── rabbitmq/                  — Remote RabbitMQ connection helper
-│   ├── utils/                     — Shared file logger and utility helpers
-│   ├── logs/                      — Append-only JSONL runtime logs (git-ignored)
-│   ├── prompts/                   — System prompts for qwen3:1.7b and qwen3:0.6b
-│   ├── config/                    — EMA confidence threshold (threshold_config.json)
-│   ├── chromadb_data/             — Persistent vector store (git-ignored)
-│   ├── User_Guide.md              — Layer-2 startup and troubleshooting
-│   └── README.md
-│
-├── layer3/                        — Node 3: gateway-node
-│   ├── dashboard/                 — Django HITL project (queue, incident detail, action views)
-│   │   └── hitl/templates/        — queue.html, incident_detail.html, modify.html, auto_monitor.html
-│   ├── auto_executor/             — Consumes auto.execute, publishes outcome.feedback
-│   ├── sqlite_logger/             — Centralised decision log writer
-│   ├── grafana/                   — Agent Pipeline & Fusion Engine dashboard JSON model
-│   ├── rabbitmq/                  — Remote RabbitMQ connection helper
-│   ├── User_Guide.md              — Layer-3 startup and troubleshooting
-│   └── README.md
-│
-├── evaluation/                    — Dataset generation, baseline, offline metrics, kappa
-├── Phase_0_Infrastructure/        — Phase 0 cluster setup and LLM benchmark (COMPLETE)
-│   ├── scripts/                   — Benchmark runner scripts (3 models x 3 variants)
-│   ├── prompts/                   — simple, medium, strict, stricter prompt sets
-│   ├── results/summary/           — Aggregate stats JSON files (per run)
-│   └── static/                    — system_architecture.png
-├── datasets/                      — Download instructions: NAB, Loghub HDFS, KDD99
-├── docs/                          — Architecture diagrams, system design documents
-├── USER_GUIDE.md                  — Full pipeline operation guide (project root)
+├── layer1/
+│   ├── README.md
+│   └── docs/layer1_component_log.md
+├── layer2/
+│   ├── README.md
+│   └── docs/layer2_component_log.md
+├── layer3/
+│   ├── README.md
+│   └── docs/layer3_component_log.md
+├── docs/
+│   ├── experiment_results/
+│   └── System_Design_and_Methodology.md
+├── Full_Rerun.md
 └── README.md
-```
+~~~
 
----
+## Documentation map
 
-## Selected Models
+| Document | Purpose |
+|---|---|
+| This README | Project and research overview |
+| [Layer 1 README](layer1/README.md) | Statistical data-plane overview |
+| [Layer 1 component log](layer1/docs/layer1_component_log.md) | Detailed Layer 1 implementation |
+| [Layer 2 README](layer2/README.md) | AI control-plane overview |
+| [Layer 2 component log](layer2/docs/layer2_component_log.md) | Detailed Layer 2 implementation |
+| [Layer 3 README](layer3/README.md) | Execution, HITL, and observability overview |
+| [Layer 3 component log](layer3/docs/layer3_component_log.md) | Detailed Layer 3 implementation |
+| [Full_Rerun.md](Full_Rerun.md) | Complete reproduction/run procedure |
+| [System Design and Methodology](docs/System_Design_and_Methodology.md) | Design rationale, methodology, metrics, and validity considerations |
 
-| Agent | Model | Selection Basis |
-|:------|:------|:----------------|
-| **Strategy Agent** | `qwen3:1.7b` via Ollama | Achieved **90% schema validity** across 30 strict adversarial prompts — the only model to satisfy the production-viability hard constraint. All three observed failures were traced to fixable engineering issues. |
-| **Learning Agent** | `qwen3:0.6b` via Ollama | Selected to remain within a sub-1B-parameter budget for Node 2 RAM compliance. Formal quality evaluation is planned. |
-| **Triage Agent** | None — rule-based + RAG | Requires no LLM; relies solely on ChromaDB retrieval, maintaining sub-3-second latency. |
-| **Policy Agent** | None — pure Python | Deterministic routing table with zero inference latency. |
+## Project status
 
-> Full model evaluation details are available in [`Phase_0_Infrastructure/README.md`](Phase_0_Infrastructure/README.md).
-
----
-
-## Evaluation Dataset — 1,950 Events
-
-| Category | Count |
-|:---------|------:|
-| Normal events (baseline healthy traffic) | 1,000 |
-| CPU / Memory Spike | 200 |
-| Error Rate Surge (5xx) | 200 |
-| Throughput Drop / Silent Crash | 200 |
-| Auth Failure Flood | 200 |
-| Schema Change — 3 sub-types (missing fields, type mutations, value shifts) | 150 |
-| **TOTAL** | **1,950** |
-
-> Ground-truth labels are stored separately in `evaluation/labels.csv` and are **never** exposed to the pipeline during evaluation runs.
-
----
-
-## Cluster Infrastructure
-
-| Node | Hostname | OS | CPU | RAM | Primary Services |
-|:-----|:---------|:---|:----|:----|:------------------|
-| Node 1 | `stream-node` | Ubuntu 24.04 Desktop | AMD Ryzen 5 | 8 GB | RabbitMQ, Layer 1, Datasets |
-| Node 2 | `ai-brain-node` | Ubuntu 24.04 Server | AMD Ryzen 5 | 8 GB | Ollama, ChromaDB, 4 Agents |
-| Node 3 | `gateway-node` | Ubuntu 24.04 Desktop | Intel Core i5 | 8 GB | Prometheus, Grafana, HITL |
-
-> All nodes communicate exclusively via **hostnames**; no hardcoded IP addresses are used in configuration or application code. When migrating to a new LAN, only the `/etc/hosts` file on each node requires updating.
-
-### Service Access URLs
-
-| Service | URL |
-|:--------|:----|
-| RabbitMQ Management UI | `http://stream-node:15672` |
-| Ollama API | `http://ai-brain-node:11434` |
-| Prometheus | `http://gateway-node:9090` |
-| Grafana | `http://gateway-node:3000` |
-| HITL Dashboard | `http://gateway-node:8000` |
-
----
-
-## Primary Research Metrics
-
-The evaluation is centred on **control-plane reasoning quality**, **fusion accuracy**, and **decision safety**, alongside standard hardware-level benchmarks.
-
-| Metric | Symbol | Definition | Target |
-|:-------|:-------|:-----------|:-------|
-| Control-Plane Latency | CPL | Average time spent in Triage + Strategy + Policy per incident | < 30 s |
-| Schema Validity Rate | SVR | Valid seven-field JSON responses / total responses (excluding timeouts) | ≥ 95% production |
-| Fusion Suppression Rate | FSR | Suppressed duplicate/normal events / (published + suppressed) | Higher is better |
-| Compound Detection Rate | CDR | Compound fusion events / total published fusion events | Measured |
-| Auto-Execution Success Rate | — | Successful automatic remediations / attempted automatic remediations | ≥ 95% |
-| False Escalation Rate | FER | Low-risk ground-truth incidents routed to HITL / total low-risk incidents | < 30% (offline) |
-| False Automation Rate | FAR | High-risk ground-truth incidents routed to AUTO / total high-risk incidents | < 5% (offline) |
-| Risk Tier Accuracy | RTA | Correct risk-tier assignments / total incidents | ≥ 75% |
-| MTTA / MTTR (control-plane definition) | MTTA / MTTR | `policy_timestamp − triage_timestamp` / `outcome_feedback_time − triage_timestamp` | Measured |
-
-> **Note on MTTA/MTTR:**
-> The conventional end-to-end MTTA/MTTR metrics are sensitive to queue backlog when the pipeline operates in batch mode. For this project, MTTA and MTTR are therefore defined as **control-plane latencies**, isolating AI reasoning and routing time from asynchronous queue delays. FER and FAR are computed offline after each run by joining decision records with ground-truth labels.
-
----
-
-## RabbitMQ Topology (Detailed)
-
-| Exchange            | Type   | Queue                | Routing Key         | Layer                | Consumed By         |
-|:--------------------|:-------|:----------------------|:---------------------|:----------------------|:---------------------|
-| `fyp.events`         | Topic  | `raw.events`           | `event.raw`           | L1 → L1              | Validator             |
-| `fyp.events`         | Topic  | `validated.event`      | `event.valid`         | L1 → L1              | ADM Runner            |
-| `detection.fanout`   | Fanout | `detect.cpu`           | `""`                  | L1 → L1              | CPU Spike Detector    |
-| `detection.fanout`   | Fanout | `detect.error`         | `""`                  | L1 → L1              | Error Rate Detector   |
-| `detection.fanout`   | Fanout | `detect.throughput`    | `""`                  | L1 → L1              | Throughput Detector   |
-| `detection.fanout`   | Fanout | `detect.auth`          | `""`                  | L1 → L1              | Auth Flood Detector   |
-| `detection.fanout`   | Fanout | `detect.schema`        | `""`                  | L1 → L1              | Schema Drift Detector |
-| `fyp.events`         | Topic  | `fusion.results`       | `fusion.result`       | L1 → L1              | Fusion Engine         |
-| `fyp.events`         | Topic  | `anomaly.detected`     | `anomaly.#`           | L1 → L2              | Triage Agent          |
-| `fyp.events`         | Topic  | `triage.result`        | `triage.result`       | L2 → L2              | Strategy Agent        |
-| `fyp.events`         | Topic  | `strategy.result`      | `strategy.result`     | L2 → L2              | Policy Agent          |
-| `fyp.events`         | Topic  | `auto.execute`         | `auto.execute`        | L2 → L3              | Auto-Executor         |
-| `fyp.events`         | Topic  | `hitl.queue`           | `hitl.queue`          | L2 → L3              | HITL Dashboard        |
-| `fyp.events`         | Topic  | `outcome.feedback`     | `outcome.feedback`    | L3 → L2              | Learning Agent        |
-| `fyp.dlx`            | Direct | `dead.letters`         | `dead`                | All                   | Manual review         |
-
----
-
-## Persistent Logging and Observability
-
-All Layer 2 agents write append-only JSONL logs to `layer2/logs/`, ensuring that cumulative agent-level counts remain recoverable across restarts, even when the pipeline is executed across multiple sessions. Grafana dashboards consume Prometheus metrics for live monitoring, while file logs, SQLite, and ChromaDB together provide the authoritative historical record.
-
----
-
-## Getting Started
-
-| Step | Component | Guide |
-|:----:|:----------|:------|
-| 0 | Full pipeline operation | `USER_GUIDE.md` (project root) |
-| 1 | Cluster infrastructure | `Phase_0_Infrastructure/User_Guide.md` |
-| 2 | Layer 1 (Node 1) | `layer1/README.md` → `layer1/User_Guide.md` |
-| 3 | Layer 2 (Node 2) | `layer2/README.md` → `layer2/User_Guide.md` |
-| 4 | Layer 3 (Node 3) | `layer3/README.md` → `layer3/User_Guide.md` |
-| 5 | Evaluation | `evaluation/README.md` |
-
----
-
-## Git Branch Strategy
-
-| Branch | Purpose |
-|:-------|:--------|
-| `main` | Production-quality code only. Tagged at each phase milestone. Broken code is never committed. |
-| `develop` | Integration branch. Feature branches merge here first, after the end-to-end demo passes. |
-| `feature/*` | One branch per component — for example, `feature/seg`, `feature/fusion-engine`, `feature/triage-agent`. |
+The frozen Wi-Fi implementation and its documentation form the current research
+baseline. Review the layer documents and [Full_Rerun.md](Full_Rerun.md) before
+starting a new experiment; do not treat this README as a replacement for the
+runbook.
