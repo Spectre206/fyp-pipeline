@@ -1,5 +1,7 @@
 # Layer 3 — Execution, Human Oversight & Observability Layer
 
+**Project:** Distributed Multi-Agent Coordination for Self-Healing Data Pipelines: A Human-in-the-Loop Approach on Commodity Hardware
+
 Layer 3 bridges the deterministic decisions made in Layer 2 to controlled automatic handling, persistent human oversight, feedback generation, and cross-system observability. It runs primarily on **Node 3, `gateway-node`** (Ubuntu 24.04 Desktop, Intel Core i5, 8 GB RAM).
 
 This is an implementation overview and experiment record, not an operations runbook. The complete end-to-end reproduction procedure is maintained in the root [Full_Rerun.md](../Full_Rerun.md). Detailed component contracts, failure semantics, and diagrams are in the [Layer 3 component log](docs/layer3_component_log.md).
@@ -10,7 +12,7 @@ Layer 2 Policy is the execution-authorisation boundary. Strategy proposes action
 
 ```mermaid
 flowchart LR
-    S[Layer 2 Strategy<br/>action proposal] --> P[Layer 2 Policy<br/>deterministic route]
+    S[Layer 2 Strategy<br/>action proposal] -->|"RabbitMQ: strategy.result"| P[Layer 2 Policy<br/>deterministic route]
     P -->|AUTO| AQ[(auto.execute)]
     P -->|HITL| HQ[(hitl.queue)]
     AQ --> AE[Layer 3<br/>Auto Executor]

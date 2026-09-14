@@ -1,7 +1,6 @@
 # Layer 2 — AI Control Plane
 
-Layer 2 is the asynchronous control plane for **Distributed Multi-Agent
-Coordination for Self-Healing Data Pipelines**. It accepts incidents from
+Layer 2 is the asynchronous control plane for **Distributed Multi-Agent Coordination for Self-Healing Data Pipelines: A Human-in-the-Loop Approach on Commodity Hardware**. It accepts incidents from
 Layer 1, normalizes and enriches them with historical context, asks a local
 language model for a structured remediation proposal, and applies deterministic
 safety policy before sending the incident to Layer 3.

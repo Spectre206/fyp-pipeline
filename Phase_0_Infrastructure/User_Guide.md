@@ -1,6 +1,16 @@
 # Phase 0: Infrastructure Setup & Environment Validation
 
-> **Project:** Distributed Multi-Agent Self-Healing Data Pipelines
+> **Historical/preliminary Phase 0 archive — not the current runbook.**
+> The setup commands, topology, model-selection results, planned Learning model,
+> production-readiness language, and network schedules below record earlier work.
+> They do not describe the frozen final implementation or prove production readiness.
+> Only Strategy now uses an LLM (`qwen3:1.7b`); Learning is deterministic.
+> The authoritative completed experiment is Wi-Fi (`wifi_cold_20260913_041045`);
+> Ethernet remains a planned comparison. Use the current [project README](../README.md),
+> [methodology](../docs/System_Design_and_Methodology.md), and [Full_Rerun.md](../Full_Rerun.md).
+> A broader Phase 0 revision is deferred until the Ethernet work.
+
+> **Project:** Distributed Multi-Agent Coordination for Self-Healing Data Pipelines: A Human-in-the-Loop Approach on Commodity Hardware
 > **Team:** Muhammad Adeel & Muhammad Asim | **Supervisor:** Dr. Laeeq Ahmed
 > **Department:** CS&IT, UET Peshawar — Nowshera Campus
 
@@ -43,7 +53,7 @@ This guide provides exact, reproducible steps to bring up the three-node cluster
 | Node 2 | `ai-brain-node` | Ubuntu 24.04 Server (Headless) | AMD Ryzen 5 | 8 GB | Ollama, ChromaDB, 4 Agents |
 | Node 3 | `gateway-node` | Ubuntu 24.04 Desktop | Intel Core i5 | 8 GB | Prometheus, Grafana, HITL |
 
-> ⚠️ **WiFi is acceptable for Phase 0 only.** No benchmark measurements should be recorded over WiFi. All paper benchmarks are taken on Gigabit Ethernet after 15 July 2026.
+> **Superseded network plan:** this guide originally restricted Wi-Fi to Phase 0 and scheduled paper benchmarks on Gigabit Ethernet after 15 July 2026. The completed final experiment is Wi-Fi; Ethernet comparison remains future work.
 
 ---
 

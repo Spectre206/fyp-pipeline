@@ -1,9 +1,11 @@
-# Layer 2 Component Log — AI Control Plane
+# Layer 2 — AI Control Plane
+
+**Document:** Component log
 
 ## Purpose and evidence boundary
 
 This component log is the detailed implementation reference for Layer 2 of
-**Distributed Multi-Agent Coordination for Self-Healing Data Pipelines**. It
+**Distributed Multi-Agent Coordination for Self-Healing Data Pipelines: A Human-in-the-Loop Approach on Commodity Hardware**. It
 describes the active asynchronous control plane: deterministic triage,
 LLM-backed Strategy, deterministic Policy, deterministic Learning, persistent
 ChromaDB memory, RabbitMQ communication, and opt-in evaluation instrumentation.
@@ -344,6 +346,7 @@ flowchart TB
     RETRYUSED{"Retry already used?"}
     GUIDE["Create deterministic validation guidance<br/>duplicate-action guidance when relevant"]
     SECOND["Generation attempt 2<br/>same dynamic schema"]
+    PARSE2{"Second response parses?"}
     CHECK2{"Schema validator passes?"}
     FINAL["Publish final valid or invalid result<br/>at most 2 calls"]
     PARSEFAIL["Publish invalid JSON result<br/>no retry"]
@@ -359,7 +362,9 @@ flowchart TB
     RETRYUSED -->|"no"| GUIDE --> SECOND
     RETRYUSED -->|"yes"| FINAL
     SECOND -->|"model exception"| TIMEOUT
-    SECOND -->|"response"| CHECK2
+    SECOND -->|"response"| PARSE2
+    PARSE2 -->|"no"| PARSEFAIL
+    PARSE2 -->|"yes"| CHECK2
     CHECK2 --> FINAL
 ```
 

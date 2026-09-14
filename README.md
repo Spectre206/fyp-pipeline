@@ -1,4 +1,5 @@
-# Distributed Multi-Agent Coordination for Self-Healing Data Pipelines
+# Distributed Multi-Agent Coordination for Self-Healing Data Pipelines:
+## A Human-in-the-Loop Approach on Commodity Hardware
 
 > An experimental, policy-bounded research prototype for coordinating detection,
 > diagnosis, remediation planning, human oversight, and learning across three
@@ -25,7 +26,7 @@ The authoritative final experiment is the cold-memory Wi-Fi run
 
 The problem is not merely anomaly detection. It is safe coordination after an
 incident is found: deciding what an incident means, proposing an appropriate
-response, ensuring an unsafe proposal cannot execute automatically, involving a
+response, preventing policy-disallowed proposals from entering AUTO, involving a
 human when needed, and preserving the outcome for future adaptation.
 
 The proposed solution combines:
@@ -44,107 +45,123 @@ This division is intentional: Triage, Policy, Learning, Layer 1 detectors,
 execution control, and the HITL workflow are not LLM agents. **Only Strategy is
 LLM-backed**, using local **qwen3:1.7b** inference through Ollama.
 
+## Literature-derived design rationale
+
+The [Literature Review](docs/Literature_Review.md#8-literature-derived-design-requirements)
+connects streaming timing constraints, governed automation, human oversight,
+asynchronous communication, and feedback evaluation to six design requirements.
+Those requirements motivate the three layers: Layer 1 keeps fast statistical
+detection independent of generation; Layer 2 separates contextual planning from
+deterministic authorization; Layer 3 handles execution, persistent human
+decisions, feedback, and observability. The selected tools and three-node layout
+are engineering choices, not uniquely mandated by the literature.
+
 ## Safety and authority model
 
 ~~~text
 Strategy proposes remediation.
 Policy authorizes or escalates.
-Layer 3 executes an authorized AUTO decision or presents a HITL case.
+Layer 3 handles the authorized AUTO path or presents the HITL path.
 ~~~
 
 The LLM never receives unrestricted execution authority. Strategy output must
 satisfy a seven-field structured contract, an allowed action vocabulary, exactly
 three distinct actions, and the severity-to-risk-tier constraint. A bounded
 regeneration permits no more than two model-generation attempts. Deterministic
-validation and Policy then fail closed: malformed, invalid, unsafe, high-risk,
+validation and Policy then fail closed: malformed, invalid, policy-disallowed, high-risk,
 or insufficient-confidence proposals route to HITL rather than AUTO.
 
 ## Full-system architecture
 
 ~~~mermaid
 flowchart LR
-    classDef l1 fill:#0c4a6e,color:#fff,stroke:#0369a1,stroke-width:2px
-    classDef l2 fill:#7c2d12,color:#fff,stroke:#c2410c,stroke-width:2px
-    classDef l3 fill:#14532d,color:#fff,stroke:#166534,stroke-width:2px
+    classDef l1 fill:#0c4a6e,color:#fff,stroke:#0369a1
+    classDef l2 fill:#7c2d12,color:#fff,stroke:#c2410c
+    classDef l3 fill:#14532d,color:#fff,stroke:#166534
     classDef queue fill:#334155,color:#fff,stroke:#475569
     classDef store fill:#312e81,color:#fff,stroke:#4f46e5
     classDef obs fill:#5b215f,color:#fff,stroke:#a21caf
 
-    subgraph N1["Node 1 — stream-node<br/>Layer 1 — Real-Time Statistical Data Plane + RabbitMQ"]
+    subgraph N1["Node 1 — stream-node<br/>Layer 1 — Real-Time Statistical Data Plane"]
         direction TB
-        SEG[Synthetic Event Generator]
-        VAL[Pydantic Validator]
-        FS[Feature Store + ADM Runner]
-        FAN[RabbitMQ<br/>detection.fanout]
-        CPU[CPU / memory detector]
-        ERR[Error-rate detector]
-        THR[Throughput detector]
-        AUTH[Auth-flood detector]
-        SCH[Schema-drift detector]
-        FUS[Fusion Engine]
-        BYP[Structural schema<br/>bypass router]
-        AD[(RabbitMQ<br/>anomaly.detected)]
-        SEG --> VAL
-        VAL -->|valid| FS --> FAN
-        FAN --> CPU
-        FAN --> ERR
-        FAN --> THR
-        FAN --> AUTH
-        FAN --> SCH
-        CPU --> FUS
-        ERR --> FUS
-        THR --> FUS
-        AUTH --> FUS
-        SCH --> FUS
-        FUS -->|fused incident| AD
-        VAL -->|structural violation| BYP --> AD
+        SEG["Synthetic Event Generator / replay"]
+        RAW[("RabbitMQ raw.events")]
+        VAL["Pydantic Validator"]
+        VQ[("RabbitMQ validated.event")]
+        ADM["ADM Runner"]
+        FS["Feature Store<br/>in-process enrichment"]
+        FAN{{"detection.fanout<br/>fanout exchange"}}
+        CPU["CPU / memory detector<br/>detect.cpu"]
+        ERR["Error-rate detector<br/>detect.error"]
+        THR["Throughput detector<br/>detect.throughput"]
+        AUTH["Auth-flood detector<br/>detect.auth"]
+        SCH["Schema-drift detector<br/>detect.schema"]
+        FQ[("RabbitMQ fusion.results")]
+        FUS["Fusion Engine"]
+        BYP["Structural schema bypass router"]
+        AD[("RabbitMQ anomaly.detected")]
+        N1M["Layer 1 / node exporters<br/>RabbitMQ metrics :15692"]
+        SEG -->|"event.raw"| RAW --> VAL
+        VAL -->|"event.valid"| VQ --> ADM
+        ADM -->|"local call"| FS
+        FS -->|"eligible enriched event via ADM"| FAN
+        FAN --> CPU & ERR & THR & AUTH & SCH
+        CPU & ERR & THR & AUTH & SCH -->|"fusion.result"| FQ
+        FQ --> FUS -->|"anomaly.fused"| AD
+        VAL -->|"structural violation"| BYP
+        BYP -->|"anomaly.schema_drift"| AD
     end
 
     subgraph N2["Node 2 — ai-brain-node<br/>Layer 2 — AI Control Plane"]
         direction TB
-        TRI[Triage<br/>deterministic protocol + RAG]
-        STR[Strategy<br/>qwen3:1.7b structured proposal]
-        POL[Policy<br/>deterministic authority boundary]
-        LEARN[Learning<br/>deterministic feedback + EMA]
-        OLL[Ollama]
-        CHR[(ChromaDB)]
-        TRI -->|triage.result| STR -->|strategy.result| POL
-        TRI <--> CHR
-        STR <--> OLL
-        LEARN --> CHR
-        LEARN -->|adaptive threshold| POL
+        TRI["Triage<br/>deterministic protocol + retrieval"]
+        STR["Strategy<br/>qwen3:1.7b structured proposal"]
+        POL["Policy<br/>deterministic authority boundary"]
+        LEARN["Learning<br/>deterministic feedback + EMA"]
+        OLL["Ollama"]
+        CHR[("ChromaDB")]
+        N2M["Layer 2 / node exporters"]
+        TRI -->|"RabbitMQ: triage.result"| STR
+        STR -->|"RabbitMQ: strategy.result"| POL
+        TRI <-->|"query / context"| CHR
+        STR <-->|"local inference"| OLL
+        LEARN -->|"upsert"| CHR
+        LEARN -->|"persisted threshold"| POL
     end
 
     subgraph N3["Node 3 — gateway-node<br/>Layer 3 — Execution, Human Oversight & Observability Layer"]
         direction TB
-        AUTO[Auto Executor<br/>controlled simulated handling]
-        HITL[Django HITL<br/>persistent review]
-        DB[(SQLite decision audit<br/>and HITL state)]
-        PROM[Prometheus]
-        GRAF[Grafana]
+        AUTO["Auto Executor<br/>controlled simulated handling"]
+        HITL["Django HITL<br/>Approve / Reject / Modify"]
+        DB[("SQLite decision audit<br/>and persistent HITL state")]
+        PROM["Prometheus"]
+        GRAF["Grafana"]
+        N3M["Layer 3 / node exporters"]
         HITL --> DB
         AUTO --> DB
-        PROM --> GRAF
+        PROM -. "query results" .-> GRAF
     end
 
-    AD --> TRI
-    POL -->|AUTO: auto.execute| AUTO
-    POL -->|HITL: hitl.queue| HITL
-    AUTO -->|outcome.feedback| LEARN
-    HITL -->|outcome.feedback| LEARN
-    N1M[Layer 1 exporters] -. scrape .-> PROM
-    N2M[Layer 2 exporters] -. scrape .-> PROM
-    N3M[Layer 3 exporters + RabbitMQ] -. scrape .-> PROM
-
-    class SEG,VAL,FS,FAN,CPU,ERR,THR,AUTH,SCH,FUS,BYP l1
+    AD -->|"RabbitMQ: anomaly.detected"| TRI
+    POL -->|"RabbitMQ: auto.execute"| AUTO
+    POL -->|"RabbitMQ: hitl.queue"| HITL
+    AUTO -->|"RabbitMQ: outcome.feedback"| LEARN
+    HITL -->|"RabbitMQ: outcome.feedback"| LEARN
+    N1M -. "scraped metrics" .-> PROM
+    N2M -. "scraped metrics" .-> PROM
+    N3M -. "scraped metrics" .-> PROM
+    class SEG,VAL,ADM,FS,CPU,ERR,THR,AUTH,SCH,FUS,BYP l1
     class TRI,STR,POL,LEARN,OLL l2
     class AUTO,HITL l3
-    class AD queue
+    class RAW,VQ,FAN,FQ,AD queue
     class CHR,DB store
     class PROM,GRAF,N1M,N2M,N3M obs
 ~~~
 
 The system is physically distributed but uses one consistent message backbone.
+All queue handoffs shown above pass through RabbitMQ on stream-node; only local
+Feature Store, inference, retrieval, and persistence operations are direct calls.
+Dotted arrows carry observational data, not execution commands.
 Structural schema violations bypass Feature Store/Fusion and enter
 **anomaly.detected** directly. Valid events are enriched, analysed by five
 specialised detectors, then correlated by Fusion before moving to Layer 2.
@@ -170,13 +187,15 @@ claim.
    calibration and computes rolling features. Five detectors independently
    assess each fusion-eligible event.
 3. **Fuse.** Fusion applies a 3.0-second primary correlation window and a
-   0.75-second recovery window to suppress, correlate, and publish incidents.
+   0.75-second recovery window (approximately 3.75 seconds maximum) to suppress,
+   correlate, and publish incidents. Fast Path marks priority without early
+   finalization; event ID/model identity checks protect against duplicates.
 4. **Triage.** A deterministic protocol mapping normalises incident context and
    retrieves related history from ChromaDB.
 5. **Plan.** Strategy requests a local qwen3:1.7b structured proposal through
    Ollama; it is the only LLM-backed stage.
-6. **Authorize.** Policy independently validates the proposal and selects
-   AUTO or HITL under deterministic rules.
+6. **Authorize.** Policy checks Strategy validation status, risk, confidence,
+   and actions, then selects AUTO or HITL under deterministic rules.
 7. **Handle.** AUTO messages enter controlled simulated execution. HITL
    messages are persisted for approve, reject, or modify decisions.
 8. **Learn.** Both paths emit outcome.feedback. Learning stores feedback in
@@ -266,8 +285,9 @@ The synthetic corpus contains **1,950** events:
 Schema drift contains 50 missing-field cases, 50 type mutations, and 50 value
 shifts. Missing-field and type-mutation events are structural violations; value
 shifts remain structurally valid and pass through detection/Fusion. Ground-truth
-labels in **evaluation/labels.csv** are evaluation-only and are not exposed to
-runtime components.
+labels in SEG-generated **labels.csv** are evaluation-only and are not exposed
+to runtime components. The SEG default output directory is `evaluation/`; the
+runbook uses a run-specific output directory and copies labels for offline analysis.
 
 Operational reproduction commands are maintained in
 [Full_Rerun.md](Full_Rerun.md), not duplicated here.
@@ -412,7 +432,7 @@ without alteration.
 Shows Layer 1 publication, Strategy validity, Policy routing, and persisted HITL
 state in the final experiment.
 
-### Layer 1 — Data Plane
+### Layer 1 — Real-Time Statistical Data Plane
 
 ![Layer 1 Data Plane](docs/experiment_results/wifi/layer1_data_plane.png)
 
@@ -425,7 +445,7 @@ Shows validator, detector, Fusion, and Layer 1 latency telemetry.
 Shows Strategy validity, Policy reasons, processing latency, EMA threshold, and
 Learning state.
 
-### Layer 3 — Execution and HITL
+### Layer 3 — Execution, Human Oversight & Observability Layer
 
 ![Layer 3 Execution and HITL](docs/experiment_results/wifi/layer3_execution_hitl.png)
 
@@ -463,6 +483,10 @@ gateway-node.
 - The Wi-Fi run is the current authoritative result. A controlled Ethernet
   comparison remains future work.
 
+Threshold-Only and Single-Agent comparisons, plus a fixed-versus-adaptive EMA
+ablation, remain planned as described in the Literature Review. They are
+separate from the infrastructure comparison.
+
 Potential next work includes a controlled Ethernet-versus-Wi-Fi comparison,
 faster or parallel local Strategy inference, broader workloads, safer
 expected-route labels, richer Policy controls, verified service restoration, and
@@ -483,6 +507,7 @@ fyp-pipeline/
 │   └── docs/layer3_component_log.md
 ├── docs/
 │   ├── experiment_results/
+│   ├── Literature_Review.md
 │   └── System_Design_and_Methodology.md
 ├── Full_Rerun.md
 └── README.md
@@ -493,6 +518,7 @@ fyp-pipeline/
 | Document | Purpose |
 |---|---|
 | This README | Project and research overview |
+| [Literature Review](docs/Literature_Review.md) | Verified literature, design requirements, architecture derivation, and planned comparisons |
 | [Layer 1 README](layer1/README.md) | Statistical data-plane overview |
 | [Layer 1 component log](layer1/docs/layer1_component_log.md) | Detailed Layer 1 implementation |
 | [Layer 2 README](layer2/README.md) | AI control-plane overview |

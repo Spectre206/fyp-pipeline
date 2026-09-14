@@ -1,6 +1,6 @@
 # Layer 3 — Execution, Human Oversight & Observability Layer
 
-**Project:** Distributed Multi-Agent Coordination for Self-Healing Data Pipelines
+**Project:** Distributed Multi-Agent Coordination for Self-Healing Data Pipelines: A Human-in-the-Loop Approach on Commodity Hardware
 **Primary node:** Node 3, **gateway-node** — Ubuntu 24.04 Desktop, Intel Core i5, 8 GB RAM
 **Authoritative experiment:** **wifi_cold_20260913_041045**
 
@@ -32,7 +32,7 @@ flowchart LR
     classDef data fill:#312e81,color:#fff,stroke:#4f46e5
     classDef learn fill:#075985,color:#fff,stroke:#0284c7
 
-    STR[Layer 2 Strategy<br/>structured proposal] --> POL[Layer 2 Policy<br/>deterministic route]
+    STR[Layer 2 Strategy<br/>structured proposal] -->|"RabbitMQ: strategy.result"| POL[Layer 2 Policy<br/>deterministic route]
     POL -->|AUTO authorised| AQ[(auto.execute)]
     POL -->|human review required| HQ[(hitl.queue)]
     AQ --> AE[Auto Executor]
@@ -180,6 +180,7 @@ flowchart LR
     classDef broker fill:#334155,color:#fff,stroke:#475569
     classDef process fill:#7c2d12,color:#fff,stroke:#c2410c
     classDef data fill:#312e81,color:#fff,stroke:#4f46e5
+    classDef decision fill:#243b53,color:#fff,stroke:#0f172a
     classDef error fill:#991b1b,color:#fff,stroke:#dc2626
 
     Q[(hitl.queue)] --> C[consume_hitl<br/>prefetch = 1]
@@ -431,6 +432,7 @@ flowchart LR
 
     subgraph SN["stream-node"]
         N1[Node Exporter :9100]
+        R[RabbitMQ metrics :15692]
         L1[Layer 1 exporters<br/>approximately :8002 to :8008]
     end
     subgraph AB["ai-brain-node"]
@@ -441,19 +443,18 @@ flowchart LR
         N3[Node Exporter :9100]
         H[HITL Django :8000]
         A[Auto Executor :8014]
-        R[RabbitMQ metrics :15692]
         P[Prometheus :9090]
         G[Grafana]
     end
-    N1 --> P
-    L1 --> P
-    N2 --> P
-    L2 --> P
-    N3 --> P
-    H --> P
-    A --> P
-    R --> P
-    P --> G
+    N1 -. "scraped metrics" .-> P
+    L1 -. "scraped metrics" .-> P
+    N2 -. "scraped metrics" .-> P
+    L2 -. "scraped metrics" .-> P
+    N3 -. "scraped metrics" .-> P
+    H -. "scraped metrics" .-> P
+    A -. "scraped metrics" .-> P
+    R -. "scraped metrics" .-> P
+    P -. "query results" .-> G
     class N1,N2,N3 node
     class L1,L2,H,A app
     class R infra
@@ -483,9 +484,9 @@ flowchart TB
     S[Three-node exporters<br/>RabbitMQ metrics<br/>Django and Auto metrics] --> P[Prometheus<br/>scrape and time series]
     P --> G[Grafana dashboard]
     G --> O[SYSTEM OVERVIEW]
-    G --> L1[LAYER 1<br/>data plane]
-    G --> L2[LAYER 2<br/>control plane]
-    G --> L3[LAYER 3<br/>execution and HITL]
+    G --> L1["Layer 1 — Real-Time Statistical Data Plane"]
+    G --> L2["Layer 2 — AI Control Plane"]
+    G --> L3["Layer 3 — Execution, Human Oversight & Observability Layer"]
     G --> I[Infrastructure health]
     G --> H[Hardware/node resources]
     O --> R[Researcher / operator reads state]

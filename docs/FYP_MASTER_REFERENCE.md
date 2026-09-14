@@ -6,8 +6,14 @@
 > targets, baseline comparisons, and future-work statements must not be treated
 > as implemented facts or final results. Use the root [README](../README.md),
 > [System Design and Methodology](System_Design_and_Methodology.md), the three
-> reconstructed layer documents, and [Full_Rerun.md](../Full_Rerun.md) for the
+> reconstructed [Layer 1](../layer1/README.md), [Layer 2](../layer2/README.md),
+> and [Layer 3](../layer3/README.md) documents, and [Full_Rerun.md](../Full_Rerun.md) for the
 > current source-aligned architecture, experiment evidence, and run procedure.
+> References to “current”, next steps, and the Literature Review in the historical
+> body mean the July snapshot and its older review. For the reconstructed review,
+> use [Literature Review](Literature_Review.md); earlier novelty/benchmark claims
+> remain historical assertions, not endorsed final research conclusions.
+
 ### Distributed Multi-Agent Coordination for Self-Healing Data Pipelines: A Human-in-the-Loop Approach on Commodity Hardware
 
 **Team:** Muhammad Adeel (23JZBCS0226) & Muhammad Asim

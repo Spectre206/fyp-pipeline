@@ -1,6 +1,6 @@
 # Final Evaluation Run — Current Cold-System Procedure
 
-**Project:** Distributed Multi-Agent Coordination for Self-Healing Data Pipelines
+**Project:** Distributed Multi-Agent Coordination for Self-Healing Data Pipelines: A Human-in-the-Loop Approach on Commodity Hardware
 **Purpose:** reproducible Wi-Fi or Ethernet experiment with a cold Layer 1 Feature Store, cold Layer 2 ChromaDB, reset EMA state, and a fresh Layer 2 evaluation run.
 
 This is the single operational runbook for the current implementation. Run the same checked-out commit on all three nodes. Commands use `~/fyp-pipeline`; set `REPO` differently only if the repository is located elsewhere.
@@ -122,7 +122,7 @@ cd "$REPO/layer1"
 
 #### 1. Reset the Feature Store calibration state
 
-The Feature Store persists one calibration baseline per `affected_component`. It uses `LAYER1_BASELINES_DIR` when set; otherwise its authoritative default is `layer1/feature_store/baselines`. `CALIBRATION_N` is currently **20**. The first 20 accepted events for each component are used for calibration and are withheld from ADM fan-out. Rolling windows are in memory and disappear when ADM stops.
+The Feature Store persists one calibration baseline per `affected_component`. It uses `LAYER1_BASELINES_DIR` when set; otherwise its authoritative default is `layer1/feature_store/baselines`. `CALIBRATION_N` is currently **20**. Calibration uses 20 accepted events per component. The first 19 are withheld from ADM fan-out; the twentieth completes calibration and can be enriched/fanned out. Rolling windows are in memory and disappear when ADM stops.
 
 ```bash
 export BASELINES_DIR="${LAYER1_BASELINES_DIR:-$REPO/layer1/feature_store/baselines}"
@@ -508,7 +508,8 @@ Do not repeatedly restart Prometheus or Grafana when their configuration is alre
 - `LAYER 1 — REAL-TIME STATISTICAL DATA PLANE`
 - `LAYER 2 — AI CONTROL PLANE`
 - `LAYER 3 — EXECUTION, HUMAN OVERSIGHT & OBSERVABILITY LAYER`
-- `INFRASTRUCTURE / HARDWARE`
+- `SYSTEM / INFRASTRUCTURE HEALTH`
+- `HARDWARE / NODE RESOURCES`
 
 ## Phase 4 — Pre-Run Verification and Metadata
 
@@ -716,7 +717,7 @@ cd "$REPO/layer1/seg"
 python3 seg.py --mode replay --config "$SEG_RUN_DIR/seg_config.json" --input "$DIAG_EVENTS" --speed 1
 ```
 
-Exactly 50 events are published. The first 20 establish one component baseline and are withheld by Feature Store; fewer than 50 Strategy records are therefore expected, not evidence of loss. This constructed ordering is diagnostic-only and must not be used as the final corpus ordering.
+Exactly 50 events are published. The first 20 establish one component baseline; the first 19 are withheld and the twentieth can reach the detectors; fewer than 50 Strategy records are therefore expected, not evidence of loss. This constructed ordering is diagnostic-only and must not be used as the final corpus ordering.
 
 After the pipeline drains, inspect Strategy’s current counters from Prometheus on `gateway-node`:
 
@@ -782,7 +783,7 @@ While replay and draining proceed, inspect queue state from `stream-node`:
 watch -n 2 'sudo rabbitmqctl list_queues -p fyp name messages_ready messages_unacknowledged'
 ```
 
-Use the Django dashboard at `http://gateway-node:8000/` to process a controlled subset of pending HITL incidents: approve at least one, reject at least one, and modify at least one where valid incidents are available. Record the IDs and counts in your experiment notes. This demonstrates all three human-decision paths and causes corresponding `outcome.feedback` activity. Do not require every HITL incident to be decided unless the study explicitly defines exhaustive feedback.
+Use the Django dashboard at `http://gateway-node:8000/` to process a controlled subset of pending HITL incidents: approve at least one, reject at least one, and modify at least one where valid incidents are available. Record the IDs and counts in your experiment notes. This demonstrates all three human-decision paths and causes corresponding `outcome.feedback` activity. This subset is a diagnostic workflow. The authoritative Wi-Fi experiment used exhaustive handling: all 469 HITL incidents were decided, with zero pending at completion and 639 total feedback records. Reproducing that completion criterion requires handling every HITL incident.
 
 Monitor the final dashboard and current metrics, including detector processing latency; Fusion published, suppressed, compound, fast-path, correlation-wait, and late-recovery observations; Strategy Schema Validity Rate and timeout rate; policy routing/reasons; Control-Plane Processing Latency; End-to-End Decision Latency; Feedback Completion Latency; Learning Processing Latency; Chroma upserts; EMA threshold; Strategy tokens/sec; Auto Executor outcomes and latency; HITL pending/outcomes; and Human Decision Latency.
 
@@ -794,7 +795,7 @@ After SEG exits, do **not** stop consumers immediately. Wait for computational b
 watch -n 2 'sudo rabbitmqctl list_queues -p fyp name messages_ready messages_unacknowledged'
 ```
 
-The computational queues `fusion.results`, `anomaly.detected`, `triage.result`, `strategy.result`, and `auto.execute` should drain to zero. `hitl.queue` may remain intentionally non-zero while cases await the controlled human subset. `outcome.feedback` must be allowed to drain after each AUTO action and each handled HITL action. Record any intentional pending HITL count separately from computational backlog.
+The queues `fusion.results`, `anomaly.detected`, `triage.result`, `strategy.result`, `auto.execute`, and `hitl.queue` should drain to zero. The Django consumer drains `hitl.queue` by persisting incidents; human review then resolves those persisted incidents. Database-backed `fyp_hitl_pending_incidents` measures incidents awaiting review, independently of RabbitMQ backlog. A diagnostic subset may leave persisted incidents pending; the authoritative Wi-Fi completion criterion requires zero pending. `outcome.feedback` must drain after AUTO and handled HITL actions.
 
 ### Layer 2 offline analysis
 

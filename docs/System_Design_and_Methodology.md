@@ -1,6 +1,6 @@
 # System Design and Methodology
 
-**Project:** Distributed Multi-Agent Coordination for Self-Healing Data Pipelines
+**Project:** Distributed Multi-Agent Coordination for Self-Healing Data Pipelines: A Human-in-the-Loop Approach on Commodity Hardware
 **Authoritative implementation:** commit **377250945c253b9c9da233d84391d1458d181fc9**
 **Authoritative experiment:** **wifi_cold_20260913_041045**
 
@@ -68,12 +68,16 @@ The implemented objectives are to:
 
 ## 4. Design principles
 
+The [Literature Review](Literature_Review.md#8-literature-derived-design-requirements)
+derives the detection, authorization, oversight, messaging, adaptation, and
+measurement requirements behind this decomposition.
+
 | Principle | Design response |
 |---|---|
 | Separation of concerns | Layer 1 detects, Layer 2 reasons/authorises, and Layer 3 handles/observes. |
 | Asynchronous coordination | RabbitMQ decouples producers and consumers. |
 | Heterogeneous agents | Only Strategy is LLM-backed; other components use deterministic/statistical logic. |
-| Deterministic safety boundary | Policy independently validates and routes every Strategy result. |
+| Deterministic safety boundary | Strategy validates its output contract; Policy checks that status and its own eligibility rules before routing. |
 | Local inference | Ollama runs qwen3:1.7b on CPU-only commodity hardware. |
 | Human oversight | Escalated incidents are persisted before review and terminal decision. |
 | Feedback-driven adaptation | Learning records outcome feedback in ChromaDB and updates an EMA threshold. |
@@ -93,31 +97,32 @@ flowchart LR
     classDef obs fill:#7c2d12,color:#fff,stroke:#c2410c
 
     subgraph N1["Node 1 — stream-node<br/>AMD Ryzen 5, 8 GB, Ubuntu Desktop"]
-        L1[Layer 1 data plane]
+        L1["Layer 1 — Real-Time Statistical Data Plane"]
         RMQ[(RabbitMQ)]
         NE1[Node Exporter :9100]
         L1 <--> RMQ
     end
     subgraph N2["Node 2 — ai-brain-node<br/>AMD Ryzen 5, 8 GB, Ubuntu Server"]
-        L2[Layer 2 control plane]
+        L2["Layer 2 — AI Control Plane"]
         OLL[Ollama CPU inference]
         CHR[(ChromaDB)]
         NE2[Node Exporter :9100]
-        L2 <--> OLL
+        L2 <-->|"Strategy only"| OLL
         L2 <--> CHR
     end
     subgraph N3["Node 3 — gateway-node<br/>Intel Core i5, 8 GB, Ubuntu Desktop"]
-        L3[Layer 3 execution and HITL]
+        L3["Layer 3 — Execution, Human Oversight & Observability Layer"]
         PR[Prometheus :9090]
         GR[Grafana]
         NE3[Node Exporter :9100]
-        L3 --> PR --> GR
+        L3 -. "metrics" .-> PR
+        PR -. "query results" .-> GR
     end
     L2 <--> RMQ
     L3 <--> RMQ
-    NE1 -. scrape .-> PR
-    NE2 -. scrape .-> PR
-    NE3 -. scrape .-> PR
+    NE1 -. "scraped metrics" .-> PR
+    NE2 -. "scraped metrics" .-> PR
+    NE3 -. "scraped metrics" .-> PR
     class L1,L2,L3 service
     class RMQ broker
     class PR,GR obs
@@ -153,15 +158,15 @@ flowchart LR
         FUS --> AN
     end
     subgraph L2["Layer 2 — AI Control Plane"]
-        TRI[Triage] --> STR[Strategy]
-        STR --> POL[Policy]
+        TRI[Triage] -->|"RabbitMQ: triage.result"| STR[Strategy]
+        STR -->|"RabbitMQ: strategy.result"| POL[Policy]
         LEA[Learning]
         MEM[(ChromaDB)]
         TRI <--> MEM
         LEA --> MEM
-        LEA --> POL
+        LEA -->|"persisted EMA threshold"| POL
     end
-    subgraph L3["Layer 3 — Execution, Human Oversight and Observability"]
+    subgraph L3["Layer 3 — Execution, Human Oversight & Observability Layer"]
         AUT[Auto Executor]
         HIT[Django HITL]
         AUD[(SQLite audit and<br/>persistent HITL state)]
@@ -180,6 +185,10 @@ flowchart LR
     class MEM,AUD store
 ~~~
 
+Inter-agent arrows denote RabbitMQ handoffs; ChromaDB and threshold arrows
+denote local retrieval/persistence. These diagrams summarize responsibilities,
+not direct inter-agent function calls.
+
 The authority relation is one-way: **Strategy proposes; Policy authorises or
 escalates; Layer 3 performs the already-selected branch.**
 
@@ -187,8 +196,8 @@ escalates; Layer 3 performs the already-selected branch.**
 
 **Implemented fact.** RabbitMQ on stream-node provides the asynchronous
 backbone. The topic exchange **fyp.events** carries most cross-stage events;
-the fanout exchange **detection.fanout** distributes validated events to the
-five detectors.
+the fanout exchange **detection.fanout** distributes eligible enriched events to
+the five detector queues without routing-key selection.
 
 | Message route | Source | Destination | Methodological role |
 |---|---|---|---|
@@ -223,8 +232,8 @@ through Feature Store, detector fan-out, and Fusion like other valid events.
 ### 8.2 Feature Store and ADM Runner
 
 The Feature Store maintains rolling component-level context and cold-state
-calibration. The first **20** accepted events per component form the calibration
-period and are not fanned out to detectors. This deliberate stateful gating
+calibration. Calibration uses **20** accepted events per component. The first **19** are
+withheld; the twentieth completes calibration and can be fanned out to detectors. This deliberate stateful gating
 explains the authoritative count change from 1,850 valid events to 1,527
 fusion-eligible events; it is not data loss.
 
@@ -294,10 +303,10 @@ flowchart LR
     classDef auto fill:#14532d,color:#fff,stroke:#166534
     classDef hitl fill:#991b1b,color:#fff,stroke:#dc2626
 
-    S[Strategy proposal] --> V[Deterministic Policy validation]
+    S[Strategy proposal] --> V[Deterministic Policy authorization checks]
     V -->|timeout, parse/schema/action failure| H[HITL]
     V -->|HIGH risk or low confidence| H
-    V -->|LOW risk, valid actions,<br/>confidence at threshold| A[AUTO]
+    V -->|LOW risk, valid actions,<br/>confidence >= threshold| A[AUTO]
     class S proposal
     class V safety
     class A auto
@@ -375,8 +384,10 @@ production traffic exhaustively.
 
 ## 12. Ground truth
 
-**Implemented fact.** **evaluation/labels.csv** contains evaluation labels.
-They are not exposed to runtime components. The runtime receives event content
+**Implemented fact.** SEG generates evaluation labels in **labels.csv**. Its
+default output directory is `evaluation/`; the runbook uses a run-specific
+output directory and copies labels for offline analysis. These labels are not
+exposed to runtime components. The runtime receives event content
 and produces detector, Strategy, Policy, and handling outputs independently.
 
 This separation prevents labels from becoming hidden runtime hints. It also

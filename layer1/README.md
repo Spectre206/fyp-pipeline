@@ -1,7 +1,6 @@
 # Layer 1 — Real-Time Statistical Data Plane
 
-Layer 1 is the deterministic detection and correlation plane in **Distributed
-Multi-Agent Coordination for Self-Healing Data Pipelines**. It receives
+Layer 1 is the deterministic detection and correlation plane in **Distributed Multi-Agent Coordination for Self-Healing Data Pipelines: A Human-in-the-Loop Approach on Commodity Hardware**. It receives
 telemetry, validates its structure, derives statistical features, runs five
 lightweight anomaly detectors, and publishes correlated incidents to
 `anomaly.detected` for Layer 2.
@@ -80,7 +79,9 @@ flowchart TB
     L2["Layer 2 Triage"]
 
     SEG -->|"event.raw"| VAL
-    VAL -->|"valid event"| FS --> ADM --> FANOUT
+    VAL -->|"event.valid → validated.event"| ADM
+    ADM -->|"local call"| FS
+    FS -->|"eligible result via ADM"| FANOUT
     FANOUT --> CPU
     FANOUT --> ERR
     FANOUT --> THR

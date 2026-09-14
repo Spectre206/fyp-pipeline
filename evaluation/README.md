@@ -1,8 +1,20 @@
-# Evaluation — Dataset Generation and Metrics
+# Evaluation — Historical Planning Archive
 
-This directory contains everything needed to generate the 1,950-event evaluation
-dataset, run the static threshold baseline system, calculate all primary research
-metrics, and produce the comparison tables for the paper.
+**Project:** Distributed Multi-Agent Coordination for Self-Healing Data Pipelines: A Human-in-the-Loop Approach on Commodity Hardware
+
+> **Historical plan, not an implemented evaluation guide.** The scripts listed
+> below (`generate_dataset.py`, `run_baseline.py`, `calculate_metrics.py`, and
+> `kappa.py`) are not present in this directory. Their descriptions, old metric
+> targets, and reproduction steps record planned work, not completed experiments.
+> Threshold-only and Single-Agent comparisons remain planned; FAR/FER are not
+> computable for the final run, and no verified service-recovery time was measured.
+> Current evaluation uses SEG corpus generation and
+> [the Layer 2 offline analyzer](../layer2/evaluation/analyze_run.py). See
+> [Full_Rerun.md](../Full_Rerun.md), [Layer 2](../layer2/README.md), and the
+> [methodology](../docs/System_Design_and_Methodology.md).
+
+The original planning outline is retained below. The referenced v1.1 document
+is an older external planning artifact, not a current repository dependency.
 
 ---
 

@@ -1,9 +1,10 @@
-# Layer 1 Component Log — Real-Time Statistical Data Plane
+# Layer 1 — Real-Time Statistical Data Plane
+
+**Document:** Component log
 
 ## Purpose, scope, and evidence boundary
 
-This is the detailed technical reference for Layer 1 of **Distributed
-Multi-Agent Coordination for Self-Healing Data Pipelines**. It documents the
+This is the detailed technical reference for Layer 1 of **Distributed Multi-Agent Coordination for Self-Healing Data Pipelines: A Human-in-the-Loop Approach on Commodity Hardware**. It documents the
 active deterministic/statistical implementation: validation, rolling feature
 derivation, five independent detectors, deterministic Fusion, and publication
 to Layer 2.
@@ -47,7 +48,9 @@ flowchart TB
     L2["Layer 2 Triage"]
 
     SEG -->|"event.raw"| VAL
-    VAL -->|"valid"| FS --> ADM --> FAN
+    VAL -->|"event.valid → validated.event"| ADM
+    ADM -->|"local call"| FS
+    FS -->|"eligible result via ADM"| FAN
     FAN --> CPU
     FAN --> ERR
     FAN --> THR
@@ -315,9 +318,10 @@ flowchart LR
     PUB["Publish once to<br/>detection.fanout"]
     ALL["All five detector queues<br/>receive a copy"]
     FAIL["Publish failure<br/>nack and requeue"]
+    BADJSON["Malformed JSON<br/>nack without requeue"]
 
     IN --> JSON
-    JSON -->|"no"| FAIL
+    JSON -->|"no"| BADJSON
     JSON -->|"yes"| STORE --> CAL
     CAL -->|"yes"| ACK
     CAL -->|"no"| PUB --> ALL
