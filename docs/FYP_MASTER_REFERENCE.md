@@ -1,4 +1,19 @@
-# FYP Master Reference Document
+# FYP Master Reference Document — Historical Planning Archive
+
+> **Historical document, not the current system reference.** This July 2026
+> planning archive predates the frozen implementation and the authoritative
+> Wi-Fi experiment. Its milestone status, planned Learning-LLM design, latency
+> targets, baseline comparisons, and future-work statements must not be treated
+> as implemented facts or final results. Use the root [README](../README.md),
+> [System Design and Methodology](System_Design_and_Methodology.md), the three
+> reconstructed [Layer 1](../layer1/README.md), [Layer 2](../layer2/README.md),
+> and [Layer 3](../layer3/README.md) documents, and [Full_Rerun.md](../Full_Rerun.md) for the
+> current source-aligned architecture, experiment evidence, and run procedure.
+> References to “current”, next steps, and the Literature Review in the historical
+> body mean the July snapshot and its older review. For the reconstructed review,
+> use [Literature Review](Literature_Review.md); earlier novelty/benchmark claims
+> remain historical assertions, not endorsed final research conclusions.
+
 ### Distributed Multi-Agent Coordination for Self-Healing Data Pipelines: A Human-in-the-Loop Approach on Commodity Hardware
 
 **Team:** Muhammad Adeel (23JZBCS0226) & Muhammad Asim

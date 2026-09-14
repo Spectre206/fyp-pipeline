@@ -14,6 +14,7 @@ def generate(
     num_ctx: int = 2048,
     num_predict: int = 512,
     timeout: int = 30,
+    format: dict | None = None,
 ) -> dict:
     """
     Call Ollama /api/generate synchronously.
@@ -30,6 +31,8 @@ def generate(
             "num_predict": num_predict,
         },
     }
+    if format is not None:
+        payload["format"] = format
     resp = requests.post(
         f"{OLLAMA_HOST}/api/generate",
         json=payload,

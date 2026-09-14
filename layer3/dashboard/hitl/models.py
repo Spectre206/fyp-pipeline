@@ -39,6 +39,7 @@ class HitlIncident(models.Model):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="PENDING")
     payload_json = models.TextField(help_text="Full Policy Agent message as JSON")
     arrived_at = models.DateTimeField(auto_now_add=True)
+    decided_at = models.DateTimeField(blank=True, null=True)
 
     class Meta:
         ordering = ["arrived_at"]

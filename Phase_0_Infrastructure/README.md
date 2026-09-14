@@ -1,6 +1,16 @@
 # 🧠 Phase 0 — Infrastructure Setup & LLM Evaluation
 
-> **Project:** Distributed Multi-Agent Coordination for Self-Healing Data Pipelines — A Human-in-the-Loop Approach on Commodity Hardware
+> **Historical/preliminary Phase 0 archive — not the current runbook.**
+> The setup commands, topology, model-selection results, planned Learning model,
+> production-readiness language, and network schedules below record earlier work.
+> They do not describe the frozen final implementation or prove production readiness.
+> Only Strategy now uses an LLM (`qwen3:1.7b`); Learning is deterministic.
+> The authoritative completed experiment is Wi-Fi (`wifi_cold_20260913_041045`);
+> Ethernet remains a planned comparison. Use the current [project README](../README.md),
+> [methodology](../docs/System_Design_and_Methodology.md), and [Full_Rerun.md](../Full_Rerun.md).
+> A broader Phase 0 revision is deferred until the Ethernet work.
+
+> **Project:** Distributed Multi-Agent Coordination for Self-Healing Data Pipelines: A Human-in-the-Loop Approach on Commodity Hardware
 > **Institution:** Department of CS&IT, UET Peshawar — Nowshera Campus
 > **Team:** Muhammad Adeel (23JZBCS0226) & Muhammad Asim
 > **Supervisor:** Dr. Laeeq Ahmed (Big Data & AI)
@@ -8,9 +18,9 @@
 
 ---
 
-## System Architecture
+## Historical System Architecture
 
-![High Level System Architecture](static/system_architecture.png)
+![High Level System Architecture](static/system_architecure.png)
 
 ---
 
@@ -21,7 +31,7 @@
 3. [Verified Baseline Measurements](#3-verified-baseline-measurements)
 4. [LLM Benchmark — Strategy Agent Selection](#4-llm-benchmark--strategy-agent-selection)
 5. [How to Replicate the Benchmark](#5-how-to-replicate-the-benchmark)
-6. [Key Findings for Paper Writing](#6-key-findings-for-paper-writing)
+6. [Historical Preliminary Findings for Paper Writing](#6-historical-preliminary-findings-for-paper-writing)
 
 ---
 
@@ -93,7 +103,7 @@ The only file that ever needs updating is `/etc/hosts` on all three nodes. Repla
 
 ## 3. Verified Baseline Measurements
 
-All measurements recorded during Phase 0 over WiFi. Paper benchmarks re-recorded on Gigabit Ethernet after 15 July 2026.
+All measurements below were recorded during Phase 0 over Wi-Fi. Re-recording on Gigabit Ethernet after 15 July 2026 was a historical plan, not a completed experiment.
 
 ### 3.1 Cluster Baseline
 
@@ -183,7 +193,7 @@ Results written to `results/raw_responses/` (JSONL) and `results/summary/` (CSV 
 
 ---
 
-## 6. Key Findings for Paper Writing
+## 6. Historical Preliminary Findings for Paper Writing
 
 **F1** — Structured output compliance is not correlated with parameter count in the sub-2B range.
 

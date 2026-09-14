@@ -1,8 +1,9 @@
-"""Learning Agent — qwen3:0.6b summarisation + ChromaDB upsert + EMA update."""
+"""Learning Agent — deterministic summaries + ChromaDB upsert + EMA update."""
 import json
 import time
 import sys
 import os
+import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -13,8 +14,8 @@ from prometheus_client import Counter, Gauge, Histogram, start_http_server
 
 from rabbitmq.connection import get_connection
 from chromadb_utils.upsert import upsert_incident
-from ollama.client import generate
 from utils.file_logger import append_log
+from evaluation.artifacts import record as record_evaluation
 
 log = structlog.get_logger()
 
@@ -27,14 +28,18 @@ THRESHOLD_UPDATES = Counter(
 CHROMADB_UPSERTS = Counter(
     "fyp_learning_chromadb_upserts_total", "ChromaDB upserts"
 )
+LEARNING_PROCESSING_LATENCY = Histogram(
+    "fyp_learning_processing_latency_seconds",
+    "Learning Agent feedback processing latency",
+)
 THRESHOLD_GAUGE = Gauge(
     "fyp_learning_confidence_threshold",
     "Current EMA confidence threshold"
 )
-MTTR_HISTOGRAM = Histogram(
-    "fyp_mttr_seconds",
-    "Mean Time To Recovery (triage_timestamp → outcome feedback received)",
-    buckets=[30, 60, 120, 180, 300, 600, 900]
+FEEDBACK_COMPLETION_LATENCY = Histogram(
+    "fyp_feedback_completion_latency_seconds",
+    "Policy decision timestamp to outcome.feedback receipt latency",
+    buckets=(5, 10, 30, 60, 120, 300, 600, 900, 1800),
 )
 TIMESTAMP_MISSING = Counter(
     "fyp_timestamp_missing_total", "Events missing original timestamp", ["agent"]
@@ -43,10 +48,7 @@ TIMESTAMP_MISSING = Counter(
 start_http_server(8013)
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-SYSTEM_PROMPT = (BASE_DIR / "prompts" / "learning_system_prompt.txt").read_text()
 THRESHOLD_PATH = BASE_DIR / "config" / "threshold_config.json"
-MODEL = "qwen3:0.6b"
-LEARNING_TIMEOUT = 10
 
 OUTCOME_SIGNALS = {
     "AUTO_EXECUTE_SUCCESS": 0.80,
@@ -56,8 +58,6 @@ OUTCOME_SIGNALS = {
     "HITL_MODIFIED": 0.60,
 }
 NEGATIVE_OUTCOMES = {"AUTO_EXECUTE_FAILURE", "HITL_REJECTED"}
-
-
 def load_threshold_config() -> dict:
     try:
         return json.loads(THRESHOLD_PATH.read_text())
@@ -70,7 +70,15 @@ THRESHOLD_GAUGE.set(current_cfg.get("confidence_threshold", 0.65))
 
 
 def save_threshold_config(data: dict):
-    THRESHOLD_PATH.write_text(json.dumps(data, indent=2))
+    THRESHOLD_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(
+        "w", encoding="utf-8", dir=THRESHOLD_PATH.parent, delete=False
+    ) as temporary_file:
+        json.dump(data, temporary_file, indent=2)
+        temporary_file.flush()
+        os.fsync(temporary_file.fileno())
+        temporary_path = temporary_file.name
+    os.replace(temporary_path, THRESHOLD_PATH)
 
 
 def update_ema(outcome_type: str):
@@ -104,29 +112,43 @@ class LearningAgent:
     def __init__(self):
         self.conn = get_connection()
         self.ch = self.conn.channel()
-        log.info("learning_agent_started", model=MODEL)
+        log.info("learning_agent_started", summary_mode="deterministic")
 
-    def _build_summary_prompt(self, outcome: dict) -> str:
-        pr = outcome.get("full_policy_result", {})
-        chain = pr.get("full_reasoning_chain", {})
-        st = chain.get("strategy_result", {})
-        llm = st.get("llm_response", {})
+    def _deterministic_summary(self, outcome: dict) -> str:
+        """Build a stable Chroma document without invoking Ollama."""
+        policy = outcome.get("full_policy_result", {})
+        chain = policy.get("full_reasoning_chain", {})
+        strategy = chain.get("strategy_result", {})
+        llm = strategy.get("llm_response", {})
         triage = chain.get("triage_result", {})
-        ev = triage.get("original_event", {})
+        event = triage.get("original_event", {})
 
-        anomaly_type = triage.get("anomaly_type") or ev.get("anomaly_type", "?")
-        component = ev.get("affected_component") or triage.get("anomaly_type", "?")
-        node = ev.get("node") or "?"
-
-        return (
-            f"Incident: {anomaly_type} on {component}\n"
-            f"Severity: {triage.get('severity','?')} | Risk tier: {llm.get('risk_tier','?')}\n"
-            f"Outcome: {outcome.get('outcome_type','?')}\n"
-            f"Actions taken: {outcome.get('actual_actions_taken',[])}\n"
-            f"Operator notes: {outcome.get('operator_notes','none')}\n"
-            f"Resolution time: {outcome.get('resolution_time_ms',0)}ms\n"
-            "Summarise this incident in one sentence."
-        )
+        parts = []
+        event_id = outcome.get("event_id")
+        anomaly_type = triage.get("anomaly_type") or event.get("anomaly_type")
+        component = event.get("affected_component")
+        actions = outcome.get("actual_actions_taken")
+        decision = policy.get("routing_decision")
+        outcome_type = outcome.get("outcome_type")
+        risk_tier = llm.get("risk_tier")
+        confidence = llm.get("confidence")
+        if event_id:
+            parts.append(f"event_id={event_id}")
+        if anomaly_type:
+            parts.append(f"anomaly_type={anomaly_type}")
+        if component:
+            parts.append(f"component={component}")
+        if isinstance(actions, list) and actions:
+            parts.append("actions=" + ", ".join(str(action) for action in actions))
+        if decision:
+            parts.append(f"decision={decision}")
+        if outcome_type:
+            parts.append(f"outcome={outcome_type}")
+        if risk_tier:
+            parts.append(f"risk={risk_tier}")
+        if isinstance(confidence, (int, float)) and not isinstance(confidence, bool):
+            parts.append(f"confidence={confidence}")
+        return "; ".join(parts) or "outcome=UNKNOWN"
 
     def on_message(self, ch, method, props, body):
         t0 = time.monotonic()
@@ -134,17 +156,14 @@ class LearningAgent:
             outcome = json.loads(body)
             event_id = outcome.get("event_id", "unknown")
             outcome_type = outcome.get("outcome_type", "UNKNOWN")
+            feedback_timestamp = datetime.now(timezone.utc).isoformat()
+            feedback_completion_latency_s = None
 
             OUTCOMES_PROCESSED.labels(outcome_type=outcome_type).inc()
 
-            # ---------- MTTR calculation ----------
-            # Control-plane MTTR: triage_timestamp → outcome feedback received
+            # Feedback completion latency: Policy decision → feedback receipt.
             try:
-                chain = outcome.get("full_policy_result", {}).get(
-                    "full_reasoning_chain", {}
-                )
-                triage_result = chain.get("triage_result", {})
-                ts = triage_result.get("triage_timestamp")
+                ts = outcome.get("full_policy_result", {}).get("policy_timestamp")
 
                 if ts:
                     try:
@@ -154,31 +173,35 @@ class LearningAgent:
                         else:
                             start_time = start_time.astimezone(timezone.utc)
 
-                        mttr = (datetime.now(timezone.utc) - start_time).total_seconds()
-                        MTTR_HISTOGRAM.observe(mttr)
+                        feedback_completion_latency_s = (
+                            datetime.now(timezone.utc) - start_time
+                        ).total_seconds()
+                        FEEDBACK_COMPLETION_LATENCY.observe(feedback_completion_latency_s)
                     except Exception:
-                        log.warning("mttr_timestamp_parse_failed", event_id=event_id, ts=ts)
+                        log.warning(
+                            "feedback_latency_timestamp_parse_failed",
+                            event_id=event_id,
+                            ts=ts,
+                        )
                         TIMESTAMP_MISSING.labels(agent="learning").inc()
                 else:
-                    log.warning("mttr_no_timestamp", event_id=event_id)
+                    log.warning("feedback_latency_no_policy_timestamp", event_id=event_id)
                     TIMESTAMP_MISSING.labels(agent="learning").inc()
             except Exception:
                 pass
             # ---------------------------------------
 
-            # Summarise with qwen3:0.6b
-            summary = f"Incident {event_id} - {outcome_type}"
-            try:
-                resp = generate(
-                    MODEL,
-                    self._build_summary_prompt(outcome),
-                    SYSTEM_PROMPT,
-                    num_predict=256,
-                    timeout=LEARNING_TIMEOUT,
-                )
-                summary = resp.get("response", summary).strip()
-            except Exception as e:
-                log.warning("learning_llm_failed", error=str(e))
+            # This records receipt before best-effort learning work begins.
+            # A separate learning record below captures successful processing.
+            record_evaluation("feedback", {
+                "event_id": event_id,
+                "outcome_type": outcome_type,
+                "feedback_timestamp": feedback_timestamp,
+                "feedback_completion_latency_s": feedback_completion_latency_s,
+            })
+
+            summary_mode = "deterministic"
+            summary = self._deterministic_summary(outcome)
 
             # Build ChromaDB metadata
             pr = outcome.get("full_policy_result", {})
@@ -211,6 +234,16 @@ class LearningAgent:
             CHROMADB_UPSERTS.inc()
 
             update_ema(outcome_type)
+            learning_latency_s = time.monotonic() - t0
+            LEARNING_PROCESSING_LATENCY.observe(learning_latency_s)
+            record_evaluation("learning", {
+                "event_id": event_id,
+                "outcome_type": outcome_type,
+                "summary_mode": summary_mode,
+                "learning_latency_s": learning_latency_s,
+                "chromadb_upsert_id": event_id,
+                "threshold_updated": outcome_type in OUTCOME_SIGNALS,
+            })
 
             # ---- File-based persistent log ----
             append_log("learning_agent.jsonl", {

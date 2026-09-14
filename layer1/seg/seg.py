@@ -35,7 +35,10 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 # Ground truth fields — stripped before pipeline ingestion
-GT_FIELDS = {"ground_truth_label", "ground_truth_risk_tier", "ground_truth_action"}
+GT_FIELDS = {
+    "ground_truth_label", "ground_truth_risk_tier", "ground_truth_action",
+    "expected_route", "safe_to_auto",
+}
 
 DEFAULT_CONFIG_PATH = Path(__file__).parent / "config" / "seg_config.json"
 
@@ -184,7 +187,8 @@ class SyntheticEventGenerator:
         with open(jsonl_path, "w") as jf, open(csv_path, "w", newline="") as cf:
             writer = csv.DictWriter(cf, fieldnames=[
                 "event_id", "ground_truth_label",
-                "ground_truth_risk_tier", "ground_truth_action"
+                "ground_truth_risk_tier", "ground_truth_action",
+                "expected_route", "safe_to_auto",
             ])
             writer.writeheader()
 

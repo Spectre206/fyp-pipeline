@@ -25,6 +25,8 @@ layer1/adm/models/*.h5
 # ─── Evaluation results (generated at runtime) ───────────────────────────────
 evaluation/results/
 !evaluation/results/.gitkeep
+layer2/evaluation/results/*
+!layer2/evaluation/results/.gitkeep
 evaluation/data/
 evaluation/*.jsonl
 evaluation/labels.csv

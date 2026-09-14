@@ -1,8 +1,16 @@
-# Datasets — Download Instructions
+# Datasets — Historical Download Instructions
 
-The three datasets used for training the ADM models and generating the evaluation
-corpus are not included in this repository due to file size. Download them to
-this directory before running any Layer 1 component.
+**Project:** Distributed Multi-Agent Coordination for Self-Healing Data Pipelines: A Human-in-the-Loop Approach on Commodity Hardware
+
+> **Historical/offline dataset plan.** The assignments below describe the earlier
+> ML-based ADM design. They are not prerequisites for the active statistical/
+> deterministic Layer 1 runtime or its synthetic 1,950-event corpus. Historical
+> training scripts remain under `layer1/evaluation/historical/`.
+> Use the [current Layer 1 README](../layer1/README.md) and
+> [Full_Rerun.md](../Full_Rerun.md) for current corpus generation and replay.
+
+The external datasets are not bundled. The historical download locations and
+model assignments below are retained for reference.
 
 ---
 
