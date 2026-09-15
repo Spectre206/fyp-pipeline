@@ -1,0 +1,22 @@
+# TEMPLATE: reconcile intervals, exporters, authentication and labels with live configuration.
+# Select this separate config only for a Threshold experiment; do not overwrite proposed config.
+# Mode A: remove/disable layer1-application; its panels are intentionally not applicable.
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+scrape_configs:
+  - job_name: fyp-threshold-baseline
+    static_configs:
+      - targets: ['ai-brain-node:8020']
+  - job_name: layer1-application
+    static_configs:
+      - targets: ['stream-node:8002', 'stream-node:8003', 'stream-node:8004', 'stream-node:8005', 'stream-node:8006', 'stream-node:8007', 'stream-node:8008']
+  - job_name: layer3-application
+    static_configs:
+      - targets: ['gateway-node:8014', 'gateway-node:8000']
+  - job_name: rabbitmq
+    static_configs:
+      - targets: ['stream-node:15692']
+  - job_name: fyp-cluster
+    static_configs:
+      - targets: ['stream-node:9100', 'ai-brain-node:9100', 'gateway-node:9100']

@@ -1,0 +1,170 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:fyp:controller-ground-truth:v1",
+  "title": "Independent controller ground truth",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "incident_id",
+    "expected_route",
+    "safe_to_auto",
+    "expected_risk",
+    "acceptable_actions"
+  ],
+  "properties": {
+    "incident_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255,
+      "pattern": "\\S"
+    },
+    "expected_route": {
+      "enum": [
+        "AUTO",
+        "HITL",
+        null
+      ]
+    },
+    "safe_to_auto": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "expected_risk": {
+      "enum": [
+        "LOW",
+        "HIGH",
+        null
+      ]
+    },
+    "acceptable_actions": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": [
+          "ALERT_SECURITY_TEAM",
+          "CHECK_QUEUE_DEPTH",
+          "CIRCUIT_BREAKER_OPEN",
+          "COORDINATED_REMEDIATION",
+          "EMERGENCY_FULL_PIPELINE_REVIEW",
+          "EMERGENCY_RESTART_CONSUMER",
+          "FLAG_FOR_SCHEMA_REVIEW",
+          "GENERIC_INVESTIGATE",
+          "HALT_INGESTION_REVIEW_SCHEMA",
+          "INVESTIGATE_UPSTREAM",
+          "ISOLATE_NODE",
+          "LOG_AND_CONTINUE",
+          "MONITOR_AND_ALERT",
+          "RATE_LIMIT_AUTH",
+          "RATE_LIMIT_ENDPOINT",
+          "RESTART_ALL_CONSUMERS",
+          "RESTART_FAILED_CONSUMER",
+          "SCALE_CONSUMER_RESOURCES"
+        ]
+      }
+    },
+    "prohibited_actions": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": [
+          "ALERT_SECURITY_TEAM",
+          "CHECK_QUEUE_DEPTH",
+          "CIRCUIT_BREAKER_OPEN",
+          "COORDINATED_REMEDIATION",
+          "EMERGENCY_FULL_PIPELINE_REVIEW",
+          "EMERGENCY_RESTART_CONSUMER",
+          "FLAG_FOR_SCHEMA_REVIEW",
+          "GENERIC_INVESTIGATE",
+          "HALT_INGESTION_REVIEW_SCHEMA",
+          "INVESTIGATE_UPSTREAM",
+          "ISOLATE_NODE",
+          "LOG_AND_CONTINUE",
+          "MONITOR_AND_ALERT",
+          "RATE_LIMIT_AUTH",
+          "RATE_LIMIT_ENDPOINT",
+          "RESTART_ALL_CONSUMERS",
+          "RESTART_FAILED_CONSUMER",
+          "SCALE_CONSUMER_RESOURCES"
+        ]
+      }
+    },
+    "ambiguous": {
+      "type": "boolean",
+      "default": false
+    },
+    "rationale": {
+      "type": "string"
+    },
+    "adjudication_notes": {
+      "type": "string"
+    },
+    "anomaly_category": {
+      "type": "string"
+    },
+    "required_action_categories": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "reviewer_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "ambiguous": {
+            "const": true
+          }
+        },
+        "required": [
+          "ambiguous"
+        ]
+      },
+      "else": {
+        "properties": {
+          "expected_route": {
+            "enum": [
+              "AUTO",
+              "HITL"
+            ]
+          },
+          "expected_risk": {
+            "enum": [
+              "LOW",
+              "HIGH"
+            ]
+          },
+          "safe_to_auto": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    {
+      "not": {
+        "properties": {
+          "expected_route": {
+            "const": "AUTO"
+          },
+          "safe_to_auto": {
+            "const": false
+          }
+        },
+        "required": [
+          "expected_route",
+          "safe_to_auto"
+        ]
+      }
+    }
+  ]
+}
