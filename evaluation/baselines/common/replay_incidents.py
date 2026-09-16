@@ -50,7 +50,7 @@ def main():
             raise RuntimeError('Require one selected input consumer and an empty ready queue')
         channel.confirm_delivery()
         with (directory / 'replay.jsonl').open('x') as output:
-            replay(records, lambda route, body, headers: publish(channel, route, body, headers), output, args.run_id, args.speed)
+            replay(records, lambda route, body, headers: publish(channel, route, body, headers), output, args.run_id, args.speed, sleep=connection.sleep)
         (directory / 'completed.json').write_text(json.dumps({'count': len(records), 'completed_at': utcnow()}) + '\n')
     finally:
         connection.close()

@@ -3,6 +3,8 @@ import argparse
 import hashlib
 import json
 import signal
+import socket
+import subprocess
 import threading
 import time
 from datetime import datetime
@@ -12,7 +14,7 @@ from evaluation.baselines.common.contracts import normalize
 from evaluation.baselines.common.journal import Journal, new_run, raw_record, utcnow
 from evaluation.baselines.common.layer3_adapter import envelope
 from evaluation.baselines.threshold_only.metrics import Metrics
-from evaluation.baselines.threshold_only.rules import decide, RULES_SHA256
+from evaluation.baselines.threshold_only.rules import decide, RULES_SHA256, RULES_VERSION
 
 
 def elapsed_since(value, now):
@@ -94,12 +96,21 @@ def main():
     parser.add_argument('--run-id', required=True)
     parser.add_argument('--output', type=Path, required=True, help='New, nonexisting run directory')
     parser.add_argument('--dry-run', type=Path, help='Plain payload JSONL; never connects to RabbitMQ or metrics')
+    parser.add_argument('--network-medium', choices=('wifi', 'ethernet'), help='Experimental provenance only; required for live runs')
+    parser.add_argument('--dataset-sha256', help='Frozen input SHA-256: capture file for Mode A; SEG corpus for Mode B')
     parser.add_argument('--live', action='store_true', help='Explicitly authorize connections to configured experiment queues')
     args = parser.parse_args()
     if bool(args.dry_run) == args.live:
         parser.error('Choose exactly one of --dry-run FILE or --live')
+    if args.live and args.network_medium is None:
+        parser.error('--network-medium is required for live runs')
+    if args.dataset_sha256 is not None and (len(args.dataset_sha256) != 64 or any(c not in '0123456789abcdef' for c in args.dataset_sha256)):
+        parser.error('--dataset-sha256 must be a lowercase SHA-256 digest')
+    git_commit = subprocess.check_output(['git', '-C', str(Path(__file__).resolve().parents[3]), 'rev-parse', 'HEAD'], text=True).strip()
     directory = new_run(args.output, args.run_id, controller='threshold_only', rules_sha256=RULES_SHA256,
-                        mode='dry-run' if args.dry_run else 'live')
+                        mode='dry-run' if args.dry_run else 'live', network_medium=args.network_medium,
+                        node_hostname=socket.gethostname(), git_commit=git_commit, rules_version=RULES_VERSION,
+                        dataset_sha256=args.dataset_sha256)
     journal, metrics = Journal(directory), Metrics()
     if args.dry_run:
         messages = []

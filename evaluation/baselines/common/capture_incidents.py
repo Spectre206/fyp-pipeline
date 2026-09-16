@@ -51,7 +51,9 @@ def load_capture(path, manifest_path):
     path = Path(path)
     manifest = json.loads(Path(manifest_path).read_text())
     content = path.read_bytes()
-    if manifest.get('format') != 'fyp-capture-v1' or manifest.get('capture_complete') is not True:
+    if (not isinstance(manifest, dict) or manifest.get('format') != 'fyp-capture-v1'
+            or manifest.get('capture_complete') is not True or manifest.get('schedule') != 'capture_offsets'
+            or type(manifest.get('count')) is not int or type(manifest.get('unique_ids')) is not int):
         raise ValueError('Unsupported/incomplete capture')
     if hashlib.sha256(content).hexdigest() != manifest.get('sha256'):
         raise ValueError('Capture checksum mismatch')
@@ -63,7 +65,8 @@ def load_capture(path, manifest_path):
         event_id = payload.get('event_id') if isinstance(payload, dict) else None
         offset = record['offset_seconds']
         if (not isinstance(event_id, str) or not event_id.strip() or len(event_id) > 255
-                or event_id != record['event_id'] or event_id in ids or record['sequence'] != len(records)
+                or event_id != record['event_id'] or event_id in ids
+                or type(record['sequence']) is not int or record['sequence'] != len(records)
                 or not isinstance(offset, (int, float)) or isinstance(offset, bool)
                 or not math.isfinite(offset) or offset < 0 or offset < last
                 or record['routing_key'] not in {'anomaly.fused', 'anomaly.schema_drift'}):

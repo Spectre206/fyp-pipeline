@@ -2,6 +2,8 @@
 
 The main design/reference document is [THRESHOLD_BASELINE_SYSTEM.md](THRESHOLD_BASELINE_SYSTEM.md). The [frozen experiment design](../BASELINE_EXPERIMENT_DESIGN.md) governs comparisons; [common utilities](../common/README.md) cover capture, replay, neutral HITL presentation, and analysis.
 
+The authoritative execution procedure is [Run_Threshold_Baseline.md](Run_Threshold_Baseline.md), covering all three nodes, Wi-Fi now and Ethernet later.
+
 ## Prerequisites
 
 Run from the repository root with Python 3.10+ and the experiment environment containing `pika` and `prometheus-client`. Tests additionally use the existing gateway's Django dependency. No new dependency family or requirements file is introduced. Record exact installed versions for formal runs.
@@ -27,7 +29,8 @@ First preserve prior evidence and isolate/reset the gateway database. Stop Triag
 ```bash
 ss -ltn '( sport = :8020 )'
 python -m evaluation.baselines.threshold_only.controller \
-  --live --run-id <run-id> --output <new-controller-run-directory>
+  --live --run-id <run-id> --output <new-controller-run-directory> \
+  --network-medium wifi --dataset-sha256 <frozen-input-sha256>
 ```
 
 The metrics bind itself also detects a busy port before consuming messages. This single command starts both independent workers and the shared metrics endpoint. Wait for both `fyp_threshold_worker_up` gauges to become 1 before replay. The controller rejects competing Triage/Strategy/Policy consumers; the feedback worker rejects competing Learning consumers. These checks do not replace verifying stale queued publications, gateway ownership, and empty run state.
@@ -67,3 +70,7 @@ Prefer full captured Mode A populations. If compute cost requires it, the approv
 3. Single-Agent → Proposed → Threshold.
 
 Finalize subset, counts, human review, cutoffs, and rerun criteria before formal execution. No baseline results are claimed by the implementation.
+
+## Network provenance
+
+Live runs require `--network-medium wifi|ethernet`. It is recorded only in `run.json`, alongside hostname, Git commit, rule version/checksum, creation time and optional `--dataset-sha256`. It never enters routing logic. Formal runs should supply and independently verify the dataset digest. Use hostnames resolving to the active medium; keep the same application revision and monitoring dashboard. Results use `results/threshold_only/<wifi|ethernet>/<run_id>/controller`, with separate replay evidence. The existing results ignore rule covers both conditions.

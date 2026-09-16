@@ -77,3 +77,7 @@ python layer3/dashboard/manage.py runserver 0.0.0.0:8000
 Use the same neutral presentation for all formal conditions. It shows Controller Risk Tier, Controller Confidence (unavailable for Threshold), Decision Rationale, and explicitly scoped controller timing. It does not relabel proposed Policy processing as full-controller latency. The approved legacy UI remains available for smoke testing.
 
 This overlay does not isolate databases. Use a dedicated experiment checkout/database and archive/reset Layer 3 between runs. Human-visible deterministic rationale may reveal the condition; do not claim reviewer blinding merely because labels are neutral.
+
+## Formal Threshold execution
+
+Use the [Threshold runbook](../threshold_only/Run_Threshold_Baseline.md) for node setup, fresh controller/replay directories, network provenance and completion gates. Replay rejects unsupported manifest schedules and noninteger counts/sequence numbers and services RabbitMQ heartbeats while waiting between captured arrivals. It verifies one input consumer and an empty ready queue; operators must additionally verify selected worker identity and zero unacknowledged work. Capture offsets are observed capture times, so capturing an already queued population freezes its drain schedule, not original publication timing. The analyzer expects a verified boundary capture; it does not derive an independent Mode B population from controller decisions.

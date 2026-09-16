@@ -183,4 +183,26 @@ Static rules lack contextual generative reasoning or adaptive learning. Detector
 
 Broker confirmations and durable recording precede ACK, but their cross-system crash window remains: this is not exactly-once execution. Existing Layer 3 has its own duplicate/action/feedback failure limitations, unchanged here. Capture/replay partial failures require reconciliation; the CLI does not automatically resume old run directories.
 
-Live RabbitMQ integration, deployed scrape configuration, and Grafana rendering must be validated in an isolated experiment environment. Offline tests and dry-run envelopes do not establish live end-to-end completion. Required-action-category scoring and other-controller native exports need their own frozen mappings before use. No hardware/network or comparative-performance claim follows from implementation alone.
+The reported live smoke integration is recorded below. Each formal run still requires deployed target/queue checks and reconciliation. Offline tests and dry-run envelopes alone do not establish live end-to-end completion. Required-action-category scoring and other-controller native exports need their own frozen mappings before use. No hardware/network or comparative-performance claim follows from implementation alone.
+
+
+## 16. Network-neutral deployment and run provenance
+
+[Run_Threshold_Baseline.md](Run_Threshold_Baseline.md) is the authoritative operational procedure. One implementation supports Wi-Fi and Ethernet: RabbitMQ uses explicit `RABBITMQ_HOST`, `RABBITMQ_PORT`, `RABBITMQ_USER`, `RABBITMQ_PASS`; DNS or `/etc/hosts` maps `stream-node`, `ai-brain-node` and `gateway-node` to active network addresses. No interface names or Wi-Fi addresses enter Threshold logic. Use the gateway hostname for the existing Django allowlist; shared Layer 3 legacy absolute import paths remain a deployment constraint, not a transport selection mechanism.
+
+Live controller startup requires `--network-medium wifi|ethernet`. This provenance is written only to `run.json`, with node hostname, checked-out Git commit, UTC creation time, run/controller identity, rules version/checksum and optional declared dataset SHA-256. It does not enter normalization, rules, envelopes or metric labels. Tests compare identical decisions across both values. Record a clean identical revision on all nodes; the hash alone does not establish a clean working tree. Verify the declared dataset digest separately against the frozen input.
+
+The same Prometheus job `fyp-threshold-baseline` targets `ai-brain-node:8020`; the same dedicated Threshold Grafana dashboard applies to both media. Record network interface/link/routes and monitoring time range externally. Formal Mode A preserves incident bytes/order/schedule across conditions. Mode B preserves Layer 1 corpus/configuration and reconciles the actual population. The analyzer currently expects a verified boundary capture; a Mode B export conversion is not supplied, and an unrelated Mode A capture must not substitute for Mode B expected identities.
+
+## 17. Live Integration Validation
+
+**Integration/smoke validation only.** The operator-reported completed smoke test for implementation commit `08627521e930461a6ae02c954ac511ab00f89d6c` established:
+
+- 5 input deliveries and 5 decisions: 1 AUTO and 4 HITL.
+- 5 feedback records; AUTO feedback and HITL approval feedback paths worked.
+- 0 failures and 0 quarantined records.
+- RabbitMQ queues drained after completion; DLQ remained empty.
+- Prometheus target `ai-brain-node:8020` returned UP.
+- The dedicated Threshold Grafana dashboard imported successfully.
+
+Reported exported line counts: `decision.jsonl` 5, `delivery.jsonl` 5, `feedback.jsonl` 5, `failure.jsonl` 0, `quarantine.jsonl` 0. These facts are supplied by the completed live test report; this readiness task did not rerun it or overwrite its evidence. They establish integration for the exercised paths, not full-population reliability, routing correctness, comparative performance, real recovery or MTTR. Formal experiments and independent ground truth remain separate.
