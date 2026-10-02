@@ -18,9 +18,10 @@ distributed, heterogeneous multi-agent architecture on commodity hardware while
 retaining a deterministic safety boundary around automatic action. It is a
 research prototype, not a claim of universal or production-ready self-healing.
 
-The authoritative final experiment is the cold-memory Wi-Fi run
+The authoritative historical Wi-Fi baseline is the cold-memory run
 **wifi_cold_20260913_041045**, performed with frozen implementation commit
-**377250945c253b9c9da233d84391d1458d181fc9**.
+**377250945c253b9c9da233d84391d1458d181fc9**. The matched proposed-system Ethernet
+reproduction **ethernet_cold_20261002_023108** is now complete.
 
 ## Research problem and proposed solution
 
@@ -466,12 +467,210 @@ synchronisation.
 Shows qualitative resource behaviour across stream-node, ai-brain-node, and
 gateway-node.
 
+## Final Ethernet experiment results
+
+The completed **ethernet_cold_20261002_023108** run reproduced the proposed
+full pipeline over Ethernet using the preserved authoritative Wi-Fi workload
+from **wifi_cold_20260913_041045**, including its event IDs, order, final labels
+and configuration, at replay speed **1**. The recorded implementation commit is
+**c595459ce64a479a2bf725df2fbffb7142d6f66b**; the Ethernet application/deployment
+base is **c0ad6be9c84955240cf4499d586ad46b1d579ecc**. Reported completion is
+**2026-10-02T06:45:49Z**.
+
+Evidence is node-local under `experiment_runs/ethernet_cold_20261002_023108/`.
+The gateway's preserved `metrics/`, `layer3-final-state.txt`,
+`transport/revision-before.txt`, `transport/prometheus-targets-after.json` and
+screenshots were inspected for this update. Node 1's corpus hashes, completion,
+protocol/reconciliation and broker-peer records, and Node 2's offline analyzer,
+Chroma and final threshold records are reported from the operator-supplied
+summary of those preserved files; they were not independently read on gateway.
+Their absence on gateway is not absence of experiment evidence. The
+[comparison document](docs/WIFI_VS_ETHERNET_COMPARISON.md) records this provenance
+and the limits of the matched pair.
+
+Reported preserved source hashes:
+
+| File | SHA-256 |
+|---|---|
+| `events_1950.jsonl` | `427d64f93caf78d2ae58ae916e74e034ce3e17681f3580d04972263faa7594a3` |
+| `labels.csv` | `da596042f35e2983b83414a7bbed84925fde2b734a7ea96255fa24454de8d936` |
+| `seg_config.json` | `36910a5208a09724010f3e5d1fae359227c2f37daa47a3de0eb6626731446418` |
+
+The manifest was created **retrospectively from the preserved authoritative
+Wi-Fi files before Ethernet replay**, as reported for `protocol-freeze.txt`.
+It is not a historically pre-existing independently approved manifest. The
+recorded revision gate passed with a clean tree and no application/deployment
+differences outside the root Ethernet runbook relative to the deployment base;
+this does not itself prove identity to the earlier Wi-Fi implementation.
+
+### Cross-layer accounting
+
+~~~text
+Generated/input events           1,950
+Validator valid                  1,850
+Structural schema violations       100
+Fusion-eligible events           1,527
+Fusion published                   539
+Structural bypass                  100
+Layer 2 incidents                  639
+Strategy responses                 639
+Strategy schema-valid              639
+Strategy schema-invalid              0
+Strategy timeouts                    0
+AUTO                               175
+HITL                               464
+HITL approved                      463
+HITL rejected                        0
+HITL modified                        1
+Total feedback                     639
+Learning updates                   639
+Final Chroma documents             639
+~~~
+
+~~~text
+539 fused + 100 structural bypass = 639 Layer 2 incidents
+175 AUTO + 464 HITL = 639 Policy decisions
+463 approved + 0 rejected + 1 modified = 464 HITL decisions
+175 AUTO feedback + 464 HITL feedback = 639 feedback events
+~~~
+
+### Layer 1 runtime results
+
+| Measure | Final count |
+|---|---:|
+| Validator received / valid / structural violations | 1,950 / 1,850 / 100 |
+| Evaluations by each detector | 1,527 |
+| CPU / error / auth / schema / throughput runtime detections | 197 / 150 / 124 / 31 / 141 |
+| Fusion published / suppressed | 539 / 988 |
+| Fusion compound / Fast Path / late recovery | 43 / 83 / 0 |
+
+The reported Node 1 operational counts match the recorded Wi-Fi counts.
+Runtime detections are not independently established true positives.
+
+### Layer 2 control-plane results
+
+| Measure | Final result |
+|---|---:|
+| Strategy responses | 639 |
+| Valid JSON / invalid JSON | 639 / 0 |
+| Schema-valid / schema-invalid | 639 / 0 |
+| Strategy schema-validity rate (non-timeout responses) | 639 / 639 = 100% |
+| Timeouts | 0 |
+| Policy AUTO / HITL | 175 (27.3865%) / 464 (72.6135%) |
+| Policy reasons: HIGH_RISK / LOW_CONFIDENCE / LOW_RISK_HIGH_CONFIDENCE | 399 / 65 / 175 |
+| Risk-tier accuracy | 513 / 630 = 81.43% |
+| FAR / FER | Not computable |
+
+Schema validity measures output-contract compliance, not remediation correctness.
+The observed SVR difference from Wi-Fi is not evidence that Ethernet caused
+better model output. Risk-tier accuracy and JSON accounting above are reported
+from the Node 2 analyzer summary; routing/schema counters are also preserved in
+the gateway metrics.
+
+### Feedback, learning, Layer 3, and integrity
+
+| Measure | Final result |
+|---|---:|
+| AUTO attempts / outcomes / feedback emitted | 175 / 175 / 175 |
+| HITL total; approved / rejected / modified | 464; 463 / 0 / 1 |
+| Persisted HITL pending at completion | 0 |
+| Overall / AUTO / HITL feedback completion | 639/639; 175/175; 464/464 |
+| Learning updates / final Chroma documents | 639 / 639 |
+| Final EMA threshold / update_count | 0.7681 / 639 |
+| Prometheus targets | 19 UP / 2 intentionally inactive baseline targets DOWN |
+| Final experiment queues (ready / unacknowledged), including DLQ | 0 / 0 |
+
+The supplied offline integrity summary reports zero missing Strategy, Policy,
+feedback or Learning processing records; zero pending HITL without feedback;
+zero unknown feedback IDs and malformed records; and zero duplicate Triage,
+Strategy, Policy, Feedback or Learning records. These per-ID checks cannot be
+established solely from aggregate counters. Final Chroma cardinality is reported
+from Node 2; its 639 upserts and 639 Learning updates are locally corroborated.
+AUTO remains controlled simulated execution; neither approval nor feedback
+establishes verified service recovery or MTTR.
+
+### Ethernet latency interpretation
+
+The **offline Layer 2 analyzer is authoritative for aggregate E2E latency**.
+These are the operator-supplied values from Node 2's
+`layer2_evaluation/ethernet_cold_20261002_023108/evaluation_summary.json`;
+all values in the following table are seconds.
+
+| Measure | Mean | Median | p95 | p99 | Maximum |
+|---|---:|---:|---:|---:|---:|
+| Triage | 0.0707496088 | 0.058 | 0.112 | 0.158 | 3.828 |
+| Strategy | 16.0009702660 | 15.855 | 17.828 | 19.567 | 27.633 |
+| Policy | 0.0003020344 | 0.0 | 0.001 | 0.001 | 0.001 |
+| Control-plane | 16.0720219092 | 15.924 | 17.873 | 19.646 | 28.171 |
+| End-to-end decision | 3968.4311863349 | 3914.150887 | 7866.067336 | 8215.490266 | 8307.39702 |
+| Feedback completion | 31.9257162801 | 24.646759 | 90.896488 | 126.563807 | 162.574282 |
+| Learning processing | 0.0548606328 | 0.0364821540 | 0.0763020730 | 0.14229403 | 5.832444645 |
+
+E2E mean/median/p95/p99/maximum are approximately **66.14 / 65.24 / 131.10 /
+136.92 / 138.46 minutes**. The Grafana E2E panel visually clipped around
+**30 minutes**; that display must not replace the offline **131.10-minute p95**.
+Dashboard histogram estimates and time windows also differ from complete-run
+offline aggregates. Serial CPU-only Strategy remained the dominant processing
+bottleneck, with substantial queueing. This one matched pair does not establish
+network causality or an overall Ethernet speed advantage.
+
+### Final Ethernet observability screenshots
+
+These preserved screenshots are embedded without alteration.
+
+![Ethernet System Overview](docs/experiment_results/ethernet/system_overview.png)
+
+Shows final publication, SVR, routing and pending counts; the clipped E2E display
+is not the authoritative latency.
+
+![Ethernet Layer 1 Data Plane](docs/experiment_results/ethernet/layer1_data_plane.png)
+
+Shows Validator, detector and Fusion operational accounting.
+
+![Ethernet Layer 2 AI Control Plane](docs/experiment_results/ethernet/layer2_control_plane.png)
+
+Shows Strategy validity, Policy reasons, Learning and EMA telemetry.
+
+![Ethernet Layer 3 Execution and HITL](docs/experiment_results/ethernet/layer3_execution_hitl.png)
+
+Shows simulated AUTO handling, human decisions and feedback activity.
+
+![Ethernet Infrastructure Health](docs/experiment_results/ethernet/infrastructure_health.png)
+
+The two DOWN targets are the intentionally inactive Threshold-Only (`:8020`)
+and Single-Agent (`:8030`) endpoints, not failures of the proposed system.
+
+![Ethernet Hardware and Node Resources](docs/experiment_results/ethernet/hardware_node_resources.png)
+
+Shows qualitative resource behaviour; aggregate network plots alone do not
+prove Ethernet transport or explain latency differences.
+
+![Ethernet Final Queue Snapshot](docs/experiment_results/ethernet/queues_final_zero.png)
+
+This final broker snapshot shows all listed experiment queues at zero ready and
+unacknowledged messages, including the DLQ. It does not show that queues never
+accumulated; the infrastructure screenshot records backlog growth and draining.
+
+### Ethernet-specific limitations
+
+This is one matched Ethernet run, with Wi-Fi first and Ethernet second rather
+than randomized order. No dedicated warmup protocol was frozen for historical
+Wi-Fi, so Ethernet intentionally introduced no Ethernet-only dedicated warmup
+(operator-reported protocol limitation). The retrospective corpus manifest
+limits claims of prospective freezing. FAR/FER remain not computable, and
+CPU-only Strategy remained the dominant processing bottleneck. Stochastic model
+outputs, adaptive feedback and different realized reviewer choices prevent
+attributing the observed differences solely to Ethernet. Repeated balanced runs
+are needed for stronger causal inference.
+
 ## Limitations and future work
 
 - The workload is synthetic and the three-node environment is a laboratory
   deployment.
 - Strategy uses CPU-only qwen3:1.7b inference with constrained/serial
-  throughput; its 77.15% schema-validity result leaves 146 invalid proposals.
+  throughput. The authoritative Wi-Fi run observed 77.15% schema validity and
+  146 schema-invalid proposals; the Ethernet run observed 639/639 schema-valid
+  responses. This observed difference does not establish Ethernet causality.
 - HITL throughput and observed human timing depend on the controlled reviewer
   workflow and should not be generalized.
 - FAR and FER are not computable from the available labels; runtime detections
@@ -480,14 +679,14 @@ gateway-node.
   service recovery. No service-recovery duration was measured.
 - SQLite/HITL persistence and centralised observability are experimental-scale
   choices, not high-availability or production-scale evidence.
-- The Wi-Fi run is the current authoritative result. A controlled Ethernet
-  comparison remains future work.
+- The Wi-Fi run remains the authoritative historical baseline. The matched
+  Ethernet reproduction above adds one observed pair, not a causal network study.
 
 Threshold-Only and Single-Agent comparisons, plus a fixed-versus-adaptive EMA
 ablation, remain planned as described in the Literature Review. They are
 separate from the infrastructure comparison.
 
-Potential next work includes a controlled Ethernet-versus-Wi-Fi comparison,
+Potential next work includes repeated balanced Ethernet-versus-Wi-Fi comparisons,
 faster or parallel local Strategy inference, broader workloads, safer
 expected-route labels, richer Policy controls, verified service restoration, and
 replicated persistence.
@@ -526,11 +725,14 @@ fyp-pipeline/
 | [Layer 3 README](layer3/README.md) | Execution, HITL, and observability overview |
 | [Layer 3 component log](layer3/docs/layer3_component_log.md) | Detailed Layer 3 implementation |
 | [Full_Rerun.md](Full_Rerun.md) | Complete reproduction/run procedure |
+| [Wi-Fi vs Ethernet comparison](docs/WIFI_VS_ETHERNET_COMPARISON.md) | Proposed-system matched-pair results and validity limits |
 | [System Design and Methodology](docs/System_Design_and_Methodology.md) | Design rationale, methodology, metrics, and validity considerations |
 
 ## Project status
 
-The frozen Wi-Fi implementation and its documentation form the current research
-baseline. Review the layer documents and [Full_Rerun.md](Full_Rerun.md) before
-starting a new experiment; do not treat this README as a replacement for the
-runbook.
+The frozen Wi-Fi run remains the authoritative historical Wi-Fi baseline.
+The matched proposed-system Ethernet full run is now complete; Threshold-Only
+and Single-Agent Ethernet full-pipeline evaluations remain next. Review the
+layer documents and the experiment runbooks, [Full_Rerun.md](Full_Rerun.md) and
+[Ethernet_Full_Rerun.md](Ethernet_Full_Rerun.md), before starting a new experiment.
+This README does not replace those runbooks.
