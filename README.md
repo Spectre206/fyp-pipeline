@@ -559,7 +559,7 @@ Runtime detections are not independently established true positives.
 | Policy AUTO / HITL | 175 (27.3865%) / 464 (72.6135%) |
 | Policy reasons: HIGH_RISK / LOW_CONFIDENCE / LOW_RISK_HIGH_CONFIDENCE | 399 / 65 / 175 |
 | Risk-tier accuracy | 513 / 630 = 81.43% |
-| FAR / FER | Not computable |
+| FAR / FER (routing-label-policy-v2, retrospective) | 38/174 = 21.84% / 104/240 = 43.33% |
 
 Schema validity measures output-contract compliance, not remediation correctness.
 The observed SVR difference from Wi-Fi is not evidence that Ethernet caused
@@ -657,11 +657,91 @@ This is one matched Ethernet run, with Wi-Fi first and Ethernet second rather
 than randomized order. No dedicated warmup protocol was frozen for historical
 Wi-Fi, so Ethernet intentionally introduced no Ethernet-only dedicated warmup
 (operator-reported protocol limitation). The retrospective corpus manifest
-limits claims of prospective freezing. FAR/FER remain not computable, and
+limits claims of prospective freezing. The later routing-policy evaluation
+below computes FAR and FER under the explicit benchmark translation.
+This is retrospective evaluation, and
 CPU-only Strategy remained the dominant processing bottleneck. Stochastic model
 outputs, adaptive feedback and different realized reviewer choices prevent
 attributing the observed differences solely to Ethernet. Repeated balanced runs
 are needed for stronger causal inference.
+
+## Offline routing ground truth and FAR/FER
+
+On 2026-10-02, **routing-label-policy-v2** was finalized retrospectively for
+the completed Proposed adaptive-EMA Ethernet run, before the remaining
+Threshold-Only, Single-Agent and Proposed fixed-EMA/history-only Ethernet runs.
+The same labels, script and metric definitions are frozen for all four systems;
+no results for the three upcoming conditions are claimed.
+
+The original SEG source predates the experiments and assigns LOW anomalies to
+`AUTO_RESTART_CONSUMER` and HIGH anomalies to `ESCALATE_TO_HITL`. V2 translates
+those exact categories into AUTO/true and HITL/false respectively; NORMAL stays
+blank/excluded. Unexpected anomaly combinations fail annotation. The corpus
+contains **380 expected AUTO, 570 expected HITL and 1,000 excluded NORMAL**.
+`safe_to_auto=true` denotes **benchmark autonomous eligibility**, not formal
+real-world operational safety certification. No Strategy, Policy, confidence or
+EMA outputs construct these labels. Original fields, event IDs and order are
+preserved in a separate `labels_routing.csv`.
+
+V1 incorrectly tested corpus actions against runtime Strategy action identifiers,
+labeling every anomaly HITL. It is superseded and archived, not erased. V2 is an
+explicit methodological amendment, not a claim that the original blank routing
+fields already constituted an operational safety contract. The completed run's
+results were known when this policy was finalized; prospective blinding is not
+claimed. The policy will not change based on comparative outcomes.
+
+- **FAR** = actual AUTO with `safe_to_auto=false` / actual AUTO with authoritative
+  nonblank eligibility labels (true or false).
+- **FER** = actual HITL with `expected_route=AUTO` / expected-AUTO incidents
+  with an actual AUTO/HITL Policy decision.
+- **Expected-AUTO Policy Coverage** = expected AUTO with a Policy decision /
+  all authoritative expected-AUTO corpus incidents.
+- **Expected-AUTO Missing Before Policy** = expected AUTO without a Policy
+  record / all authoritative expected-AUTO corpus incidents.
+
+All exclude NORMAL/unlabeled routing cases; zero denominators are
+`not_computable`, never zero error. Lower FAR/FER and missing-before-Policy rates
+are better; higher Policy coverage is better.
+The JSON key `false_automation_rate` is retained for compatibility.
+
+### Confirmed proposed adaptive-EMA Ethernet re-evaluation
+
+Locally preserved source CSV and five stage JSONLs under
+`experiment_runs/ethernet_cold_20261002_023108/offline_eval_inputs/` give:
+
+| Measure | Confirmed result |
+|---|---:|
+| Policy incidents | 639 |
+| Joined expected AUTO / HITL / excluded NORMAL | 240 / 390 / 9 |
+| Actual AUTO / HITL, before exclusions | 175 / 464 |
+| NORMAL excluded from actual AUTO / HITL | 1 / 8 |
+| FAR numerator / denominator / value | 38 / 174 / 21.84% |
+| FER numerator / denominator / value | 104 / 240 / 43.33% |
+| Expected-AUTO Policy Coverage | 240 / 380 = 63.16% |
+| Expected-AUTO Missing Before Policy | 140 / 380 = 36.84% |
+| Risk-tier accuracy | 513 / 630 = 81.43% |
+| SVR; invalid JSON / schema-invalid / timeouts | 639/639 = 100%; 0 / 0 / 0 |
+| Feedback overall / AUTO / HITL | 639/639; 175/175; 464/464 |
+
+All reported missing-stage, missing-feedback, unknown-feedback, pending-HITL,
+missing-Learning, malformed and duplicate checks are zero for observed incidents.
+A separate event-ID join agrees exactly: 136 eligible incidents routed AUTO
+and 104 routed HITL, totaling 240. FER measures routing only after an eligible
+event reaches Policy. The 140 eligible IDs without Policy are upstream coverage
+attrition, not false escalations, and do not enter the routing FER denominator.
+Non-routing metrics and historical Wi-Fi results are unchanged.
+These scores measure benchmark routing disagreement, not real-world harm or
+verified service restoration.
+
+Final CSV SHA-256:
+`f57a7cf80f72c60a915286fa40ea93064cb9053e9e2272bffc765131ecee129c`.
+Final summary, per-event results, independent verification and manifest are
+preserved beside the inputs; v1 artifacts are in `routing-policy-v1-superseded/`.
+See the [authoritative policy](layer2/evaluation/ROUTING_LABEL_POLICY.md) for
+source evidence, hashes, exact semantics, history and reproduction commands.
+The [Wi-Fi/Ethernet comparison](docs/WIFI_VS_ETHERNET_COMPARISON.md) retains the
+original blank-routing-label analysis; this later evaluation supersedes its
+Ethernet FAR/FER availability statement only.
 
 ## Limitations and future work
 
@@ -673,8 +753,9 @@ are needed for stronger causal inference.
   responses. This observed difference does not establish Ethernet causality.
 - HITL throughput and observed human timing depend on the controlled reviewer
   workflow and should not be generalized.
-- FAR and FER are not computable from the available labels; runtime detections
-  are not truth labels.
+- Historical Wi-Fi FAR/FER remain uncomputed. The retrospective Ethernet
+  routing-policy evaluation above gives FAR 21.84% and FER 43.33%,
+  with the corpus-coverage limitation disclosed above. Runtime detections are not truth labels.
 - AUTO outcomes are controlled simulated execution-path outcomes, not verified
   service recovery. No service-recovery duration was measured.
 - SQLite/HITL persistence and centralised observability are experimental-scale
