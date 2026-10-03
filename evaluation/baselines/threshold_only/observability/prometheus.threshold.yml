@@ -1,3 +1,6 @@
+# Legacy hostname-based template for historical runs only.
+# Ethernet Mode B uses deployment/ethernet/prometheus.ethernet.yml;
+# the dedicated dashboard now uses its shared job names.
 # TEMPLATE: reconcile intervals, exporters, authentication and labels with live configuration.
 # Select this separate config only for a Threshold experiment; do not overwrite proposed config.
 # Mode A: remove/disable layer1-application; its panels are intentionally not applicable.

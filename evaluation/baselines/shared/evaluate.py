@@ -144,10 +144,16 @@ def evaluate(labels, decisions_path, feedback_path, controller, run_id,
     feedback_issues = Counter()
     accepted, feedback_signatures, feedback_conflicts = set(), {}, set()
     for line, row in feedback_rows:
-        if row.get('run_id') != run_id or row.get('controller') != controller:
+        payload = row.get('payload')
+        envelope = payload.get('full_policy_result') if isinstance(payload, dict) else None
+        # Threshold's existing recorder omits top-level controller; validate its
+        # original embedded identity instead. Explicit conflicting identity fails.
+        recorded_controller = row.get('controller')
+        if recorded_controller is None and controller == 'threshold_only' and isinstance(envelope, dict):
+            recorded_controller = envelope.get('controller')
+        if row.get('run_id') != run_id or recorded_controller != controller:
             feedback_issues['wrong_identity'] += 1
             continue
-        payload = row.get('payload')
         if not isinstance(payload, dict) or row.get('status') not in ('accepted', 'duplicate', 'conflicting_duplicate'):
             feedback_issues['rejected_' + str(row.get('status', 'missing_status'))] += 1
             continue
@@ -204,6 +210,9 @@ def evaluate(labels, decisions_path, feedback_path, controller, run_id,
     summary = dict(contract=CONTRACT, routing_policy=POLICY_VERSION, controller=controller, run_id=run_id,
         counts=dict(decision_records=len(rows), corpus=len(corpus), anomalies=len(corpus-normal), normal=len(normal),
                     received_ids=len(reached & corpus) if deliveries_path else None,
+                    received_anomaly_ids=len((reached & corpus)-normal) if deliveries_path else None,
+                    anomaly_routing_decisions=len(set(valid)-normal),
+                    expected_hitl_total=len(unsafe),
                     routing_decisions=len(valid), actual_auto=len(auto), actual_hitl=len(hitl),
                     normal_decisions=len(set(valid)&normal), feedback_ids=len(accepted),
                     expected_auto_total=len(eligible), expected_auto_with_decision=len(eligible&set(valid)),

@@ -1,4 +1,8 @@
-"""Controller-neutral ID-based analysis; labels are offline inputs only."""
+"""Historical Mode A analyzer. Final Ethernet routing metrics use shared.evaluate.
+
+The unsafe-population FAR and full-label FER below are superseded for the
+four-system Ethernet contract; retained for historical analyses/tests only.
+"""
 import argparse
 import json
 import math

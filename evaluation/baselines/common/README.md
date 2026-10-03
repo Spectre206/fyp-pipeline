@@ -1,5 +1,7 @@
 # Shared baseline utilities
 
+**Ethernet Mode B:** use [ETHERNET_FULL_RUN.md](../threshold_only/ETHERNET_FULL_RUN.md) and the [shared contract](../ETHERNET_SHARED_EXPERIMENT_CONTRACT.md). The older network procedure and `common/analyze_comparison.py` FAR/FER definitions below are historical/superseded for the final four-system Ethernet comparison. Use `shared.evaluate` with frozen routing-label-policy-v2; no boundary capture consumer is required.
+
 Run modules from the repository root with the interpreter containing `pika` and `prometheus-client`. These utilities do not import live proposed-system agents. The authoritative vocabulary is read from the literal `ALLOWED_ACTIONS` declaration without executing that module.
 
 ## Capture and freeze Mode A input
