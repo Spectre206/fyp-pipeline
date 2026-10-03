@@ -161,6 +161,56 @@ A list of alternative acceptable actions is not automatically a list of required
 
 ## 8. Routing and Decision-Quality Metrics
 
+
+The [Shared Ethernet Experiment Contract](ETHERNET_SHARED_EXPERIMENT_CONTRACT.md)
+implements the frozen offline baseline adapters and defines Mode B reconciliation,
+revision manifests, evidence transfer and condition-specific deployment gates.
+It supersedes older baseline analyzer denominators for this four-condition
+Ethernet comparison without changing controller algorithms or Mode A history.
+
+
+**Versioned amendment — 2026-10-02, routing-label-policy-v2.** The four
+Ethernet configurations are Threshold-Only, Single-Agent, Proposed multi-agent
+adaptive EMA, and Proposed multi-agent fixed EMA/history-only learning.
+All must reuse the same 1,950-event workload semantics, source/derived labels,
+annotation script, routing contract, NORMAL exclusion and benchmark definitions.
+
+The [authoritative offline policy](../../layer2/evaluation/ROUTING_LABEL_POLICY.md)
+translates ANOMALY + LOW + AUTO_RESTART_CONSUMER to AUTO/true, and ANOMALY + HIGH +
+ESCALATE_TO_HITL to HITL/false. NORMAL remains blank/excluded; any other anomaly
+combination fails. Actual corpus counts are 380 AUTO, 570 HITL and 1,000 NORMAL.
+True denotes benchmark autonomous eligibility, not real-world operational safety
+certification. V1's runtime-action-membership test mixed separate vocabularies
+and is superseded; its artifacts remain archived.
+
+**FAR = actual AUTO with safe_to_auto=false / actual AUTO with authoritative
+nonblank safe_to_auto labels (true or false).**
+**FER = actual HITL with expected_route=AUTO / expected-AUTO incidents with
+an actual AUTO/HITL Policy decision.**
+**Expected-AUTO Policy Coverage = expected AUTO with Policy decision / all
+authoritative expected-AUTO corpus incidents.** Report expected-AUTO missing
+before Policy separately as absent Policy records / all expected-AUTO corpus IDs.
+NORMAL/unlabeled routing cases are excluded. Join by event_id; zero denominators
+are not computable. Missing Policy cases are upstream coverage attrition, not
+false escalations, and cannot dilute the routing FER denominator. An existing
+record without a valid AUTO/HITL route is reported separately as invalid.
+These metric semantics are frozen unchanged for all four Ethernet systems.
+The initial v2 full-corpus FER denominator is superseded following methodological
+review; the v2 labels and FAR remain unchanged. These supersede the historical FAR/FER entries below.
+
+The source risk/action mappings predate the runs. This translation was finalized
+retrospectively for the already completed adaptive-EMA Ethernet experiment,
+after its results were known; prospective blinding is not claimed. It is frozen
+before the remaining Threshold-Only, Single-Agent and fixed-EMA experiments.
+No system outputs construct labels, and comparative outcomes must not change
+this policy. Apply the same policy and formulas unchanged to every system;
+record tool revisions and label hashes. Other protocol-freeze requirements
+remain in force. Original definitions below are history, not an alternative
+active metric contract for these four conditions.
+
+### Original prospective definitions (superseded above for the four Ethernet conditions)
+
+
 The following definitions are common to every condition. Report numerators, denominators, label coverage, and missing-decision counts alongside percentages. A zero denominator is **not computable**, not zero error.
 
 | Metric | Definition |
