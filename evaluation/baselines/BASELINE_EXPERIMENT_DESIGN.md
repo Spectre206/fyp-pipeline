@@ -161,6 +161,13 @@ A list of alternative acceptable actions is not automatically a list of required
 
 ## 8. Routing and Decision-Quality Metrics
 
+The [Shared Ethernet Experiment Contract](ETHERNET_SHARED_EXPERIMENT_CONTRACT.md)
+implements the frozen offline baseline adapters and defines Mode B reconciliation,
+revision manifests, evidence transfer and condition-specific deployment gates.
+It supersedes older baseline analyzer denominators for this four-condition
+Ethernet comparison without changing controller algorithms or Mode A history.
+
+
 **Versioned amendment — 2026-10-02, routing-label-policy-v2.** The four
 Ethernet configurations are Threshold-Only, Single-Agent, Proposed multi-agent
 adaptive EMA, and Proposed multi-agent fixed EMA/history-only learning.
