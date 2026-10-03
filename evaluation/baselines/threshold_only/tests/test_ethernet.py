@@ -3,6 +3,8 @@ import hashlib
 import json
 import os
 import subprocess
+import sys
+import csv
 import tempfile
 import unittest
 from pathlib import Path
@@ -70,6 +72,34 @@ class EthernetTests(unittest.TestCase):
             self.assertEqual(summary['expected_auto_controller_coverage']['value'],1)
             self.assertFalse(integrity['feedback_issues'])
             self.assertEqual(summary['counts']['received_anomaly_ids'],2)
+            # Run the documented CLI against actual Threshold exports, not a
+            # fabricated attempt sidecar. Include an unobserved eligible ID.
+            self.assertFalse((path/'attempt.jsonl').exists())
+            corpus_labels={i:dict(event_id=i,ground_truth_label='ANOMALY',
+                ground_truth_risk_tier='LOW',ground_truth_action='AUTO_RESTART_CONSUMER',
+                expected_route='AUTO',safe_to_auto='true') for i in ('a','h','missing')}
+            labels_path=path/'labels_routing.csv'
+            with labels_path.open('w',newline='') as source:
+                writer=csv.DictWriter(source,fieldnames=list(corpus_labels['a']))
+                writer.writeheader();writer.writerows(corpus_labels.values())
+            output=path/'analysis'
+            result=subprocess.run([sys.executable,'-B','-m','evaluation.baselines.shared.evaluate',
+                '--labels',str(labels_path),'--decisions',str(path/'decision.jsonl'),
+                '--feedback',str(path/'feedback.jsonl'),'--deliveries',str(path/'delivery.jsonl'),
+                '--quarantine',str(path/'quarantine.jsonl'),'--failures',str(path/'failure.jsonl'),
+                '--controller','threshold_only','--run-id','run','--output',str(output),
+                '--expect-hitl-feedback'],capture_output=True,text=True)
+            self.assertEqual(result.returncode,0,result.stderr)
+            actual=json.loads((output/'evaluation_summary.json').read_text())
+            expected,_,_=evaluate(corpus_labels,path/'decision.jsonl',path/'feedback.jsonl',
+                'threshold_only','run',path/'delivery.jsonl',True)
+            for key in ('far','fer','expected_auto_controller_coverage',
+                        'expected_auto_missing_before_routing','feedback_completion','risk_accuracy'):
+                self.assertEqual(actual[key],expected[key])
+            self.assertEqual(actual['feedback_completion']['value'],1)
+            self.assertEqual(actual['expected_auto_controller_coverage']['value'],2/3)
+            self.assertIn('upstream reconciliation',actual['completion_claim'])
+            self.assertFalse((path/'attempt.jsonl').exists())
             rows=journal.records('feedback');rows[0]['controller']='single_agent'
             (path/'feedback.jsonl').write_text(''.join(json.dumps(r)+'\n' for r in rows))
             _,_,integrity=evaluate(labels,path/'decision.jsonl',path/'feedback.jsonl','threshold_only','run')

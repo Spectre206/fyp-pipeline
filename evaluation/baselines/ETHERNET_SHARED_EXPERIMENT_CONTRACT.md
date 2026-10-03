@@ -80,14 +80,20 @@ python -B -m evaluation.baselines.shared.evaluate \
   --decisions "$CONTROLLER_DIR/decision.jsonl" \
   --feedback "$CONTROLLER_DIR/feedback.jsonl" \
   --deliveries "$CONTROLLER_DIR/delivery.jsonl" \
-  --attempts "$CONTROLLER_DIR/attempt.jsonl" \
   --quarantine "$CONTROLLER_DIR/quarantine.jsonl" \
   --failures "$CONTROLLER_DIR/failure.jsonl" \
   --controller threshold_only --run-id "$RUN_ID" \
   --output "$ANALYSIS_DIR" --expect-hitl-feedback
 ```
 
-Select `single_agent` for that condition. Explicit paths are node-local;
+Evidence is condition-specific: Threshold has no attempt sidecar because it has
+no model invocation/retry stage. For Single-Agent select `single_agent` and add
+`--attempts "$CONTROLLER_DIR/attempt.jsonl"` for its real model-attempt export.
+The Proposed system retains its own native agent/stage evidence and evaluator;
+do not manufacture baseline/model stages for it or Threshold. Shared routing
+metric definitions remain the same. Never fabricate an empty attempt file.
+
+Explicit paths are node-local;
 `ANALYSIS_DIR` must not exist. Omit the exhaustive HITL flag only under a frozen
 sampled-review protocol; AUTO feedback is always expected. Optional missing
 artifact arguments are omitted, never replaced by fabricated empty evidence.
@@ -138,6 +144,21 @@ structural bypass, failures and unresolved IDs separately in reconciliation.txt.
 The evaluator reports sets; it does not infer causal reasons from labels or
 fabricate detector TP/FP performance. Receipt without decision is an integrity
 review item. Corpus coverage alone does not establish experimental completion.
+
+A clean controller journal is not proof of an uninterrupted experiment. Any
+application-worker death/restart after replay begins and before required
+completion invalidates the formal run, including upstream Layer 1 workers.
+Preserve failures and classify a same-RUN_ID restart as
+`RESUMED_INVALID_FOR_FORMAL_COMPARISON`; never rehabilitate it based on later
+clean exports. Use a new RUN_ID and cold state for the replacement experiment.
+Keep an append-only operator protocol-event record with occurrence/recording
+UTC times, node/worker identity, evidence references and eligibility, distinguishing
+`IN_PROGRESS`, `FAILED_INCOMPLETE`, resumed-invalid, and reviewed
+`COMPLETED_UNINTERRUPTED`. Unknown event times must not be invented.
+The evaluator does not read/enforce this protocol record; formal eligibility
+requires separate review. Replay markers guard publication, not worker launches.
+Process-start/exit logs, boot ID/PID/start-time evidence and queue/metrics history
+support that review; final snapshots alone cannot prove absence of restarts.
 
 Freeze cutoff duration, drain timeout, review scope and rerun criteria before
 publication; this contract does not invent numeric cutoffs. Completion requires:

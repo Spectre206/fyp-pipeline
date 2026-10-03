@@ -530,6 +530,56 @@ date -u +%FT%TZ > "$RUN_ROOT/replay-ended.txt"
 Do not replay raw source events directly into anomaly.detected. Layer 1 produces
 both Fusion incidents and Validator structural bypass incidents normally.
 
+## Worker failure and resumed execution — formal validity
+
+From replay start through required drain/feedback completion, any application
+worker death or restart invalidates the formal run. This includes Layer 1
+workers even when SEG finishes successfully or Threshold exports appear clean.
+Preserve evidence; do not restart/resume in the same RUN_ID. A replacement formal
+attempt requires a new RUN_ID and the complete cold-reset procedure. Normal
+shutdown after documented completion is not a worker restart.
+
+Keep an operator-owned, append-only `protocol-events.jsonl` beside metadata and
+reference it in reconciliation. Each entry records RUN_ID, UTC recording time,
+occurrence time (or unknown), node, worker, status, reason, evidence paths and
+formal eligibility. Use these explicit classifications:
+
+- `IN_PROGRESS`: not yet eligible for a completion claim.
+- `FAILED_INCOMPLETE`: worker death, interruption or failed completion; excluded.
+- `RESUMED_INVALID_FOR_FORMAL_COMPARISON`: a worker restarted after publication
+  began and before completion; permanently excluded for this RUN_ID.
+- `COMPLETED_UNINTERRUPTED`: only after all completion gates and process-history
+  review; never use it to overwrite a failed/resumed classification.
+
+If a restart already happened, append both failure and restart observations;
+retain earlier evidence and distinguish retrospective recording from actual
+occurrence time. Unknown times remain unknown. Record later clean exports as
+post-resume evidence, not a replacement successful experiment. The operator-
+reported run `threshold-ethernet-full-20261003-053739` belongs to
+`RESUMED_INVALID_FOR_FORMAL_COMPARISON` after the throughput worker restart.
+This documentation does not create or modify that run's preserved artifacts.
+
+The exclusive replay marker only prevents a second SEG invocation. It does not
+prevent a detector restart. As a manual prelaunch check, confirm with Node 1
+whether replay has begun before starting/restarting any application pane; a
+missing local marker on Node 2/3 is not permission to restart. Do not add
+automatic recovery under the same RUN_ID.
+
+For future runs, preserve per-worker startup/exit logs and process identity
+(node, boot ID, PID, process start time, command) before replay and before
+shutdown, plus snapshots at any fault. Save queue consumer counts/backlogs,
+service logs and Prometheus process-start/counter-reset history when available.
+Before/after PID snapshots alone cannot prove uninterrupted execution: PIDs can
+be reused, short-lived processes can be missed and metrics can have scrape gaps.
+The current helpers do not automatically enforce or reconstruct this history.
+
+Offline `no_detected_record_errors` and 100% feedback completion cover observed
+controller records only. Neither overrides the protocol status, upstream worker
+failure, a 286-message detector backlog, or an observed restart. Keep full source
+labels for partial analysis; missing routing coverage cannot by itself assign
+causes to individual events. Preserve pre/post-resume exports separately if both
+exist and label any analysis accordingly.
+
 ## Phase 9 — drain, human review and flush
 
 On Node 1 observe ready/unacknowledged counts until all experiment queues drain;
@@ -593,9 +643,13 @@ python -B -m evaluation.baselines.shared.evaluate \
  --labels "$LABELS_ROUTING" --decisions "$RUN_BASE/controller/decision.jsonl" \
  --feedback "$RUN_BASE/controller/feedback.jsonl" --deliveries "$RUN_BASE/controller/delivery.jsonl" \
  --quarantine "$RUN_BASE/controller/quarantine.jsonl" --failures "$RUN_BASE/controller/failure.jsonl" \
- --attempts "$RUN_BASE/controller/attempt.jsonl" --controller threshold_only --run-id "$RUN_ID" \
+ --controller threshold_only --run-id "$RUN_ID" \
  --output "$RUN_ROOT/offline_eval_inputs/analysis" --expect-hitl-feedback
 ```
+
+`attempt.jsonl` is not applicable to Threshold: it has no model invocation/retry
+stage. Omit `--attempts`; do not create an empty placeholder. Its five native
+JSONL exports are decision, feedback, delivery, quarantine and failure.
 
 Omit the HITL flag only if the frozen diagnostic review is sampled; explicitly
 record retained pending cases. Inspect evaluation_summary.json, integrity_report,
