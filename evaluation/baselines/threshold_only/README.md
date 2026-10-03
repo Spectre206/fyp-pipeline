@@ -1,78 +1,151 @@
-# Threshold-Only baseline
+# Threshold-only baseline
 
-**Ethernet Mode B:** use [ETHERNET_FULL_RUN.md](ETHERNET_FULL_RUN.md) and the [shared contract](../ETHERNET_SHARED_EXPERIMENT_CONTRACT.md). The older network procedure and `common/analyze_comparison.py` FAR/FER definitions below are historical/superseded for the final four-system Ethernet comparison. Use `shared.evaluate` with frozen routing-label-policy-v2; no boundary capture consumer is required.
+The Threshold-only baseline is a **deterministic fixed-rule controller** for
+Distributed Multi-Agent Coordination for Self-Healing Data Pipelines. It provides
+a non-LLM comparison condition: the detector and execution layers remain shared,
+while fixed rules replace the proposed multi-agent control plane.
 
-The main design/reference document is [THRESHOLD_BASELINE_SYSTEM.md](THRESHOLD_BASELINE_SYSTEM.md). The [frozen experiment design](../BASELINE_EXPERIMENT_DESIGN.md) governs comparisons; [common utilities](../common/README.md) cover capture, replay, neutral HITL presentation, and analysis.
+The completed formal Ethernet Mode B run is
+`threshold-ethernet-full-20261003-084252`, execution commit
+`c1cdbd70e66e8a70b68d22c2eec539e70515cfdb`, status
+`COMPLETED_UNINTERRUPTED`. See the [permanent result record](results/ETHERNET_RESULTS.md)
+for evidence provenance, [historical runs](HISTORICAL_RUNS.md) for the excluded
+resumed attempt, and [cross-system comparison](../COMPARISON.md).
 
-The authoritative execution procedure is [Run_Threshold_Baseline.md](Run_Threshold_Baseline.md), covering all three nodes, Wi-Fi now and Ethernet later.
+## Architecture and rules
 
-## Prerequisites
+Unchanged Layer 1 on stream-node validates SEG events, calibrates features,
+runs detectors and publishes Fusion incidents; structural schema bypass also
+reaches `anomaly.detected`. The Threshold controller on ai-brain-node consumes
+that queue and publishes to `auto.execute` or `hitl.queue`. Shared Layer 3 on
+gateway-node performs controlled simulated execution or human review and emits
+`outcome.feedback`, which Threshold records for completion accounting.
 
-Run from the repository root with Python 3.10+ and the experiment environment containing `pika` and `prometheus-client`. Tests additionally use the existing gateway's Django dependency. No new dependency family or requirements file is introduced. Record exact installed versions for formal runs.
+There is **no LLM, model inference/retry stage, Chroma/RAG, EMA or adaptive
+learning**. Feedback does not change rules. `attempt.jsonl` is not applicable;
+no empty model-attempt sidecar should be created. Metrics use port 8020.
 
-The baseline never loads Ollama, ChromaDB, or proposed agent runtimes. Its vocabulary reader parses the existing pure contract declaration. No network connections or metrics listeners start on import.
+The first matching rule in [rules.py](rules.py), using the frozen action sets
+and precedence in [rules.json](rules.json), determines the response:
 
-## Broker-free dry run
+| Input, in precedence order | Route and risk |
+|---|---|
+| Unidentifiable | Quarantine; no routing decision |
+| Invalid identifiable input | HITL; no invented risk tier |
+| Structural schema bypass | HITL, HIGH |
+| Compound incident | HITL, HIGH |
+| Schema drift | HITL, HIGH |
+| CPU/memory, error, throughput or authentication incident; HIGH/CRITICAL severity | HITL, HIGH; family intervention action set |
+| Same supported families; LOW/MEDIUM severity | AUTO, LOW; family bounded action set |
+| Unsupported incident | HITL; no invented risk tier |
 
-Use a separate smoke payload JSONL, not captured wrapper JSONL or formal labels:
+There is no confidence gate. These rules operate on detector incident fields;
+they do not consume ground-truth labels. Architecture and implementation details
+remain in [THRESHOLD_BASELINE_SYSTEM.md](THRESHOLD_BASELINE_SYSTEM.md).
+
+## Formal Ethernet methodology
+
+Use [ETHERNET_FULL_RUN.md](ETHERNET_FULL_RUN.md) with the
+[shared Ethernet contract](../ETHERNET_SHARED_EXPERIMENT_CONTRACT.md) and
+[experiment design](../BASELINE_EXPERIMENT_DESIGN.md). This README reports results;
+it does not replace startup, freeze, cleanup, replay, review or archival steps.
+[Run_Threshold_Baseline.md](Run_Threshold_Baseline.md) is the older procedure;
+its legacy analysis definitions are not the final Ethernet scoring contract.
+
+Mode B reuses the frozen 1,950-event source, IDs, order, configuration and labels,
+verified against the approved manifest, on the same three Ethernet nodes at
+replay speed 1. Start with cold Layer 1 and isolated controller/gateway state;
+keep competing controllers and Learning inactive. Preserve controller exports
+and all node-local protocol evidence after complete review and drain.
+
+[Routing-label-policy-v2](../../../layer2/evaluation/ROUTING_LABEL_POLICY.md)
+derives expected routes and autonomous eligibility only from original corpus
+ground-truth fields. NORMAL is excluded from anomaly routing metrics. LOW plus
+`AUTO_RESTART_CONSUMER` denotes expected AUTO; HIGH plus `ESCALATE_TO_HITL`
+denotes expected HITL. This benchmark eligibility is not operational safety
+certification. Use `evaluation.baselines.shared.evaluate` as documented in the
+runbook, without `--attempts`; the older common analyzer has superseded FAR/FER
+definitions for this comparison.
+
+Any application-worker restart after replay begins invalidates a formal run.
+Preserve it, record its status and begin a new cold run with a new RUN_ID.
+Evaluator cleanliness does not prove uninterrupted execution.
+
+## Final Layer 1 and controller results
+
+| Stage | Count |
+|---|---:|
+| Source events | 1,950 |
+| Structurally valid events | 1,850 |
+| Structural schema bypass incidents | 100 |
+| Cold-start/calibration withheld | 323 |
+| Detector-evaluated events, per detector | 1,527 |
+| Fusion-published incidents | 539 |
+| Controller incidents: Fusion + structural bypass | 539 + 100 = 639 |
+
+Of 639 controller decisions, 630 were anomalies and nine were NORMAL. Total
+routes were **168 AUTO / 471 HITL**, with 639 delivery and 639 feedback records,
+zero failure records and zero quarantine records. The nine NORMAL decisions
+were AUTO and are excluded from the following anomaly cross-tab.
+
+| Ground truth | Actual AUTO | Actual HITL | Observed anomaly decisions |
+|---|---:|---:|---:|
+| Expected AUTO | 109 | 131 | 240 |
+| Expected HITL | 50 | 340 | 390 |
+| Total | 159 | 471 | 630 |
+
+## Final metrics and human review
+
+| Metric | Numerator / denominator | Result |
+|---|---:|---:|
+| False autonomy rate (FAR) | 50 / 159 | 31.4465408805% |
+| Routing FER | 131 / 240 | 54.5833333333% |
+| Expected-AUTO controller coverage | 240 / 380 | 63.1578947368% |
+| Expected-AUTO missing before routing | 140 / 380 | 36.8421052632% |
+| Risk accuracy | 449 / 630 | 71.2698412698% |
+| Feedback completion | 639 / 639 | 100% |
+
+HITL finished with **469 APPROVED, 1 REJECTED, 1 MODIFIED and 0 PENDING**.
+The reported final gates were SEG exit 0, drained queues, zero DLQ, 16 required
+Prometheus targets UP, 1 Gbit/s full-duplex links, synchronized clocks, no worker
+restart, `no_detected_record_errors`, and evaluator FAR/FER/coverage agreement.
+
+Gateway metrics, labels, SQLite and protocol/transport records were inspected
+locally. Threshold cross-tab, risk accuracy and final evaluator integrity are
+operator-reported from preserved Node 1/2 evidence; those evaluator files were
+not locally inspected. The [result record](results/ETHERNET_RESULTS.md) specifies
+the scope of corroboration. Missing gateway copies do not mean missing evidence.
+
+## Interpretation and limitations
+
+Routing FER measures escalation among expected-AUTO incidents that reached a
+valid controller decision: 131/240. Expected-AUTO controller coverage is
+240/380; the 140 missing before routing are a separate upstream coverage result.
+Neither 639/1,950 nor 100% feedback completion establishes full detector coverage.
+FAR measures benchmark-ineligible autonomy among labeled anomaly AUTO decisions;
+it does not measure actual service damage or restoration.
+
+Threshold controller processing time is not end-to-end latency. Mode B source
+timestamps do not establish fresh controller-boundary arrival times, and no
+cross-system latency ranking is made here. AUTO actions remain controlled
+simulated execution.
+
+This is one completed run per populated condition, without repeated-run
+uncertainty estimates or a causal attribution claim. Human review and adaptive
+state differ between controllers. The routing translation was finalized
+retrospectively for the completed Proposed Adaptive run, before baseline
+scoring; no prospective blinding is claimed for Proposed. Mode B full-pipeline
+results do not replace Mode A's identical-incident controller comparison.
+
+## Tests and evidence storage
 
 ```bash
-python -m evaluation.baselines.threshold_only.controller \
-  --run-id smoke-001 --output /tmp/threshold-smoke-001 \
-  --dry-run <smoke-payloads.jsonl>
-```
-
-The output directory must not already exist. Dry-run publication is an in-memory stub, recorded as `mode=dry-run`; generated envelopes and timing are test evidence, not actual Layer 3 completions or experiment results. No RabbitMQ or HTTP port is used.
-
-## Live experiment
-
-First preserve prior evidence and isolate/reset the gateway database. Stop Triage, Strategy, Policy, Learning, and any other controllers. Check that the selected gateway is the only active Layer 3 instance. Set broker host/user/password explicitly in the environment; do not commit secrets.
-
-```bash
-ss -ltn '( sport = :8020 )'
-python -m evaluation.baselines.threshold_only.controller \
-  --live --run-id <run-id> --output <new-controller-run-directory> \
-  --network-medium wifi --dataset-sha256 <frozen-input-sha256>
-```
-
-The metrics bind itself also detects a busy port before consuming messages. This single command starts both independent workers and the shared metrics endpoint. Wait for both `fyp_threshold_worker_up` gauges to become 1 before replay. The controller rejects competing Triage/Strategy/Policy consumers; the feedback worker rejects competing Learning consumers. These checks do not replace verifying stale queued publications, gateway ownership, and empty run state.
-
-The service uses exclusive subscriptions to its two input queues without modifying topology. It never creates or purges application queues. Each worker owns its own AMQP connection. Any worker failure stops both workers, retains evidence, and leaves unacknowledged work for reconciliation. Stop with Ctrl-C only after the agreed workload, Layer 3 handling, and feedback are complete. JSONL exports are written at shutdown.
-
-## Mode A and Mode B
-
-Mode A: Layer 1 is stopped. Replay the approved boundary capture using the common utility with the same run ID and a separate replay-output directory. Only fresh replay header timestamps support input-wait and boundary-to-decision metrics.
-
-Mode B: use the unchanged Layer 1 cold procedure and SEG replay from the existing runbook, replacing only the proposed Layer 2 processes with Threshold. Source event timestamps are not fresh controller-boundary publication timestamps, so the baseline leaves those queue-wait metrics unobserved. Do not reset Chroma, EMA, or Ollama; keep them inactive.
-
-## Monitoring
-
-`observability/prometheus.threshold.yml` is a separate template. Reconcile it with the deployed scrape intervals, exporter configuration, authentication, and labels before formal use. It excludes ports 8010–8013. For Mode A, disable `layer1-application`; the dashboard labels those application panels N/A. Preserve the template's shared job names or adjust the new dashboard consistently.
-
-Import the separate Threshold dashboard and select its experiment Prometheus datasource. It uses a datasource variable, not the proposed dashboard's hard-coded UID. Node/detector label names follow source (`detector`, not `model`). RabbitMQ per-queue metrics depend on deployed exporter settings; verify them rather than treating missing data as zero. No Grafana or Prometheus service is installed/restarted by these files.
-
-## Tests
-
-```bash
+python -B -m unittest discover -s evaluation/baselines/shared/tests -v
 python -B -m unittest discover -s evaluation/baselines/threshold_only/tests -v
 ```
 
-Tests use temporary storage and mock broker/side effects. Existing Layer 3 function bodies are exercised without import-time metrics servers or live consumer startup. The neutral template is rendered locally.
-
-## Cold state and repetitions
-
-Archive old records; stop competing controllers and Learning; reconcile/drain relevant queues; initialize an isolated Layer 3 database and a new run directory; start the selected gateway and Threshold workers; verify consumers/metrics; then replay. Do not alter original event IDs. Reusing IDs against old HITL state will suppress incidents because its database key is unique.
-
-For Mode B additionally reset Layer 1 as prescribed by the frozen runbook. Nothing in this baseline automatically resets any shared state.
-
-Prefer full captured Mode A populations. If compute cost requires it, the approved candidate protocol is one full run per architecture plus three repetitions on a frozen stratified subset, in balanced order:
-
-1. Threshold → Single-Agent → Proposed.
-2. Proposed → Threshold → Single-Agent.
-3. Single-Agent → Proposed → Threshold.
-
-Finalize subset, counts, human review, cutoffs, and rerun criteria before formal execution. No baseline results are claimed by the implementation.
-
-## Network provenance
-
-Live runs require `--network-medium wifi|ethernet`. It is recorded only in `run.json`, alongside hostname, Git commit, rule version/checksum, creation time and optional `--dataset-sha256`. It never enters routing logic. Formal runs should supply and independently verify the dataset digest. Use hostnames resolving to the active medium; keep the same application revision and monitoring dashboard. Results use `results/threshold_only/<wifi|ethernet>/<run_id>/controller`, with separate replay evidence. The existing results ignore rule covers both conditions.
+The ignored `evaluation/baselines/results/` tree holds local controller evidence;
+`experiment_runs/` contains node-local run evidence. The small tracked
+[results document](results/ETHERNET_RESULTS.md) under this baseline is curated
+separately. Raw JSONL streams, journals, SQLite backups and protected configuration
+remain local; they are not copied into the published documentation.
