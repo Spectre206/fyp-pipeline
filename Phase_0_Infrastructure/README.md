@@ -20,7 +20,7 @@
 
 ## Historical System Architecture
 
-![High Level System Architecture](static/system_architecure.png)
+![High Level System Architecture](static/system_architecture.png)
 
 ---
 
