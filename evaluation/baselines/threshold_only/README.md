@@ -106,33 +106,40 @@ were AUTO and are excluded from the following anomaly cross-tab.
 | Feedback completion | 639 / 639 | 100% |
 
 HITL finished with **469 APPROVED, 1 REJECTED, 1 MODIFIED and 0 PENDING**.
-The reported final gates were SEG exit 0, drained queues, zero DLQ, 16 required
-Prometheus targets UP, 1 Gbit/s full-duplex links, synchronized clocks, no worker
+The completed formal closeout evidence records SEG exit 0, drained queues, zero
+DLQ, 16 required Prometheus targets UP, 1 Gbit/s full-duplex links, synchronized clocks, no worker
 restart, `no_detected_record_errors`, and evaluator FAR/FER/coverage agreement.
 
-Gateway metrics, labels, SQLite and protocol/transport records were inspected
-locally. Threshold cross-tab, risk accuracy and final evaluator integrity are
-operator-reported from preserved Node 1/2 evidence; those evaluator files were
-not locally inspected. The [result record](results/ETHERNET_RESULTS.md) specifies
-the scope of corroboration. Missing gateway copies do not mean missing evidence.
+Formal closeout verified the preserved node-local Node 1/2 controller/evaluator
+evidence, including the Threshold cross-tab, risk accuracy and final evaluator
+integrity. Gateway metrics, labels, SQLite and protocol/transport records were
+inspected locally. This gateway-only documentation edit did not rerun or
+regenerate results, or independently reopen all native Node 1/2 artifacts, which
+are not available in the local gateway copy. The
+[result record](results/ETHERNET_RESULTS.md) specifies the scope of corroboration.
+Missing gateway copies do not negate formal closeout verification.
 
 ## Interpretation and limitations
 
-Routing FER measures escalation among expected-AUTO incidents that reached a
-valid controller decision: 131/240. Expected-AUTO controller coverage is
-240/380; the 140 missing before routing are a separate upstream coverage result.
+Routing FER is expected-AUTO incidents routed HITL divided by expected-AUTO
+incidents with a valid AUTO/HITL controller decision: 131/240. Expected-AUTO
+controller coverage is 240/380; the 140 missing before routing are a separate upstream coverage result.
 Neither 639/1,950 nor 100% feedback completion establishes full detector coverage.
-FAR measures benchmark-ineligible autonomy among labeled anomaly AUTO decisions;
-it does not measure actual service damage or restoration.
+FAR is actual AUTO decisions on incidents labeled `safe_to_auto=false` divided
+by actual AUTO decisions having an authoritative nonblank `safe_to_auto` label.
+Of 168 total AUTO decisions, the nine NORMAL AUTO decisions are excluded from
+anomaly routing evaluation, leaving a denominator of 159 and an unsafe/ineligible
+AUTO numerator of 50: FAR = 50/159. It does not measure actual service damage or
+restoration.
 
 Threshold controller processing time is not end-to-end latency. Mode B source
 timestamps do not establish fresh controller-boundary arrival times, and no
 cross-system latency ranking is made here. AUTO actions remain controlled
 simulated execution.
 
-This is one completed run per populated condition, without repeated-run
-uncertainty estimates or a causal attribution claim. Human review and adaptive
-state differ between controllers. The routing translation was finalized
+This Threshold condition has one completed formal Ethernet run; repeated-run
+uncertainty is therefore not estimated. No causal attribution is claimed. Human
+review and adaptive state differ between controllers. The routing translation was finalized
 retrospectively for the completed Proposed Adaptive run, before baseline
 scoring; no prospective blinding is claimed for Proposed. Mode B full-pipeline
 results do not replace Mode A's identical-incident controller comparison.

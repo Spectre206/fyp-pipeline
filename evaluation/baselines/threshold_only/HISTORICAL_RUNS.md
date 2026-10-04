@@ -1,8 +1,11 @@
 # Threshold-only Ethernet run history
 
-This record preserves both execution attempts. Status and interruption history
-are operator-reported unless local corroboration is explicitly noted. An offline
-evaluator assesses record integrity; it cannot certify upstream process continuity.
+This record preserves both execution attempts and their distinct protocol
+statuses. Formal closeout verified the preserved node-local evidence for the
+completed replacement run. This gateway-only documentation edit did not rerun
+or regenerate results, or independently reopen all native Node 1/2 artifacts,
+which are not locally available. An offline evaluator assesses record integrity;
+it cannot certify upstream process continuity.
 
 | Run ID | Protocol status | Formal comparison |
 |---|---|---|
@@ -30,7 +33,7 @@ Run `threshold-ethernet-full-20261003-084252` used execution revision
 `c1cdbd70e66e8a70b68d22c2eec539e70515cfdb` on
 `experiment/threshold-baseline`, Ethernet Mode B, replay speed 1.
 
-The operator's final evidence report records successful replay (SEG exit 0), no
+The completed formal closeout evidence records successful replay (SEG exit 0), no
 application-worker restart after the replay marker, zero ready/unacknowledged
 messages in experiment queues, zero DLQ, zero pending HITL, 639/639 controller
 feedback, and successful evaluation with `no_detected_record_errors` and
@@ -38,9 +41,11 @@ FAR/FER/coverage agreement. Its formal status is `COMPLETED_UNINTERRUPTED`.
 
 The gateway protocol log locally corroborates the completed status at that
 revision; gateway metrics and SQLite corroborate feedback and HITL counts.
-Other-node continuity and the final Threshold evaluator report remain attributed
-to the supplied node-local evidence summary. Formal eligibility rests on the
-reported full protocol evidence, not merely clean controller exports.
+Formal closeout also verified the preserved Node 1/2 controller/evaluator and
+protocol evidence; those native artifacts were not independently reopened by
+this gateway-only edit. Formal eligibility rests on that verified full protocol
+evidence, not merely clean controller exports. This verification of the completed
+replacement does not rehabilitate the earlier resumed run.
 
 See the [final result record](results/ETHERNET_RESULTS.md) and
 [shared comparison](../COMPARISON.md). A later worker failure requires preservation

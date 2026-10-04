@@ -11,11 +11,12 @@
 | Condition | Threshold-only, Ethernet, Mode B full pipeline |
 | Replay speed | 1 |
 
-The operator supplied the final Node 1/2 reconciliation and evaluator results.
-The controller exports and Threshold evaluator summary were not available in the
-local gateway copy during this documentation audit. Their cross-tab, risk score,
-failure/quarantine counts and evaluator agreement are therefore attributed to
-that supplied final report, not presented as independently recomputed here.
+Formal closeout verified the preserved node-local Node 1/2 reconciliation,
+controller exports and evaluator results, including the cross-tab, risk score,
+failure/quarantine counts and evaluator agreement. Those native artifacts are
+not available in the local gateway copy for this documentation audit. This
+gateway-only edit did not rerun or regenerate results, or independently reopen
+all Node 1/2-native artifacts; it retains the completed formal closeout evidence.
 
 Locally inspected gateway evidence corroborates the 1,950/1,850/100 Validator
 counts, 539 Fusion publications, 639 controller deliveries/decisions, 168 AUTO,
@@ -24,8 +25,8 @@ the routing CSV contains 1,950 labels (1,000 NORMAL, 380 expected AUTO and 570
 expected HITL). The gateway protocol log records `COMPLETED_UNINTERRUPTED` at the
 execution revision. Its target snapshot shows all 16 required Threshold targets
 UP; its link and clock records confirm gateway 1000 Mb/s full duplex and clock
-synchronization. These local checks agree with the supplied results. They do not
-independently prove uninterrupted execution on the other two nodes.
+synchronization. These local checks agree with the completed formal closeout
+evidence. They do not independently prove uninterrupted execution on the other two nodes.
 
 Raw evidence remains node-local under `experiment_runs/<run_id>/` and the
 controller result directory specified by the [runbook](../ETHERNET_FULL_RUN.md).
@@ -72,7 +73,11 @@ schema bypass incidents reach the controller without that detector/Fusion path.
 | Total | 159 | 471 | 630 |
 
 All nine NORMAL decisions were AUTO; they are excluded from anomaly FAR/FER.
-Thus FAR uses 159 labeled anomaly AUTO decisions, not all 168 AUTO decisions.
+FAR is actual AUTO decisions on incidents labeled `safe_to_auto=false` divided
+by actual AUTO decisions having an authoritative nonblank `safe_to_auto` label.
+Of 168 total AUTO decisions, excluding the nine NORMAL AUTO decisions leaves
+an authoritative anomaly AUTO denominator of 159. The unsafe/ineligible AUTO
+numerator is 50, giving FAR = 50/159.
 
 ## Final metrics
 
@@ -85,10 +90,11 @@ Thus FAR uses 159 labeled anomaly AUTO decisions, not all 168 AUTO decisions.
 | Risk accuracy | 449 / 630 | 71.2698412698% |
 | Feedback completion | 639 / 639 | 100% |
 
-Fractions are authoritative; displayed percentages are rounded. Routing FER
-uses the 240 expected-AUTO anomalies with decisions, not all 380 corpus-eligible
-anomalies. The remaining 140 are missing before routing and are reported
-separately. Feedback completion covers the 639 observed decisions, not all source
+Fractions are authoritative; displayed percentages are rounded. Routing FER is
+expected-AUTO incidents routed HITL divided by expected-AUTO incidents with a
+valid AUTO/HITL controller decision: 131/240. Its denominator is the 240 such
+incidents, not all 380 corpus-eligible anomalies. The remaining 140 are missing
+before routing and are reported separately. Feedback completion covers the 639 observed decisions, not all source
 events. Definitions follow the [shared contract](../../ETHERNET_SHARED_EXPERIMENT_CONTRACT.md).
 
 ## HITL and run integrity
@@ -100,13 +106,13 @@ events. Definitions follow the [shared contract](../../ETHERNET_SHARED_EXPERIMEN
 | MODIFIED | 1 |
 | PENDING | 0 |
 
-The final operator report records SEG exit 0; all experiment queues at zero ready
-and zero unacknowledged; `dead.letters` zero; all three nodes at 1000 Mb/s full
+The completed formal closeout evidence records SEG exit 0; all experiment queues
+at zero ready and zero unacknowledged; `dead.letters` zero; all three nodes at 1000 Mb/s full
 duplex with synchronized clocks; and no application-worker restart after replay
 began. It records evaluator `integrity_status=no_detected_record_errors` and
 FAR/FER/coverage agreement `true`. Gateway checks are scoped above. Final snapshots
 and clean controller exports alone cannot establish an uninterrupted run.
 
 This run is included in the [formal comparison](../../COMPARISON.md) on the
-reported completed protocol evidence. The earlier resumed execution is excluded
-and retained in [historical runs](../HISTORICAL_RUNS.md).
+verified formal closeout protocol evidence. The earlier resumed execution is
+excluded and retained in [historical runs](../HISTORICAL_RUNS.md).
