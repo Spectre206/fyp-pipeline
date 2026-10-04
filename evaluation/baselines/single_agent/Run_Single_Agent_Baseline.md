@@ -1,6 +1,9 @@
 # Run the Single-Agent Baseline
 
-Authoritative operational procedure for the Single-Agent comparative baseline. Wi-Fi is the current formal condition; Ethernet reuses this procedure and application commit after changing connectivity/hostname resolution and network metadata. This runbook is readiness documentation, not evidence of a completed live or formal run.
+Mode A and legacy operational reference. The current formal Ethernet Mode B
+procedure is [ETHERNET_FULL_RUN.md](ETHERNET_FULL_RUN.md), which supersedes the
+network, scoring and lifecycle instructions here for that condition. This file
+is readiness documentation, not evidence of a completed run.
 
 ## 1. Freeze and synchronize the revision
 
@@ -165,11 +168,11 @@ curl --fail -s http://localhost:8030/metrics | grep fyp_single_agent_worker_up
 curl --fail http://ai-brain-node:8030/metrics
 ```
 
-Both controller and feedback gauges must be 1. Use the same warmup/residency protocol for Proposed Strategy in the later matched comparison. Keep load-duration telemetry per attempt; a change may indicate reload overhead but is not a calibrated reload detector. Do not mix warm and cold runs silently.
+Both controller and feedback gauges must be 1. For future directly matched LLM timing comparisons, freeze a common warmup/residency protocol. The completed Proposed Adaptive Ethernet run had no matching dedicated warmup; Single-Agent retains its existing warmup and discloses the difference. Keep load-duration telemetry per attempt; a change may indicate reload overhead but is not a calibrated reload detector. Do not mix warm and cold runs silently.
 
 ## 7. Prometheus and Grafana
 
-Reconcile `observability/prometheus.single_agent.yml` with the live gateway config; the historical tracked Prometheus file is empty. Preserve actual exporters/authentication and use comparable scrape intervals across conditions. The template uses 5 seconds and job `fyp-single-agent-baseline`, target `ai-brain-node:8030`.
+For legacy deployments only, reconcile `observability/prometheus.single_agent.yml` with the live gateway config; the historical tracked Prometheus file is empty. Preserve actual exporters/authentication and use comparable scrape intervals across conditions. Formal Ethernet instead uses `deployment/ethernet/prometheus.ethernet.yml`, preserving its intervals and hostname labels; do not install the legacy template over it. The legacy template uses 5 seconds and job `fyp-single-agent-baseline`, target `ai-brain-node:8030`.
 
 After a reviewed configuration change:
 
@@ -224,9 +227,17 @@ Same bytes, IDs, order, routing keys and schedule across controllers. Replay ref
 
 ## 9. Mode B — secondary full pipeline
 
-Use unchanged SEG → Layer 1 → Single-Agent → shared Layer 3. Follow only [Full_Rerun.md](../../../Full_Rerun.md)'s Phase 0 Node 1 Feature Store/output cleanup, Phase 1 Layer 1 startup and frozen SEG corpus/replay procedure. Do not start its Phase 2 Proposed agents or use its Layer 2 analyzer. Set the same logical RUN_ID and node-local Layer 1 run variables. Freeze corpus/checksum/configuration/arrival speed.
+Follow [ETHERNET_FULL_RUN.md](ETHERNET_FULL_RUN.md) end to end for the formal
+Ethernet run: unchanged SEG/Layer 1, Single-Agent and shared Layer 3, frozen source
+and routing-label-policy-v2, replay speed 1 and fresh cold state. No Proposed
+agents, Chroma/EMA reset or competing boundary-capture consumer is used.
 
-Start SEG after sections 4–7 pass. Record the actual Layer 1 incident population. Do not assume it matches Mode A or a historical total. Preserve Fusion and structural-publication evidence without adding a competing capture consumer. The common analyzer currently expects a verified boundary capture; conversion of independent Mode B population evidence is a separate required step before comparative quality scoring. Mode B can run and journal decisions now, but do not substitute controller-received IDs or an unrelated Mode A capture as its independent denominator.
+Use `evaluation.baselines.shared.evaluate` directly with the full frozen
+`labels_routing.csv` and native journal exports, including `--attempts`. It joins
+by event_id without a Mode A capture or conversion. NORMAL is excluded from
+FAR/routing FER. Routing FER is conditional on expected-AUTO decisions; missing
+before routing is a separate corpus-coverage metric. Preserve actual Layer 1
+population evidence and explain calibration/Fusion/bypass differences.
 
 ## 10. Human review and completion
 
@@ -240,7 +251,7 @@ Reconcile before shutdown:
 - Ready/unacknowledged counts at zero; DLQ empty or documented failures.
 - Failures/quarantine, replay completed marker/count, both worker gauges and Prometheus target health.
 
-Keep incomplete/failed runs and exclusion reasons. Model invalidity is not a reason to rerun a condition selectively. During operation SQLite is authoritative; JSONL appears at shutdown. Inspect evidence read-only if needed.
+Keep incomplete/failed runs and exclusion reasons. Any application worker failure/restart after formal replay starts invalidates the RUN_ID; preserve it and use a new cold run, never same-ID resume. Review HITL without consulting expected_route, safe_to_auto or expected_risk; do not force approval percentages. Model invalidity is not a reason to rerun a condition selectively. During operation SQLite is authoritative; JSONL appears at shutdown. Inspect evidence read-only if needed.
 
 ## 11. Shutdown and archive
 
@@ -260,7 +271,7 @@ After input stops and agreed completion gates pass, save final metrics/queue sna
 
 Replay produces its own run manifest/publication log/completion marker; capture has exact dataset/manifest. Preserve per-node commit/dependencies, CPU/network/clock state, database, checksums and monitoring exports in backed-up experiment storage. Generated results are ignored by Git. Commit reviewed code/docs/templates only, not runtime dumps, secrets or databases.
 
-## 12. Analyze Mode A
+## 12. Legacy Mode A analyzer (not authoritative for formal Ethernet Mode B)
 
 ```bash
 python -m evaluation.baselines.common.analyze_comparison \
@@ -272,7 +283,7 @@ python -m evaluation.baselines.common.analyze_comparison \
   --labels <independently-adjudicated-labels.jsonl> --expect-hitl-feedback
 ```
 
-Save output to a new analysis artifact. Labels are optional: omit them to inspect completeness/workload without fabricating quality scores. Zero denominators are not computable. Missing and ambiguous records remain visible; interpret raw recommendations separately from final fallback routes. Consult [common README](../common/README.md) for denominators, action scoring and evidence scope.
+This legacy analyzer has different FAR/FER denominators and must not supply the final Ethernet comparison scores. Save output to a new analysis artifact. Labels are optional: omit them to inspect completeness/workload without fabricating quality scores. Zero denominators are not computable. Missing and ambiguous records remain visible; interpret raw recommendations separately from final fallback routes. Consult [common README](../common/README.md) for denominators, action scoring and evidence scope.
 
 ## 13. Wi-Fi versus Ethernet
 

@@ -1,0 +1,114 @@
+# Ethernet deployment template; manually install only after review.
+# Derived from captured gateway /etc/prometheus/prometheus.yml on 2026-09-24.
+# Preserve logical instances while changing remote scrape destinations.
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+scrape_configs:
+- job_name: fyp-cluster
+  scrape_interval: 5s
+  scrape_timeout: 5s
+  static_configs:
+  - targets:
+    - 10.10.10.11:9100
+    labels:
+      instance: stream-node:9100
+  - targets:
+    - 10.10.10.12:9100
+    labels:
+      instance: ai-brain-node:9100
+  - targets:
+    - 10.10.10.13:9100
+    labels:
+      instance: gateway-node:9100
+- job_name: fyp-layer1
+  scrape_interval: 5s
+  static_configs:
+  - targets:
+    - 10.10.10.11:8002
+    labels:
+      instance: stream-node:8002
+  - targets:
+    - 10.10.10.11:8003
+    labels:
+      instance: stream-node:8003
+  - targets:
+    - 10.10.10.11:8004
+    labels:
+      instance: stream-node:8004
+  - targets:
+    - 10.10.10.11:8005
+    labels:
+      instance: stream-node:8005
+  - targets:
+    - 10.10.10.11:8006
+    labels:
+      instance: stream-node:8006
+  - targets:
+    - 10.10.10.11:8007
+    labels:
+      instance: stream-node:8007
+  - targets:
+    - 10.10.10.11:8008
+    labels:
+      instance: stream-node:8008
+- job_name: fyp-agent-pipeline
+  scrape_interval: 5s
+  static_configs:
+  - targets:
+    - 10.10.10.12:8010
+    labels:
+      instance: ai-brain-node:8010
+  - targets:
+    - 10.10.10.12:8011
+    labels:
+      instance: ai-brain-node:8011
+  - targets:
+    - 10.10.10.12:8012
+    labels:
+      instance: ai-brain-node:8012
+  - targets:
+    - 10.10.10.12:8013
+    labels:
+      instance: ai-brain-node:8013
+- job_name: fyp-threshold-baseline
+  scrape_interval: 5s
+  static_configs:
+  - targets:
+    - 10.10.10.12:8020
+    labels:
+      instance: ai-brain-node:8020
+- job_name: prometheus
+  static_configs:
+  - targets:
+    - localhost:9090
+- job_name: node
+  static_configs:
+  - targets:
+    - localhost:9100
+- job_name: rabbitmq
+  static_configs:
+  - targets:
+    - 10.10.10.11:15692
+    labels:
+      instance: stream-node:15692
+- job_name: fyp-layer3-autoexec
+  static_configs:
+  - targets:
+    - 10.10.10.13:8014
+    labels:
+      instance: gateway-node:8014
+- job_name: fyp-layer3-hitl
+  scrape_interval: 5s
+  static_configs:
+  - targets:
+    - 10.10.10.13:8000
+    labels:
+      instance: gateway-node:8000
+- job_name: fyp-single-agent-baseline
+  scrape_interval: 5s
+  static_configs:
+  - targets:
+    - 10.10.10.12:8030
+    labels:
+      instance: ai-brain-node:8030

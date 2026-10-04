@@ -1,3 +1,5 @@
+# Legacy standalone template. Formal Ethernet Mode B uses deployment/ethernet/prometheus.ethernet.yml.
+# Do not install this file over the shared Ethernet configuration.
 # TEMPLATE: reconcile intervals, exporters, authentication and labels with live configuration.
 # Select this separate config only for a Single-Agent experiment; do not overwrite proposed config.
 # Mode A: remove/disable layer1-application; its panels are intentionally not applicable.
