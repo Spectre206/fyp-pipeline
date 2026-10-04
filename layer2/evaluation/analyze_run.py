@@ -116,44 +116,68 @@ def risk_accuracy(strategy, labels):
 
 
 def automation_metrics(policy, labels):
-    has_safe_to_auto = any(
-        row.get("safe_to_auto", "").strip() in {"true", "false"}
-        for row in labels.values()
+    # Historical files without ground_truth_label remain supported; explicit
+    # NORMAL rows are excluded even if someone populated their routing fields.
+    labels = {event_id: row for event_id, row in labels.items()
+              if row.get("ground_truth_label") != "NORMAL"}
+    comparable = [
+        event_id for event_id, row in policy.items()
+        if row.get("routing_decision") == "AUTO" and event_id in labels
+        and (labels[event_id].get("safe_to_auto") or "").strip() in {"true", "false"}
+    ]
+    unsafe = sum(labels[event_id]["safe_to_auto"].strip() == "false" for event_id in comparable)
+    far = {
+        "status": "computed" if comparable else "not_computable",
+        "definition": "AUTO decisions labeled safe_to_auto=false / AUTO decisions with safe_to_auto labels (excluding NORMAL)",
+        "labeled_auto_decisions": len(comparable),
+        "unsafe_auto_decisions": unsafe,
+        "numerator": unsafe, "denominator": len(comparable),
+        "value": rate(unsafe, len(comparable)),
+    }
+    if not comparable:
+        far["reason"] = "no actual AUTO decisions with authoritative safety labels (zero denominator)"
+    eligible = {
+        event_id for event_id, row in labels.items()
+        if row.get("expected_route") == "AUTO"
+    }
+    false_escalations = sum(
+        policy.get(event_id, {}).get("routing_decision") == "HITL" for event_id in eligible
     )
-    has_expected_route = any(
-        row.get("expected_route") in {"AUTO", "HITL"} for row in labels.values()
-    )
-    if not has_safe_to_auto:
-        far = unavailable("requires authoritative safe_to_auto ground truth for each AUTO decision")
-    else:
-        comparable = [
-            (event_id, row) for event_id, row in policy.items()
-            if row.get("routing_decision") == "AUTO" and event_id in labels
-            and labels[event_id].get("safe_to_auto", "").strip() in {"true", "false"}
-        ]
-        unsafe = sum(labels[event_id]["safe_to_auto"].strip() == "false" for event_id, _ in comparable)
-        far = {
-            "status": "computed",
-            "definition": "AUTO decisions labeled safe_to_auto=false / AUTO decisions with safe_to_auto labels",
-            "labeled_auto_decisions": len(comparable),
-            "unsafe_auto_decisions": unsafe,
-            "value": rate(unsafe, len(comparable)),
+    with_policy = {event_id for event_id in eligible
+                   if policy.get(event_id, {}).get("routing_decision") in {"AUTO", "HITL"}}
+    missing = eligible - set(policy)
+    def coverage_metric(numerator, definition):
+        result = {
+            "status": "computed" if eligible else "not_computable",
+            "definition": definition,
+            "numerator": numerator, "denominator": len(eligible),
+            "value": rate(numerator, len(eligible)),
         }
-    if not has_expected_route:
-        fer = unavailable("requires authoritative expected_route ground truth to identify AUTO-eligible HITL decisions")
-    else:
-        eligible = [
-            (event_id, row) for event_id, row in policy.items()
-            if event_id in labels and labels[event_id].get("expected_route") == "AUTO"
-        ]
-        false_escalations = sum(row.get("routing_decision") == "HITL" for _, row in eligible)
-        fer = {
-            "status": "computed",
-            "definition": "HITL decisions with expected_route=AUTO / decisions with expected_route=AUTO",
-            "auto_eligible_decisions": len(eligible),
-            "false_escalations": false_escalations,
-            "value": rate(false_escalations, len(eligible)),
-        }
+        if not eligible:
+            result["reason"] = "no authoritative expected-AUTO corpus incidents (zero denominator)"
+        return result
+
+    fer = {
+        "status": "computed" if with_policy else "not_computable",
+        "definition": "actual HITL with expected_route=AUTO / expected-AUTO incidents with actual AUTO/HITL Policy decision (excluding NORMAL)",
+        "auto_eligible_decisions": len(with_policy),
+        "expected_auto_total_corpus": len(eligible),
+        "expected_auto_with_policy": len(with_policy),
+        "expected_auto_missing_policy": len(missing),
+        "expected_auto_invalid_policy": len(eligible - missing - with_policy),
+        "false_escalations": false_escalations,
+        "numerator": false_escalations, "denominator": len(with_policy),
+        "eligible_without_policy": len(missing),
+        "eligible_without_valid_route": len(eligible - with_policy),
+        "value": rate(false_escalations, len(with_policy)),
+        "expected_auto_policy_coverage": coverage_metric(
+            len(with_policy), "expected AUTO with actual AUTO/HITL Policy decision / all authoritative expected AUTO"),
+        "expected_auto_missing_before_policy": coverage_metric(
+            len(missing), "expected AUTO without Policy record / all authoritative expected AUTO"),
+    }
+    if not with_policy:
+        fer["reason"] = "no expected-AUTO incidents with an actual Policy routing decision (zero denominator)"
+
     return far, fer
 
 

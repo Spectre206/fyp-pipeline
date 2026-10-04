@@ -2,9 +2,10 @@
 import json
 import sys
 import os
+from pathlib import Path
 
 # Add the layer3 directory to sys.path
-sys.path.insert(0, "/home/spectre/fyp-pipeline/layer3")
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from django.shortcuts import render, redirect
 from django.http import HttpResponse

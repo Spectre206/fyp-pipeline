@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html>
+<head><title>HITL Dashboard</title></head>
+<body>
+<h1>Pending Incidents</h1>
+<ul>
+{% for inc in incidents %}
+  <li>
+    <a href="{% url 'detail' inc.id %}">{{ inc.event_id }}</a> — arrived {{ inc.arrived_at }}
+  </li>
+{% empty %}
+  <li>No pending incidents.</li>
+{% endfor %}
+</ul>
+</body>
+</html>

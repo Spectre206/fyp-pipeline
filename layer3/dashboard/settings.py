@@ -6,7 +6,7 @@ BASE_DIR = Path(__file__).resolve().parent
 
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "evaluation-secret-key-not-for-production")
 DEBUG = True
-ALLOWED_HOSTS = ["192.168.18.103", "gateway-node", "localhost", "127.0.0.1"]
+ALLOWED_HOSTS = ["192.168.18.103", "10.10.10.13", "gateway-node", "localhost", "127.0.0.1"]
 
 INSTALLED_APPS = [
     "django.contrib.staticfiles",

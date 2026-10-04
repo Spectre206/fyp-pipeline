@@ -763,9 +763,28 @@ overall, 170/170 for AUTO, and 469/469 for HITL.
 | LOW | LOW | 177 |
 
 The remaining nine incidents are not assigned fabricated labels. False
-Automation Rate and False Escalation Rate are **not computable** for the final
+Automation Rate and False Escalation Rate are **not computable** for the historical Wi-Fi final
 run because authoritative `safe_to_auto` and `expected_route` values were not
 provided. Risk-tier labels are not substitutes for either of those fields.
+
+**Offline evaluation amendment, 2026-10-02:** The original routing fields were
+unassigned. An initial retrospective annotation used mismatched runtime action
+identifiers and has been archived. The explicit
+[routing-label-policy-v2](../evaluation/ROUTING_LABEL_POLICY.md) now translates
+pre-existing LOW/autonomous and HIGH/escalation corpus categories into benchmark
+routing labels. It does not certify real-world operational safety. For the
+completed Proposed adaptive-EMA Ethernet run, offline FAR is **38/174 = 21.84%**
+and final routing FER **104/240 = 43.33%**. Expected-AUTO Policy Coverage is
+**240/380 = 63.16%**, with **140/380 = 36.84%** missing before Policy.
+The initial v2 FER used the full corpus denominator (104/380 = 27.37%,
+**superseded**). Review identified dilution by missing Policy cases; final FER
+uses only eligible incidents with actual Policy decisions and reports upstream
+coverage separately. The v2 labels and FAR did not change.
+The policy was finalized after that run's results were known and is frozen
+before Threshold-Only, Single-Agent and fixed-EMA/history-only comparisons.
+No runtime behavior or historical Wi-Fi results changed; labels use no system
+outputs. See the policy for source evidence, coverage and preserved history.
+
 
 | Final observed Learning state | Value |
 |---|---:|
