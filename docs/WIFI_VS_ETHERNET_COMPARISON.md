@@ -232,17 +232,15 @@ system. Repeated, balanced Wi-Fi/Ethernet runs with frozen review, warmup and
 runtime settings would be needed for stronger causal inference. No overall
 winner is assigned.
 
-## 11. Next experiments
+## 11. Completed Ethernet controller comparison
 
-The next planned full Ethernet evaluations are **Threshold-Only** and
-**Single-Agent**. Both must reuse the same frozen 1,950-event dataset, final
-labels, event IDs/order, replay speed and comparable cold-state procedure, with
-controller-specific semantics preserved. Their results are not yet included.
-After those runs, a separate four-condition comparison is planned: Proposed
-Wi-Fi, Proposed Ethernet, Threshold-Only Ethernet and Single-Agent Ethernet.
-It must distinguish architecture effects from network-medium differences.
+The final formal Ethernet Mode B comparison now contains exactly Proposed
+Adaptive, Threshold-only and Single-Agent. See the
+[authoritative comparison](../evaluation/baselines/COMPARISON.md) for completed
+results. The earlier plan to combine Wi-Fi and controller conditions in one
+future comparison is superseded; this document retains the historical
+Proposed-only transport comparison and its original numerical results.
 
-These are full-pipeline comparisons (Mode B in the
-[Baseline Experiment Design](../evaluation/baselines/BASELINE_EXPERIMENT_DESIGN.md)).
-They do not replace its primary Mode A identical-incident control-plane study;
-that requires its own captured incident dataset and frozen analysis protocol.
+Architecture comparisons and network-medium observations must remain distinct.
+Mode B results do not replace the primary Mode A identical-incident study in the
+[Baseline Experiment Design](../evaluation/baselines/BASELINE_EXPERIMENT_DESIGN.md).

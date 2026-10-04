@@ -1,8 +1,8 @@
 # Run the Threshold-Only Baseline
 
-**Ethernet Mode B:** use [ETHERNET_FULL_RUN.md](ETHERNET_FULL_RUN.md) and the [shared contract](../ETHERNET_SHARED_EXPERIMENT_CONTRACT.md). The older network procedure and `common/analyze_comparison.py` FAR/FER definitions below are historical/superseded for the final four-system Ethernet comparison. Use `shared.evaluate` with frozen routing-label-policy-v2; no boundary capture consumer is required.
+**Ethernet Mode B:** use [ETHERNET_FULL_RUN.md](ETHERNET_FULL_RUN.md) and the [shared contract](../ETHERNET_SHARED_EXPERIMENT_CONTRACT.md). The older network procedure and `common/analyze_comparison.py` FAR/FER definitions below are historical/superseded for the final three-condition Ethernet comparison. Use `shared.evaluate` with frozen routing-label-policy-v2; no boundary capture consumer is required.
 
-This is the authoritative operational runbook for Threshold comparative experiments. The current formal condition is **Wi-Fi**. Ethernet later uses the same application commit, rules and procedure, with different connectivity/hostname resolution and `--network-medium ethernet`. This document prepares execution; it does not report formal results.
+This is the authoritative operational runbook for Threshold comparative experiments. The formal Ethernet condition has been completed; its authoritative result is recorded in [results/ETHERNET_RESULTS.md](results/ETHERNET_RESULTS.md). This document preserves the execution procedure and does not itself serve as the authoritative result record.
 
 ## 1. Freeze the revision and node roles
 

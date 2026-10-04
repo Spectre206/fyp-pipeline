@@ -1,14 +1,14 @@
 # Shared Ethernet experiment and offline evaluation contract
 
-Status: shared scaffolding, 2026-10-03. This does not migrate or authorize execution
-of either baseline. Reference branch `feature/ethernet-migration`, pre-change HEAD
+Status: final shared contract for the three completed formal Ethernet conditions.
+This document does not itself authorize a new execution. Historical scaffolding
+reference: branch `feature/ethernet-migration`, pre-change HEAD
 `3212732f86c4b398453389d0abed2b016b59b4d6`; completed Proposed adaptive-EMA run
 `ethernet_cold_20261002_023108` executed at
 `c595459ce64a479a2bf725df2fbffb7142d6f66b`, deployment base
 `c0ad6be9c84955240cf4499d586ad46b1d579ecc`.
 
-Applies to Threshold-Only, Single-Agent, Proposed adaptive EMA and Proposed fixed
-EMA/history-only. Preserve architectural differences. This Mode B contract is
+Applies to exactly Proposed Adaptive, Threshold-only and Single-Agent. Preserve architectural differences. This Mode B contract is
 not a substitute for the primary Mode A identical-incident comparison.
 
 ## Frozen inputs and metrics
@@ -28,11 +28,12 @@ from controller outcomes or invent acceptable-action annotations.
 
 Final shared definitions (join by event_id; exclude NORMAL/unlabeled routing):
 
-- FAR = actual AUTO labeled false / actual AUTO with authoritative eligibility.
-- Routing FER = expected AUTO routed HITL / expected AUTO with an actual valid
-  controller routing decision.
+- FAR = actual AUTO with `safe_to_auto=false` / actual AUTO with an authoritative
+  nonblank `safe_to_auto` label.
+- Routing FER = expected AUTO routed HITL / expected AUTO with a valid AUTO/HITL
+  controller decision.
 - Expected-AUTO Controller Coverage = expected AUTO with a valid decision / all
-  authoritative expected-AUTO corpus IDs.
+  380 authoritative expected-AUTO corpus IDs.
 - Expected-AUTO Missing Before Routing = expected AUTO without a scoreable
   decision / all authoritative expected-AUTO corpus IDs.
 
@@ -56,7 +57,7 @@ Audited Threshold `931450a6ac82e280134e1b5145d1c104608b15df` and Single-Agent
 - Existing `common/analyze_comparison.py` expects JSONL `incident_id`,
   `expected_route`, boolean `safe_to_auto`, `expected_risk`, `acceptable_actions`.
   FAR uses the unsafe population; FER uses the complete eligible label set.
-  Those definitions are superseded for this four-condition Ethernet comparison.
+  Those definitions are superseded for this three-condition Ethernet comparison.
   Do not use that CLI for the frozen routing CSV or Mode B final routing scores.
 - Both `decision.jsonl` exports contain `event_id`, `run_id`, `controller`,
   `routing_decision`, `risk_tier`, actions and timing. `event_id` is preserved from
@@ -202,7 +203,6 @@ create fresh output directories. Preserve old runs, source files and history.
 | Threshold | Fresh journal; no LLM, Chroma, EMA or confidence/learning additions |
 | Single-Agent | Fresh journal; existing local model protocol; no Chroma/EMA |
 | Proposed adaptive | Chroma empty; EMA 0.65, update_count 0, alpha 0.9 |
-| Proposed fixed EMA/history-only | Separate reviewed ablation protocol; do not infer it from adaptive reset |
 
 Start infrastructure/topology, applicable Layer 1, selected controller and shared
 Layer 3; verify ownership, worker readiness, endpoints and transport before input.
@@ -318,8 +318,9 @@ recorded source revision. It verifies the supplied inventory, not its completene
 human approval. Installed models, secrets, external Prometheus config and process
 state require separate evidence. Runtime-only excludes may cover a specific run
 folder, never source changes. Record the manifest hash and repeat before replay.
-The current uncommitted scaffolding must first undergo normal review; no future
-controller/evaluation commit is fabricated here.
+Completed runs retain their actual reviewed execution revisions. Any new run
+requires its own reviewed freeze; integration HEAD is not a replacement for
+historical execution identities.
 
 ## Monitoring compatibility plan
 
@@ -330,7 +331,7 @@ Keep the Ethernet template's logical labels and job names:
 | All | fyp-layer1: 8002–8008 on .11; fyp-layer3-autoexec: .13:8014; fyp-layer3-hitl: .13:8000 |
 | Threshold | fyp-threshold-baseline: .12:8020 |
 | Single-Agent | fyp-single-agent-baseline: .12:8030 |
-| Proposed adaptive/fixed | fyp-agent-pipeline: .12:8010–8013 |
+| Proposed Adaptive | fyp-agent-pipeline: .12:8010–8013 |
 
 Also require fyp-cluster's three :9100 targets and rabbitmq .11:15692. When
 retaining the template, local prometheus:9090 and node:9100 are expected healthy.

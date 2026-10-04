@@ -1,5 +1,10 @@
 # Common comparative infrastructure
 
+The completed formal Ethernet comparison is Proposed Adaptive, Threshold-only
+and Single-Agent. Use the [shared contract](../ETHERNET_SHARED_EXPERIMENT_CONTRACT.md)
+and [final comparison](../COMPARISON.md) for Mode B scoring; the common analyzer
+below retains legacy Mode A definitions and is not the final Ethernet scorer.
+
 These modules contain no controller routing policy or model prompt. `contracts.py` preserves both actual Layer 1 input forms, maps detector names to semantic families, validates observable fields, reads the authoritative action vocabulary without running Proposed agents, and rejects duplicate/nonfinite JSON. `journal.py` stores durable evidence in SQLite (WAL, synchronous FULL), indexes prepared/confirmed decisions and exports records in insertion order. `layer3_adapter.py` serializes native decisions into shared Layer 3 legacy keys without requiring rule versions or fabricating stages.
 
 `rabbitmq.py` requires `RABBITMQ_HOST`, `RABBITMQ_USER`, `RABBITMQ_PASS`; `RABBITMQ_PORT` defaults to 5672, vhost is `fyp`. It does not load `.env`, create topology or purge queues. Live callers enable publisher confirms before persistent mandatory publication. Exclusive subscriptions and passive ownership checks reject competing consumers; operators must exclude stale publishers and verify unacknowledged messages separately.

@@ -21,7 +21,9 @@ research prototype, not a claim of universal or production-ready self-healing.
 The authoritative historical Wi-Fi baseline is the cold-memory run
 **wifi_cold_20260913_041045**, performed with frozen implementation commit
 **377250945c253b9c9da233d84391d1458d181fc9**. The matched proposed-system Ethernet
-reproduction **ethernet_cold_20261002_023108** is now complete.
+reproduction **ethernet_cold_20261002_023108** is complete. The final Ethernet
+Mode B comparison now comprises three completed conditions: Proposed Adaptive,
+Threshold-only and Single-Agent; see the [final comparison](evaluation/baselines/COMPARISON.md).
 
 ## Research problem and proposed solution
 
@@ -668,10 +670,9 @@ are needed for stronger causal inference.
 ## Offline routing ground truth and FAR/FER
 
 On 2026-10-02, **routing-label-policy-v2** was finalized retrospectively for
-the completed Proposed adaptive-EMA Ethernet run, before the remaining
-Threshold-Only, Single-Agent and Proposed fixed-EMA/history-only Ethernet runs.
-The same labels, script and metric definitions are frozen for all four systems;
-no results for the three upcoming conditions are claimed.
+the completed Proposed Adaptive Ethernet run, before the subsequently completed
+Threshold-only and Single-Agent runs. The same labels, script and metric
+definitions apply to all three formal Ethernet conditions.
 
 The original SEG source predates the experiments and assigns LOW anomalies to
 `AUTO_RESTART_CONSUMER` and HIGH anomalies to `ESCALATE_TO_HITL`. V2 translates
@@ -743,6 +744,30 @@ The [Wi-Fi/Ethernet comparison](docs/WIFI_VS_ETHERNET_COMPARISON.md) retains the
 original blank-routing-label analysis; this later evaluation supersedes its
 Ethernet FAR/FER availability statement only.
 
+## Completed Ethernet controller comparison
+
+| Condition | AUTO / HITL | FAR | Routing FER | Risk accuracy |
+|---|---:|---:|---:|---:|
+| Proposed Adaptive | 175 / 464 | 38/174 = 21.84% | 104/240 = 43.33% | 513/630 = 81.43% |
+| Threshold-only | 168 / 471 | 50/159 = 31.45% | 131/240 = 54.58% | 449/630 = 71.27% |
+| Single-Agent | 1 / 638 | 0/1 = 0% | 239/240 = 99.58% | 443/630 = 70.32% |
+
+Each condition completed 639 decisions/feedback, with Expected-AUTO coverage
+240/380 and missing-before-routing 140/380. NORMAL is excluded from anomaly
+FAR/FER. FAR uses AUTO decisions with an authoritative nonblank safe_to_auto label;
+its numerator is those labeled false. Routing FER is conditional on expected-AUTO
+incidents with valid AUTO/HITL decisions, not the full eligible corpus.
+Single-Agent's zero FAR rests on one AUTO decision; its 639 valid first outputs
+coexisted with extreme HITL conservatism. No statistical or universal superiority
+claim follows from one run per condition. Warmup and timing boundaries differ.
+
+See the [authoritative comparison](evaluation/baselines/COMPARISON.md),
+[Threshold record](evaluation/baselines/threshold_only/README.md), and
+[Single-Agent record](evaluation/baselines/single_agent/README.md) for details.
+Use [Ethernet_Full_Rerun.md](Ethernet_Full_Rerun.md) for Proposed formal reruns,
+or the separate [Ethernet demo guide](docs/ETHERNET_DEMO_RUNBOOK.md) for a short
+non-formal demonstration. Demo outputs are not formal experimental evidence.
+
 ## Limitations and future work
 
 - The workload is synthetic and the three-node environment is a laboratory
@@ -763,9 +788,9 @@ Ethernet FAR/FER availability statement only.
 - The Wi-Fi run remains the authoritative historical baseline. The matched
   Ethernet reproduction above adds one observed pair, not a causal network study.
 
-Threshold-Only and Single-Agent comparisons, plus a fixed-versus-adaptive EMA
-ablation, remain planned as described in the Literature Review. They are
-separate from the infrastructure comparison.
+The three-condition Ethernet controller comparison is complete. It remains
+separate from the historical Wi-Fi/Ethernet infrastructure comparison; earlier
+planning documents retain historical context only.
 
 Potential next work includes repeated balanced Ethernet-versus-Wi-Fi comparisons,
 faster or parallel local Strategy inference, broader workloads, safer
@@ -812,8 +837,8 @@ fyp-pipeline/
 ## Project status
 
 The frozen Wi-Fi run remains the authoritative historical Wi-Fi baseline.
-The matched proposed-system Ethernet full run is now complete; Threshold-Only
-and Single-Agent Ethernet full-pipeline evaluations remain next. Review the
+Proposed Adaptive, Threshold-only and Single-Agent have completed their formal
+Ethernet Mode B runs. Review the
 layer documents and the experiment runbooks, [Full_Rerun.md](Full_Rerun.md) and
 [Ethernet_Full_Rerun.md](Ethernet_Full_Rerun.md), before starting a new experiment.
 This README does not replace those runbooks.

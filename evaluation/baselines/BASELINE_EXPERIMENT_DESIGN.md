@@ -2,6 +2,12 @@
 
 **Project:** Distributed Multi-Agent Coordination for Self-Healing Data Pipelines: A Human-in-the-Loop Approach on Commodity Hardware
 
+**Final scope:** the completed formal Ethernet Mode B comparison contains exactly
+Proposed Adaptive, Threshold-only and Single-Agent; see [final results](COMPARISON.md).
+Prospective requirements below retain their historical design context. They do
+not imply that every planned Mode A/repetition study was completed. The final
+routing amendment governs Ethernet scoring.
+
 ## 1. Purpose and Research Question
 
 This document establishes the comparative-evaluation protocol for three control-plane conditions:
@@ -164,13 +170,13 @@ A list of alternative acceptable actions is not automatically a list of required
 The [Shared Ethernet Experiment Contract](ETHERNET_SHARED_EXPERIMENT_CONTRACT.md)
 implements the frozen offline baseline adapters and defines Mode B reconciliation,
 revision manifests, evidence transfer and condition-specific deployment gates.
-It supersedes older baseline analyzer denominators for this four-condition
+It supersedes older baseline analyzer denominators for this three-condition
 Ethernet comparison without changing controller algorithms or Mode A history.
 
 
-**Versioned amendment — 2026-10-02, routing-label-policy-v2.** The four
-Ethernet configurations are Threshold-Only, Single-Agent, Proposed multi-agent
-adaptive EMA, and Proposed multi-agent fixed EMA/history-only learning.
+**Versioned amendment — 2026-10-02, routing-label-policy-v2; final scope reconciled after closeout.**
+The three completed Ethernet conditions are Proposed Adaptive, Threshold-only
+and Single-Agent.
 All must reuse the same 1,950-event workload semantics, source/derived labels,
 annotation script, routing contract, NORMAL exclusion and benchmark definitions.
 
@@ -184,30 +190,31 @@ and is superseded; its artifacts remain archived.
 
 **FAR = actual AUTO with safe_to_auto=false / actual AUTO with authoritative
 nonblank safe_to_auto labels (true or false).**
-**FER = actual HITL with expected_route=AUTO / expected-AUTO incidents with
-an actual AUTO/HITL Policy decision.**
-**Expected-AUTO Policy Coverage = expected AUTO with Policy decision / all
-authoritative expected-AUTO corpus incidents.** Report expected-AUTO missing
-before Policy separately as absent Policy records / all expected-AUTO corpus IDs.
+**Routing FER = expected-AUTO incidents routed HITL / expected-AUTO incidents
+with a valid AUTO/HITL controller decision.**
+**Expected-AUTO controller coverage = expected AUTO with a valid controller
+decision / all 380 expected-AUTO corpus incidents.** Missing before routing is
+expected AUTO without a scoreable controller decision / all 380 expected-AUTO
+corpus incidents. Policy is the Proposed-system name for this routing boundary.
 NORMAL/unlabeled routing cases are excluded. Join by event_id; zero denominators
 are not computable. Missing Policy cases are upstream coverage attrition, not
 false escalations, and cannot dilute the routing FER denominator. An existing
 record without a valid AUTO/HITL route is reported separately as invalid.
-These metric semantics are frozen unchanged for all four Ethernet systems.
+These metric semantics are frozen unchanged for all three Ethernet conditions.
 The initial v2 full-corpus FER denominator is superseded following methodological
 review; the v2 labels and FAR remain unchanged. These supersede the historical FAR/FER entries below.
 
 The source risk/action mappings predate the runs. This translation was finalized
 retrospectively for the already completed adaptive-EMA Ethernet experiment,
-after its results were known; prospective blinding is not claimed. It is frozen
-before the remaining Threshold-Only, Single-Agent and fixed-EMA experiments.
+after its results were known; prospective blinding is not claimed. It was frozen
+before the subsequently completed Threshold-only and Single-Agent experiments.
 No system outputs construct labels, and comparative outcomes must not change
 this policy. Apply the same policy and formulas unchanged to every system;
 record tool revisions and label hashes. Other protocol-freeze requirements
 remain in force. Original definitions below are history, not an alternative
-active metric contract for these four conditions.
+active metric contract for these three conditions.
 
-### Original prospective definitions (superseded above for the four Ethernet conditions)
+### Original prospective definitions (superseded above for the three Ethernet conditions)
 
 The following definitions are common to every condition. Report numerators, denominators, label coverage, and missing-decision counts alongside percentages. A zero denominator is **not computable**, not zero error.
 
@@ -299,7 +306,9 @@ Predefine infrastructure-failure handling and rerun criteria. Preserve failed ru
 
 ## 15. Secondary Ablations
 
-These optional studies do not replace the primary three-condition comparison:
+Historical superseded ablation planning (not current or pending formal
+conditions): these options were outside the now-completed three-condition
+Ethernet comparison and have no formal results in it:
 
 | Ablation | Purpose and control |
 |---|---|
