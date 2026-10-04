@@ -15,8 +15,11 @@ Verify the same frozen application revision on all nodes with `git branch --show
 On Node 2, in **each** selected controller pane:
 
 ```bash
-export REPO=/home/spectre206/fyp-pipeline
-source "$REPO/.venv/bin/activate"
+export REPO="$HOME/fyp-pipeline"
+read -r -p 'Absolute existing reviewed/tested Python environment on this node: ' EXPERIMENT_VENV
+[[ "$EXPERIMENT_VENV" == /* && -f "$EXPERIMENT_VENV/bin/activate" ]] || exit 1
+export EXPERIMENT_VENV
+source "$EXPERIMENT_VENV/bin/activate"
 source "$REPO/deployment/ethernet/node2.env.sh"
 ```
 
@@ -35,7 +38,7 @@ For Proposed, `cd "$REPO/layer2"` and launch each in its own pane: `python agent
 On Node 3, in **each** Django, HITL consumer and Auto Executor pane:
 
 ```bash
-export REPO=/home/spectre/fyp-pipeline
+export REPO="$HOME/fyp-pipeline"
 source "$REPO/venv/bin/activate"
 source "$REPO/deployment/ethernet/node3.env.sh"
 ```
@@ -52,7 +55,7 @@ Django now accepts direct Ethernet access at **http://10.10.10.13:8000** and ret
 
 All ten jobs are preserved: `fyp-cluster`, `fyp-layer1`, `fyp-agent-pipeline`, `fyp-threshold-baseline`, `prometheus`, `node`, `rabbitmq`, `fyp-layer3-autoexec`, `fyp-layer3-hitl`, `fyp-single-agent-baseline`. Global scrape/evaluation intervals remain 15s. Cluster, Layer 1, Proposed agents, both baselines and HITL retain explicit 5s scrape intervals; cluster retains its 5s timeout. Other jobs inherit the original global defaults.
 
-Remote targets use Ethernet IPs; each retains its original `hostname:port` instance label. Grafana's fixed node selectors and display overrides therefore remain compatible without JSON changes. Prometheus self-scrape remains `localhost:9090`; the duplicate local `node` job remains `localhost:9100`, including its existing label identity. Gateway self-scrapes may use a local kernel route, not the physical switch.
+Remote targets use Ethernet IPs; each retains its original `hostname:port` instance label. Existing hostname-based node selectors and display overrides remain compatible. The dedicated Single-Agent dashboard additionally uses the shared fyp-layer1 and fyp-layer3-autoexec/fyp-layer3-hitl jobs. Prometheus self-scrape remains `localhost:9090`; the duplicate local `node` job remains `localhost:9100`, including its existing label identity. Gateway self-scrapes may use a local kernel route, not the physical switch.
 
 **Manual gateway procedure only; nothing in this profile deploys automatically:**
 
@@ -63,7 +66,7 @@ Remote targets use Ethernet IPs; each retains its original `hostname:port` insta
 5. Run `sudo systemctl reload prometheus`. If the unit lacks reload support, use its established deployment reload procedure before measurement.
 6. Inspect `curl -fsS http://localhost:9090/api/v1/targets`: confirm Ethernet scrape URLs, original logical instances, and health of the active condition's targets.
 
-Inactive controller jobs can be DOWN; do not start competing controllers to make every target green. Retain the same job-selection policy and scrape intervals across matched Wi-Fi/Ethernet conditions. Grafana datasource/live dashboard state needs no changes. Its combined network panel includes Wi-Fi Internet traffic and is not transport proof by itself.
+Inactive controller jobs can be DOWN; do not start competing controllers to make every target green. Retain the same job-selection policy and scrape intervals across matched Wi-Fi/Ethernet conditions. Keep the existing Grafana datasource; load the condition-specific reviewed dashboard and verify its selectors, as described in the Single-Agent Ethernet runbook. Its combined network panel includes Wi-Fi Internet traffic and is not transport proof by itself.
 
 ## Prove application transport before formal runs
 

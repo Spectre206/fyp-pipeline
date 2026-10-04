@@ -80,14 +80,17 @@ python -B -m evaluation.baselines.shared.evaluate \
   --decisions "$CONTROLLER_DIR/decision.jsonl" \
   --feedback "$CONTROLLER_DIR/feedback.jsonl" \
   --deliveries "$CONTROLLER_DIR/delivery.jsonl" \
-  --attempts "$CONTROLLER_DIR/attempt.jsonl" \
   --quarantine "$CONTROLLER_DIR/quarantine.jsonl" \
   --failures "$CONTROLLER_DIR/failure.jsonl" \
   --controller threshold_only --run-id "$RUN_ID" \
   --output "$ANALYSIS_DIR" --expect-hitl-feedback
 ```
 
-Select `single_agent` for that condition. Explicit paths are node-local;
+Threshold has no model-attempt sidecar. For Single-Agent select `single_agent`
+and include `--attempts "$CONTROLLER_DIR/attempt.jsonl"` for its real attempt
+export; do not manufacture an empty placeholder for Threshold. Proposed retains
+its native agent/stage evidence and evaluator under the shared metric definitions.
+Explicit paths are node-local;
 `ANALYSIS_DIR` must not exist. Omit the exhaustive HITL flag only under a frozen
 sampled-review protocol; AUTO feedback is always expected. Optional missing
 artifact arguments are omitted, never replaced by fabricated empty evidence.
@@ -326,14 +329,15 @@ Retain baseline exporter names `fyp_threshold_*`/`fyp_single_agent_*`, job names
 and logical instance labels. Check each query/panel after adaptation. Do not
 install old baseline Prometheus templates wholesale: they use different jobs
 and global intervals. Preserve the reviewed Ethernet 15s global/selected 5s
-intervals. No dashboard/config has been migrated by this task.
+intervals. The Single-Agent Ethernet preparation includes this selector migration and the
+shared deployment template; installed configuration still needs live verification.
 
 Inactive controllers need not be UP; never start them to turn a panel green.
 Preserve queue backlog/DLQ, CPU/memory/disk/network and NTP-offset evidence.
 Verify actual sockets/routes, because combined Wi-Fi/Ethernet network charts do
 not prove transport. A dashboard NTP panel is not by itself a clock-sync gate.
 
-## Timing and Single-Agent protocol decision still required
+## Timing and Single-Agent warmup disclosure
 
 | Existing baseline field | Boundary and limitation |
 |---|---|
@@ -356,17 +360,29 @@ clock synchronization. Feedback completion counts do not establish latency.
 Single-Agent currently uses qwen3:1.7b, structured output, one eligible validation
 retry and fallback, and performs preload plus a fixed warmup inference before
 measurement. The completed adaptive-EMA run had no dedicated matching warmup.
-Before Single-Agent full execution explicitly choose and record either (A)
-retain/disclose this difference or (B) match warmup for future model-based runs.
-This task chooses neither. Do not remove its warmup, add one to Threshold or
+The Single-Agent Ethernet preparation retains and discloses this difference.
+Routing-quality metrics remain comparable under the common routing contract;
+directly matched LLM latency/residency comparisons are not established. Record
+this in the reviewed protocol before execution. Do not remove its warmup, add one to Threshold or
 retroactively claim the completed Proposed run was warmed.
 
-## Next migration scope
+## Migration boundaries
 
-First apply reviewed shared offline tooling and deployment scaffolding to
-Threshold without changing its frozen first-match rules/actions, confidence
-semantics or feedback-only accounting. Adapt runbook, artifact paths, revision
-manifest and dashboard selectors; validate offline tests and isolated integration
-before a separately authorized formal run. Then reuse that migration pattern
-for Single-Agent with its own model/warmup decision. No Chroma, EMA, proposed
-Triage/Policy/Learning or fake stage metrics are introduced into either baseline.
+Controller branches retain their own runtime semantics. Single-Agent preparation
+uses the shared Ethernet deployment profile, dedicated dashboard selectors,
+revision checks and full runbook, while retaining its model/warmup protocol.
+Offline preparation does not certify installed state or authorize workload
+execution. Complete isolated integration checks and the reviewed freeze before
+formal use. No Chroma, EMA, proposed Triage/Policy/Learning or fake stage metrics
+are introduced into either baseline.
+
+## Single-Agent formal run lifecycle
+
+The [Single-Agent Ethernet runbook](single_agent/ETHERNET_FULL_RUN.md) records
+RUN_SETUP, PRE_REPLAY_GATE, REPLAY_STARTED, REPLAY_ENDED, DRAINED,
+GRACEFUL_SHUTDOWN, OFFLINE_EVALUATION and COMPLETED_UNINTERRUPTED. Any worker
+failure after replay begins makes the run FAILED_INCOMPLETE; a same-ID restart
+makes it RESUMED_INVALID_FOR_FORMAL_COMPARISON. Preserve evidence and start a
+new cold run under a new ID. Replay markers prevent repeat publication, not
+worker restarts. Clean controller records/complete feedback do not certify
+upstream continuity. Review process and protocol history across all nodes.
