@@ -134,6 +134,58 @@ class EvaluationTests(unittest.TestCase):
         s,_,i=evaluate(self.labels,self.decisions,None,'threshold_only','run')
         self.assertEqual(i['malformed_decision_lines'],[1,2])
 
+    def cli(self, output, controller='threshold_only', extra=()):
+        return subprocess.run([sys.executable,'-B','-m','evaluation.baselines.shared.evaluate',
+            '--labels',str(self.csv),'--decisions',str(self.decisions),'--feedback',str(self.feedback),
+            '--controller',controller,'--run-id','run','--output',str(output),
+            '--expect-hitl-feedback',*extra],capture_output=True,text=True)
+
+    def test_partial_cli_without_attempts_preserves_metrics_not_completion(self):
+        rows=[self.row('a'),self.row('b','HITL'),self.row('u')]
+        feedback=[self.fb('a'),self.fb('b','HITL'),self.fb('u')]
+        expected,_,_=self.run_eval(rows,feedback,expect_hitl_feedback=True)
+        output=self.root/'partial'
+        result=self.cli(output)
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertFalse((self.root/'attempt.jsonl').exists())
+        summary=json.loads((output/'evaluation_summary.json').read_text())
+        for key in ('far','fer','expected_auto_controller_coverage',
+                    'expected_auto_missing_before_routing','feedback_completion','risk_accuracy'):
+            self.assertEqual(summary[key],expected[key])
+        self.assertEqual(summary['expected_auto_controller_coverage']['value'],2/3)
+        self.assertEqual(summary['expected_auto_missing_before_routing']['value'],1/3)
+        self.assertEqual(summary['feedback_completion']['value'],1)
+        self.assertEqual(summary['integrity_status'],'no_detected_record_errors')
+        self.assertIn('upstream reconciliation',summary['completion_claim'])
+        self.assertLess(summary['corpus_decision_coverage']['value'],1)
+        integrity=json.loads((output/'integrity_report.json').read_text())
+        self.assertEqual(integrity['expected_auto_without_scoreable_decision'],['c'])
+        self.assertNotIn('attempts',integrity)
+
+    def test_explicit_missing_optional_evidence_fails(self):
+        self.write(self.decisions,[self.row()]);self.write(self.feedback,[self.fb()])
+        for option in ('attempts','quarantine','failures'):
+            missing=self.root/(option+'.jsonl');output=self.root/(option+'-output')
+            result=self.cli(output,extra=('--'+option,str(missing)))
+            self.assertNotEqual(result.returncode,0)
+            self.assertIn('FileNotFoundError',result.stderr)
+            self.assertIn(str(missing),result.stderr)
+            self.assertFalse(output.exists())
+
+    def test_single_agent_real_attempt_sidecar_supported(self):
+        attempt=dict(event_id='a',run_id='run',attempt_number=1,valid=True,
+                     raw_response='{"routing_decision":"AUTO"}',validation_issues=[],telemetry={})
+        self.write(self.decisions,[self.row(controller='single_agent',attempts=[attempt])])
+        f=self.fb();f['controller']='single_agent';f['payload']['full_policy_result']['controller']='single_agent'
+        self.write(self.feedback,[f])
+        path=self.root/'attempt.jsonl';self.write(path,[attempt])
+        output=self.root/'single';result=self.cli(output,'single_agent',('--attempts',str(path)))
+        self.assertEqual(result.returncode,0,result.stderr)
+        integrity=json.loads((output/'integrity_report.json').read_text())
+        self.assertEqual(integrity['attempts'],dict(records=1,malformed_lines=[]))
+        normalized=json.loads((output/'normalized_decisions.jsonl').read_text())
+        self.assertEqual(normalized['validation_metadata']['attempts'],[attempt])
+
     def test_cli_no_proposed_stages_deterministic_outputs(self):
         self.write(self.decisions,[self.row()]);self.write(self.feedback,[self.fb()])
         for name in ['out1','out2']:

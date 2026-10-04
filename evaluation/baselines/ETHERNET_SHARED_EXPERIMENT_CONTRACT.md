@@ -142,6 +142,22 @@ The evaluator reports sets; it does not infer causal reasons from labels or
 fabricate detector TP/FP performance. Receipt without decision is an integrity
 review item. Corpus coverage alone does not establish experimental completion.
 
+A clean controller journal is not proof of an uninterrupted experiment. Any
+application-worker death or restart after replay begins and before required
+completion invalidates the formal run, including upstream Layer 1 workers.
+Preserve failures and classify a same-RUN_ID restart as
+`RESUMED_INVALID_FOR_FORMAL_COMPARISON`; never rehabilitate it based on later
+clean exports. Use a new RUN_ID and cold state for the replacement experiment.
+
+Keep an append-only protocol-event record with occurrence/recording UTC times,
+node/worker identity, evidence references and eligibility, distinguishing
+`IN_PROGRESS`, `FAILED_INCOMPLETE`, resumed-invalid, and reviewed
+`COMPLETED_UNINTERRUPTED`. Unknown event times must not be invented. The offline
+evaluator does not by itself certify process continuity; replay markers guard
+publication, not worker launches. Process-start/exit logs, boot ID/PID/start-time
+evidence, queue state and metrics history support that review. Final snapshots
+alone cannot prove absence of restarts.
+
 Freeze cutoff duration, drain timeout, review scope and rerun criteria before
 publication; this contract does not invent numeric cutoffs. Completion requires:
 

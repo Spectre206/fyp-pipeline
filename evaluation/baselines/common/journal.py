@@ -65,10 +65,17 @@ class Journal:
 
     def export(self):
         with self.lock:
-            for kind in ('decision', 'feedback', 'delivery', 'quarantine', 'failure', 'attempt'):
+            for kind in ('decision', 'feedback', 'delivery', 'quarantine', 'failure'):
                 target = self.path.parent / (kind + '.jsonl')
                 with target.open('w') as output:
                     for row in self.records(kind):
+                        output.write(json.dumps(row, allow_nan=False) + '\n')
+
+            attempt_rows = self.records('attempt')
+            if attempt_rows:
+                target = self.path.parent / 'attempt.jsonl'
+                with target.open('w') as output:
+                    for row in attempt_rows:
                         output.write(json.dumps(row, allow_nan=False) + '\n')
 
     def close(self):
